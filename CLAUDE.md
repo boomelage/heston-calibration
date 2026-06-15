@@ -85,13 +85,16 @@ Writes `otm/cboe_spx_otm_<lastquotedate>.csv`.
 core. For each OTM file it does **per-spot-level calibration**, not one snapshot per day:
 1. Look up `r`, `g` from `rg` for the file's quote date.
 2. Round spot to the nearest 0.5 (`(2*spot).round()//2`) and group trades by this rounded level.
-3. For each spot level: rank maturities by traded volume (top ~7), gather OTM put+call strikes,
-   require ≥5 IV points, and `pivot_table` into a strike×maturity IV surface (`values='trade_iv'`).
-4. Call `calibrate_heston(surface, s, r, g)`; accumulate params into a per-spot table and write
-   `calibrations/cboe_spx_calibrations_<date>.csv` (incrementally, after each spot).
-5. For diagnostics, reprice every contract under Black–Scholes (`vanp.df_numpy_black_scholes`)
-   and Heston (`vanp.df_heston_price`) with the fitted params and write
-   `calibration_tests/cboe_spx_calibration_tests_<date>.csv`.
+3. For each spot level: rank maturities by traded volume (top `max_nt`=7); for each kept maturity,
+   take the `max_nk`=7 strikes nearest the money on each wing (highest OTM puts `pK[-n:]`, lowest
+   OTM calls `cK[:n]`) from that maturity's rows only; concat into one snapshot and `pivot_table`
+   into a strike×maturity IV surface (`values='trade_iv'`), requiring ≥5 non-NaN cells.
+4. Call `calibrate_heston(surface, s, r, g)` **once per spot** over the full multi-maturity surface;
+   accumulate params into a per-spot table and write `calibrations/cboe_spx_calibrations_<date>.csv`
+   (incrementally, after each spot).
+5. For diagnostics, reprice each spot's snapshot under Black–Scholes (`vanp.df_numpy_black_scholes`)
+   and Heston (`vanp.df_heston_price`) with the fitted params; accumulate across all spots and write
+   `calibration_tests/cboe_spx_calibration_tests_<date>.csv` **once** after the spot loop.
 
 Output routing uses `filepath.replace('otm', ...)`, which rewrites **both** the `otm` directory
 segment and the `otm` token in the filename in one call — fragile but intentional.
@@ -117,13 +120,9 @@ breaks a downstream stage:
 
 ## Known issues & fragility (verify before trusting outputs)
 
-> **Remediation plan for the remaining code bug below: [PLAN.md](PLAN.md).** When a fix lands and is
-> verified, delete that item here (see "Maintaining this file") and drop its PLAN.md pointer.
-
-- **Strike-selection slips in `calibrateby_spot`.** In the maturity loop: (A) `cK`/`pK` come from a
-  stale `dft` (the last group of the *previous* loop) instead of the current maturity; (B) the
-  candidate set `ct` is filtered from the full `df` (all spot levels) rather than the current spot's
-  subset; (C) `pK[:max(npK, max_nk)]` / `cK[:max(ncK, max_nk)]` never caps strike count (`max` should
-  be `min`). Related: each `cal` is a single-maturity slice, so the per-spot "surface" is calibrated
-  one maturity at a time and only the last persists. See PLAN.md §2.
+- Output routing uses `filepath.replace('otm', ...)`, which rewrites **both** the `otm` directory
+  segment and the `otm` token in the filename in one call — fragile but intentional.
+- Spot is rounded to a 0.5 grid (`(2*spot).round()//2`), so a contract that was OTM at its actual
+  spot can land with `strike_price == spot_price` (an ATM tie) in the snapshot. Harmless, but a
+  strict `K>spot`/`K<spot` OTM check will flag these ties.
 - The `data/__pycache__/` holds bytecode for deleted modules (`get_data`, `get_options`, ...) — ignore it.

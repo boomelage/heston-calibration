@@ -96,7 +96,16 @@ Pass criterion: `risk_free_rate ≈ 0.05` (Oct-2024), **not** `0.0233`.
 
 ---
 
-## Issue 2 — Strike-selection slips
+## Issue 2 — Strike-selection slips — ✅ DONE (Path 2)
+
+Rewrote the per-spot loop in `calibrateby_spot`: maturities ranked by volume (top `max_nt`=7);
+each kept maturity contributes its `max_nk`=7 nearest-money strikes per wing (`pK[-n:]` puts,
+`cK[:n]` calls) — fixing (A) stale `dft` (now `byt.get_group(t)` per maturity), (B) wrong frame
+(now this spot's `dft` only), and (C) the `max`→`min` cap. The per-maturity slices are concatenated
+into one multi-maturity surface, calibrated **once per spot** (Path 2), and the repriced snapshots
+are accumulated and written to `calibration_tests/*.csv` **once** after the spot loop. Verified on
+Oct-2024: 57 spots, 20 distinct maturities survive; ≤7 strikes per wing; the only OTM-check
+"violations" are `strike==rounded_spot` ties from the 0.5 spot grid (no strike on the wrong side).
 
 ### Location
 `src/calibrator_prototype.py:47-76` (the per-spot loop and the inner maturity loop).
@@ -231,7 +240,7 @@ Pass criteria:
 
 ## Done criteria
 - [x] `calibrations/*.csv` show `risk_free_rate ≈ 0.05` for the Oct-2024 files.
-- [ ] `ct`/snapshot rows are sourced from the current spot **and** current maturity only.
-- [ ] Strike count per wing ≤ `max_nk`; strikes are OTM and follow the agreed near/far policy.
-- [ ] (Path 2) one calibration per spot over a multi-maturity surface; `calibration_tests` retains all spots.
-- [ ] `CLAUDE.md` "Known issues" updated to match reality.
+- [x] `ct`/snapshot rows are sourced from the current spot **and** current maturity only.
+- [x] Strike count per wing ≤ `max_nk`; strikes are OTM and follow the agreed near/far policy.
+- [x] (Path 2) one calibration per spot over a multi-maturity surface; `calibration_tests` retains all spots.
+- [x] `CLAUDE.md` "Known issues" updated to match reality.

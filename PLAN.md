@@ -35,7 +35,7 @@ not line numbers.
 |------|-----------------|------|--------|
 | Issue 1 — stale rate lookup | `src/calibrator_prototype.py` | low | ✅ done |
 | Issue 2 — strike-selection slips | `src/calibrator_prototype.py` | medium | ✅ done |
-| Work item 1 — validation/diagnostics | **new** `src/validate_calibrations.py` | none (read-only) | ☐ todo |
+| Work item 1 — validation/diagnostics | **new** `src/validate_calibrations.py` | none (read-only) | ✅ done |
 | Work item 2 — engine hardening | `src/calibrate_heston.py` (+ small prototype edit) | medium | ☐ todo |
 | Work item 3 — one calibration per day | `src/calibrator_prototype.py` (restructure) | high (schema change) | ☐ todo |
 
@@ -352,8 +352,10 @@ Items 1–2 have stabilized the engine and given a baseline to compare against.
 
 ## Done criteria
 
-- [ ] **Item 1:** `src/validate_calibrations.py` runs read-only and reports per-bucket flags,
-      repricing/IV RMSE, and per-day stability; baseline reproduces the Diagnosis table.
+- [x] **Item 1:** `src/validate_calibrations.py` runs read-only and reports per-bucket flags,
+      repricing/IV RMSE, and per-day stability; baseline reproduces the Diagnosis table
+      (2024-10-07: 17 pegged `rho`, 40 Feller violations, 26 `eta>1.5`). Across all 5 days only
+      **35/256 buckets (14%)** pass all hard checks — the baseline to beat.
 - [ ] **Item 2:** `calibrate_heston` calibrates with box bounds and multiple restarts, rejects
       boundary/high-RMSE fits (old "==guess" sentinel removed), and returns `rmse`/`accepted`;
       `calibrator_prototype.py` records the new keys.

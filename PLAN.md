@@ -22,7 +22,12 @@ pipeline is re-run after the fixes; expect them to change (rates ~0.0233 → ~0.
 
 ---
 
-## Issue 1 — Stale rate lookup
+## Issue 1 — Stale rate lookup — ✅ DONE (Option B)
+
+Fixed in `src/calibrator_prototype.py`: a module-level `rg_asc = rg.sort_index()` plus
+`r = rg_asc['risk_free_rate'].asof(date)` / `g = rg_asc['dividend_rate'].asof(date)`, with a
+NaN guard that skips the file if no rate exists on/before `date`. Verified: the regenerated
+`calibrations/*.csv` show `risk_free_rate ≈ 0.042–0.05` for Oct-2024 (was `0.023285`).
 
 ### Location
 `src/calibrator_prototype.py:32-33`
@@ -225,7 +230,7 @@ Pass criteria:
    "done"), and drop the `→ see PLAN.md` pointers.
 
 ## Done criteria
-- [ ] `calibrations/*.csv` show `risk_free_rate ≈ 0.05` for the Oct-2024 files.
+- [x] `calibrations/*.csv` show `risk_free_rate ≈ 0.05` for the Oct-2024 files.
 - [ ] `ct`/snapshot rows are sourced from the current spot **and** current maturity only.
 - [ ] Strike count per wing ≤ `max_nk`; strikes are OTM and follow the agreed near/far policy.
 - [ ] (Path 2) one calibration per spot over a multi-maturity surface; `calibration_tests` retains all spots.

@@ -24,13 +24,21 @@ if str(DATA) not in sys.path:
 
 from get_rg import rg # pyright: ignore[reportMissingImports]
 
+# `rg` is sorted descending (newest first); `asof` needs an ascending index. Sort once here
+# instead of per file. `asof(date)` returns the last value on/before `date` regardless of `rg`'s
+# ordering, or NaN if `date` precedes all rates.
+rg_asc = rg.sort_index()
+
 def calibrateby_spot(filepath):
     df = pd.read_csv(filepath)
     df = df[df['trade_iv']>0]
     df['quote_datetime'] = pd.to_datetime(df['quote_datetime'])
     date = df['quote_datetime'].copy().dt.floor('D').unique()[0]
-    r = rg[rg.index<=date]['risk_free_rate'].iloc[-1]
-    g = rg[rg.index<=date]['dividend_rate'].iloc[-1]
+    r = rg_asc['risk_free_rate'].asof(date)
+    g = rg_asc['dividend_rate'].asof(date)
+    if pd.isna(r) or pd.isna(g):
+        print(f"skipping {filepath}: no rate on/before {date}")
+        return
     df['spot_price'] = (2*df['spot_price']).round()//2
     S = df['spot_price'].copy().drop_duplicates().sort_values().reset_index(drop=True)
     bys = df.groupby('spot_price')

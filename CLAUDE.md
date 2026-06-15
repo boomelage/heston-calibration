@@ -117,14 +117,9 @@ breaks a downstream stage:
 
 ## Known issues & fragility (verify before trusting outputs)
 
-> **Remediation plan for the two code bugs below: [PLAN.md](PLAN.md).** When a fix lands and is
+> **Remediation plan for the remaining code bug below: [PLAN.md](PLAN.md).** When a fix lands and is
 > verified, delete that item here (see "Maintaining this file") and drop its PLAN.md pointer.
 
-- **Stale rate lookup (confirmed, material).** In `calibrateby_spot`, `r`/`g` are read as
-  `rg[rg.index <= date]['risk_free_rate'].iloc[-1]`. Because `rg` is sorted **descending**,
-  `.iloc[-1]` is the **oldest** row in the whole history, not the most recent on/before the quote
-  date. For the 2024-10 data this picks the 2008-01-07 rate (~2.33%) instead of ~5.0%; the committed
-  `calibrations/*.csv` show `risk_free_rate=0.023285`. Fix: `.iloc[0]` (or `asof`). See PLAN.md §1.
 - **Strike-selection slips in `calibrateby_spot`.** In the maturity loop: (A) `cK`/`pK` come from a
   stale `dft` (the last group of the *previous* loop) instead of the current maturity; (B) the
   candidate set `ct` is filtered from the full `df` (all spot levels) rather than the current spot's

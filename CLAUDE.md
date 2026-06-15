@@ -68,6 +68,7 @@ raw/  --extract_otms.py-->  otm/  --calibrator_prototype.py-->  calibrations/  +
 
 **Stage 1 — market rates (`data/get_rg.py`).** Imported for its side effect: building a
 module-level DataFrame `rg`. Parses two hard-coded filenames in `data/market/`:
+
 - `historical_USGG12M.csv` → US 12M Treasury yield → `risk_free_rate`.
 - `historical_SPX_ivols.csv` → SPX `spot_price`, 12M `dividend_rate`, and a term structure of
   `<tenor>_vol` columns.
@@ -83,6 +84,7 @@ Writes `otm/cboe_spx_otm_<lastquotedate>.csv`.
 
 **Stage 3 — orchestration (`src/calibrator_prototype.py`, `calibrateby_spot`).** The non-obvious
 core. For each OTM file it does **per-spot-level calibration**, not one snapshot per day:
+
 1. Look up `r`, `g` from `rg` for the file's quote date.
 2. Round spot to the nearest 0.5 (`(2*spot).round()//2`) and group trades by this rounded level.
 3. For each spot level: rank maturities by traded volume (top `max_nt`=7); for each kept maturity,
@@ -91,7 +93,7 @@ core. For each OTM file it does **per-spot-level calibration**, not one snapshot
    into a strike×maturity IV surface (`values='trade_iv'`), requiring ≥5 non-NaN cells.
 4. Call `calibrate_heston(surface, s, r, g)` **once per spot** over the full multi-maturity surface;
    accumulate params into a per-spot table and write `calibrations/cboe_spx_calibrations_<date>.csv`
-   (incrementally, after each spot).
+   **once** after the spot loop.
 5. For diagnostics, reprice each spot's snapshot under Black–Scholes (`vanp.df_numpy_black_scholes`)
    and Heston (`vanp.df_heston_price`) with the fitted params; accumulate across all spots and write
    `calibration_tests/cboe_spx_calibration_tests_<date>.csv` **once** after the spot loop.
@@ -112,6 +114,7 @@ Levenberg–Marquardt. Returns `{theta, kappa, eta, rho, v0, feller}` where `fel
 
 Stages communicate through column names, not typed interfaces. Renaming any of these silently
 breaks a downstream stage:
+
 - `otm/*.csv` schema: `quote_datetime, strike_price, w, trade_size, trade_price, trade_iv, spot_price, days_to_maturity`.
 - `ms.df_moneyness(df)` needs `w, spot_price, strike_price` (returns `spot-strike` for calls, `strike-spot` for puts).
 - `vanp.df_numpy_black_scholes(df)` needs `spot_price, strike_price, days_to_maturity, risk_free_rate, volatility, w`

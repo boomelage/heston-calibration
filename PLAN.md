@@ -30,6 +30,7 @@ NaN guard that skips the file if no rate exists on/before `date`. Verified: the 
 `calibrations/*.csv` show `risk_free_rate ≈ 0.042–0.05` for Oct-2024 (was `0.023285`).
 
 ### Location
+
 `src/calibrator_prototype.py:32-33`
 
 ```python
@@ -38,11 +39,13 @@ g = rg[rg.index<=date]['dividend_rate'].iloc[-1]
 ```
 
 ### Root cause
+
 `rg` (from `data/get_rg.py`) is `sort_index(ascending=False)` — **newest first**. `rg[rg.index<=date]`
 keeps every row on/before the quote date but preserves that descending order, so `.iloc[-1]` is the
 **oldest row in the entire history**, not the most recent quote on/before `date`.
 
 ### Evidence (reproducible now, pre-fix)
+
 ```bash
 python -c "
 import sys; sys.path.insert(0,'data'); from get_rg import rg
@@ -53,14 +56,17 @@ print('fixed   .iloc[ 0] :', sub.iloc[0])     # 0.049994  (2024-10-07)  <- corre
 print('robust  asof      :', rg.sort_index()['risk_free_rate'].asof(d))
 "
 ```
+
 The committed `calibrations/*.csv` show `risk_free_rate=0.023285`, confirming the stale 2008 value
 was used in production output.
 
 ### Fix — option A (minimal)
+
 Change `.iloc[-1]` → `.iloc[0]` on both lines. Correct because, within a descending frame, the first
 row of the `<= date` slice is the largest date on/before `date`.
 
 ### Fix — option B (robust, recommended)
+
 Make the lookup independent of `rg`'s sort order with `asof`:
 
 ```python
@@ -74,6 +80,7 @@ return a wrong row if `rg`'s ordering is ever changed. Hoisting `rg_asc` into `g
 pre-sorted frame) avoids re-sorting per file.
 
 ### Edge case to add either way
+
 If no rate exists on/before `date` (date precedes all of `rg`), option A raises `IndexError` and
 option B yields `NaN` that later breaks QuantLib. Guard it:
 
@@ -84,6 +91,7 @@ if pd.isna(r) or pd.isna(g):
 ```
 
 ### Verification (post-fix)
+
 ```bash
 python src/calibrator_prototype.py
 python -c "
@@ -92,6 +100,7 @@ f = sorted(glob.glob('data/options/calibrations/*.csv'))[-1]
 print(pd.read_csv(f)[['spot_price','risk_free_rate','dividend_rate']].head())
 "
 ```
+
 Pass criterion: `risk_free_rate ≈ 0.05` (Oct-2024), **not** `0.0233`.
 
 ---
@@ -108,6 +117,7 @@ Oct-2024: 57 spots, 20 distinct maturities survive; ≤7 strikes per wing; the o
 "violations" are `strike==rounded_spot` ties from the 0.5 spot grid (no strike on the wrong side).
 
 ### Location
+
 `src/calibrator_prototype.py:47-76` (the per-spot loop and the inner maturity loop).
 
 ```python
@@ -130,7 +140,9 @@ for s in S:
 ```
 
 ### The three named slips
+
 - **(A) Stale `dft`.** The strike loop never reassigns `dft`, so `cK`/`pK` are taken from whatever
+
   maturity the *volume-ranking* loop happened to end on — not the current `t`. Every maturity in the
   strike loop sees the same arbitrary strike universe.
 - **(B) Wrong frame for `ct`.** `ct` is filtered from the whole-day `df` (all rounded spot levels),
@@ -141,6 +153,7 @@ for s in S:
   caps, *which* strikes are kept starts to matter (see decision below).
 
 ### Closely related structural finding — single-maturity "surface" (decide before fixing)
+
 Each `ct` appended to `cals` is a single-maturity slice (`df['days_to_maturity']==t`). In the writer
 loop (`:79-111`) every `cal` is pivoted into a one-column `surf` and calibrated separately, each
 **overwriting** `sparams.loc[s]` and re-writing the CSVs — so the stored params for a spot come from
@@ -149,18 +162,21 @@ final spot. Yet `calibrate_heston` loops over both `T` (columns) and `K` (rows):
 for a **multi-maturity surface**. So the current per-maturity calibration contradicts the design.
 
 **Decision (one choice drives the rest of this section):**
+
 - **Path 1 — minimal:** fix (A)(B)(C) only; keep one calibration per maturity. Lowest risk, but the
   per-spot result stays single-maturity and the CSV-overwrite behavior remains.
 - **Path 2 — recommended:** fix (A)(B)(C) *and* build one multi-maturity surface per spot, calibrate
   once, write once. Matches the engine's design and makes `calibration_tests` a usable per-day diagnostic.
 
 ### Strike policy (applies to both paths once (C) is fixed)
+
 `pK`/`cK` are sorted ascending. Recommend keeping the `max_nk` strikes **nearest the money** on each
 wing: highest puts (`pK[-n:]`, since OTM puts have `K<spot`) and lowest calls (`cK[:n]`, since OTM
 calls have `K>spot`). Confirm this matches the modeling intent; the alternative (deepest-OTM, i.e.
 `pK[:n]`) is what a naive `min` fix to the existing head-slice would give for puts.
 
 ### Recommended corrected sketch (Path 2)
+
 Replaces the inner loops and the per-`cal` writer with one snapshot + one calibration per spot:
 
 ```python
@@ -200,16 +216,19 @@ for s in S:
 ```
 
 Notes:
+
 - Rename the per-spot subset (`spot_data`) so it is not overwritten by the later `data = cal...`.
 - Move the `calibration_tests` write out of the inner loop; accumulate repriced `snap`s and write
   once at the end so all spots survive.
 
 ### Path 1 (minimal) line edits, if Path 2 is rejected
+
 1. Inside the strike loop, add `dft = byt.get_group(t)` as the first statement. (A)
 2. `K = pK[-min(npK,max_nk):] + cK[:min(ncK,max_nk)]`. (C + strike policy)
 3. `ct = data[(data['days_to_maturity']==t) & (data['strike_price'].isin(K))]...`. (B)
 
 ### Verification (post-fix)
+
 ```bash
 python src/calibrator_prototype.py
 python -c "
@@ -220,7 +239,9 @@ print('rows:', len(d), '| spots:', d['spot_price'].nunique(),
       '| maturities:', sorted(d['days_to_maturity'].unique()))
 "
 ```
+
 Pass criteria:
+
 - Path 2: `maturities` has **>1** value and `spots` is **>1** (surface is multi-maturity; not just the
   last slice survived).
 - Both paths: spot-check that every strike kept satisfies OTM (`K>spot` for calls, `K<spot` for puts)
@@ -239,6 +260,7 @@ Pass criteria:
    "done"), and drop the `→ see PLAN.md` pointers.
 
 ## Done criteria
+
 - [x] `calibrations/*.csv` show `risk_free_rate ≈ 0.05` for the Oct-2024 files.
 - [x] `ct`/snapshot rows are sourced from the current spot **and** current maturity only.
 - [x] Strike count per wing ≤ `max_nk`; strikes are OTM and follow the agreed near/far policy.

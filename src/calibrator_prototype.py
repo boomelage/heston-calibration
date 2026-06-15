@@ -124,7 +124,7 @@ def calibrateby_spot(filepath):
         pd.concat(test_frames,ignore_index=True).dropna().to_csv(filepath.replace('otm','calibration_tests'),index=False)
 
 
-OTM = Path(__file__).parent.parent / "data" / "options" /"otm"
+OTM = Path(__file__).parent.parent / "data" / "options" / "otm"
 files = [f for f in os.listdir(OTM) if f.endswith('.csv')]
 files = pd.Series([os.path.join(OTM,f) for f in files]).sort_values(ascending=False).reset_index(drop=True)
 for f in files: calibrateby_spot(f)

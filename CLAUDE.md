@@ -52,6 +52,11 @@ python data/extract_otms.py
 # Stage 3+4: calibrate per spot level and write params + repricing diagnostics.
 #            Safe to run from anywhere (resolves paths from __file__).
 python src/calibrator_prototype.py
+
+# Validation (read-only): grade the calibrations/ + calibration_tests/ output for fit quality,
+#          economic reasonability, and cross-bucket stability. Writes validation/validation_<date>.csv
+#          and prints a per-day summary. Does not modify the pipeline.
+python src/validate_calibrations.py
 ```
 
 There is no single-test command because there are no tests. To exercise just the engine, import

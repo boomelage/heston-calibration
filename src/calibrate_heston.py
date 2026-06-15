@@ -1,7 +1,7 @@
 import QuantLib as ql
 import pandas as  pd
 
-def calibrate_heston(vol_matrix,s,r,g) -> dict[str, float]:
+def calibrate_heston(vol_matrix,s,r,g) -> dict[str, float | None]:
     calculation_date = ql.Date.todaysDate()
     day_count = ql.Actual365Fixed()
     ql.Settings.instance().evaluationDate = calculation_date
@@ -42,7 +42,6 @@ def calibrate_heston(vol_matrix,s,r,g) -> dict[str, float]:
 
     lm = ql.LevenbergMarquardt(1e-8, 1e-8, 1e-8)
 
-
     model.calibrate(
         heston_helpers, lm,
         ql.EndCriteria(500, 50, 1.0e-8,1.0e-8, 1.0e-8)
@@ -53,4 +52,4 @@ def calibrate_heston(vol_matrix,s,r,g) -> dict[str, float]:
     if v0 == 0.01 and kappa == 0.2 and theta == 0.02 and rho == -0.75 and eta == 0.5:
         return {'theta': None, 'kappa': None, 'eta': None, 'rho': None, 'v0': None, 'feller': None}
     else:
-        return {'theta':theta, 'kappa':kappa, 'eta':eta, 'rho':rho, 'v0':v0, 'feller': feller}
+        return {'theta': theta, 'kappa': kappa, 'eta':eta, 'rho': rho, 'v0': v0, 'feller': feller}

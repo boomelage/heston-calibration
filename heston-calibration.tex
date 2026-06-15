@@ -1,0 +1,24 @@
+\documentclass[a4paper, 11pt]{article}
+\usepackage[margin=1.5in]{geometry}
+\usepackage{amsmath}
+\usepackage{natbib}
+
+
+\author{}
+\title{Heston model parameter calibration}
+
+
+\begin{document}
+	\begin{titlepage}
+		\begin{center}
+			{\Large Calibrating Heston (1993) stochastic volatility parameters from option price skew}
+		\end{center}
+	\end{titlepage}
+	
+	\section*{Setting}
+	\begin{align}\label{eq:heston-diffs}
+		dX_t &= \left( r - \frac{v_t}{2} \right) dt + \sqrt{v_t} \left( \rho dW_t + \sqrt{1 - \rho^2} dB_t \right) \label{eq:level} \\
+		dv_t &= \kappa (\theta - v_t) dt + \eta \sqrt{v_t} dW_t \label{eq:variance}
+	\end{align}
+	
+\end{document}

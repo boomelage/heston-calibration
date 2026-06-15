@@ -45,9 +45,9 @@ def extract_otms(file_dir):
         pass
 
 
-DATA = Path().resolve()
-RAW = DATA/"data"/"options"/"raw"
-OTM = DATA/"data"/"options"/"otm"
+DATA = Path(__file__).parent.resolve()
+RAW = DATA/"options"/"raw"
+OTM = DATA/"options"/"otm"
 
 
 if str(RAW) not in sys.path:

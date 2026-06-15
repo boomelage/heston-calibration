@@ -1,0 +1,58 @@
+import os
+import sys
+from pathlib import Path
+import pandas as pd
+from model_settings import ms
+
+def extract_otms(file_dir):
+    raw = pd.read_csv(file_dir)
+    raw = raw[
+        [
+            'underlying_symbol', 'quote_datetime', 
+            'sequence_number', 
+            'root',
+            'expiration', 'strike', 'option_type', 'trade_size',
+            'trade_price',
+            'best_bid', 'best_ask', 'trade_iv', 'trade_delta', 'underlying_bid',
+        ]
+    ]
+    raw = raw.rename(columns={'strike':'strike_price','option_type':'w'})
+    df = raw.copy()
+    df = df.rename(columns={'underlying_bid':'spot_price'})
+    df['quote_datetime'] = pd.to_datetime(df['quote_datetime'])
+    df['expiration'] = pd.to_datetime(df['expiration'],format='%Y-%m-%d')
+    df['days_to_maturity'] = (df['expiration'] - df['quote_datetime']) / pd.Timedelta(days=1)
+    df['days_to_maturity'] = df['days_to_maturity'].astype(int)
+    df = df[df['days_to_maturity']>0]
+    df = df[df['spot_price']>0]
+    df = df[df['strike_price']>0]
+    df = df[df['trade_iv']>0].copy()
+    df['w'] = df['w'].replace({'C': 'call', 'P': 'put'})
+    df = df[['quote_datetime', 'strike_price', 'w', 'trade_size', 'trade_price','trade_iv', 'spot_price','days_to_maturity']]
+    df['moneyness'] = ms.df_moneyness(df)
+    df = df[df['moneyness']<0]
+    df = df.drop(columns='moneyness').dropna()
+    times = df['quote_datetime'].drop_duplicates().sort_values()
+    try:
+        df = df[df['quote_datetime'].isin(times)].copy().reset_index(drop=True)
+        otm = df.sort_values(by='quote_datetime',ascending=True).reset_index(drop=True)
+        t = times.iloc[-1].strftime('%Y-%m-%d')
+        if not os.path.exists(OTM):
+            os.mkdir(OTM)
+        otm.to_csv(os.path.join(OTM,f'cboe_spx_otm_{t}.csv'),index=False)
+    except Exception as e:
+        print(e)
+        pass
+
+
+DATA = Path().resolve()
+RAW = DATA/"data"/"options"/"raw"
+OTM = DATA/"data"/"options"/"otm"
+
+
+if str(RAW) not in sys.path:
+    sys.path.insert(0,str(RAW))
+
+CSVS = [RAW/f for f in os.listdir(RAW) if f.endswith('.csv')]
+
+for s in CSVS: extract_otms(s)

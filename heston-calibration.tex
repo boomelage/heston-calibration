@@ -9,6 +9,14 @@
 \usepackage{algorithmic}
 \usepackage{seqsplit}
 
+\hypersetup{
+	colorlinks=true, 
+	linkcolor=black, 
+	citecolor=blue, 
+	urlcolor=blue,
+	pdfborder={0,0,0}
+}
+
 \newcommand{\Real}{\mathbb{R}}
 \newcommand{\Cplx}{\mathbb{C}}
 \newcommand{\given}{\,\vert\,}
@@ -232,7 +240,7 @@
 	A day failing \eqref{eq:coverage} (or with no usable maturities) is dropped: it
 	contributes no calibration and clears its stale diagnostics.
 
-	\section{The calibration as an optimization problem}\label{sec:objective}
+	\section{The optimization problem}\label{sec:objective}
 	Let $\mathcal{N}$ index the targets with market data $\{(\hat\sigma_n, K^\star_n, T_n, w_n)\}_{n\in\mathcal{N}}$,
 	all priced at the single spot $S_{\mathrm{ref}}$. Define the feasible box
 	\begin{equation}\label{eq:box}

@@ -5,6 +5,7 @@ import pandas as pd
 from model_settings import ms
 
 def extract_otms(file_dir):
+    print(file_dir)
     raw = pd.read_csv(file_dir)
     raw = raw[
         [
@@ -44,15 +45,20 @@ def extract_otms(file_dir):
         print(e)
         pass
 
+def main():
+    from joblib import Parallel, delayed
+    
+    DATA = Path(__file__).parent.resolve()
+    RAW = DATA/"options"/"raw"
+    OTM = DATA/"options"/"otm"
+    max_jobs = max(1, os.cpu_count() // 4)
 
-DATA = Path(__file__).parent.resolve()
-RAW = DATA/"options"/"raw"
-OTM = DATA/"options"/"otm"
+    if str(RAW) not in sys.path:
+        sys.path.insert(0,str(RAW))
 
+    CSVS = [RAW/f for f in os.listdir(RAW) if f.endswith('.csv')]
+    
+    Parallel(n_jobs=max_jobs)(delayed(extract_otms)(f) for f in CSVS)
 
-if str(RAW) not in sys.path:
-    sys.path.insert(0,str(RAW))
-
-CSVS = [RAW/f for f in os.listdir(RAW) if f.endswith('.csv')]
-
-for s in CSVS: extract_otms(s)
+if __name__ == "__main__":
+    main()

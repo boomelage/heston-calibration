@@ -11,10 +11,23 @@ keep `CLAUDE.md` in sync with both.
   self-grading), one pooled calibration per trading day over a moneyness-normalised surface, and an
   IV-space acceptance gate. This fixed the per-bucket under-determination: the routine now produces
   one *identified*, cross-day-stable fit per day. See [Completed tasks](#completed-tasks).
-- **Phase 3 — acceptance (open, this plan).** The fits are good — every day fits to ≤1 vol point —
-  but **only 1 of 5 days is accepted**: the rest peg a skew parameter to its bound. Phase 3 resolves
-  that pegging. See [Current status](#current-status-why-good-fits-still-reject) and the
+- **Phase 3 — acceptance (open, this plan).** The fits are good — days fit to ≤1 vol point — but a
+  **minority of days are accepted**: a full multi-year run **attempted 3215 days and accepted only 1742
+  (~54%)**, just under the 60% target. The rest mostly peg a skew parameter to its bound — now confirmed,
+  not presumed: `data/rejections.csv` enumerates **pegged 1369, iv_miss 103, no_trades 1** (so pegging is
+  93% of rejections, 43% of all attempted days). The accepted set is peg-free only because the gate
+  enforces it (`kappa`/`rho` clean by construction, not evidence pegging is solved). None of the levers
+  A–E are implemented yet, so ~54% is the Phase 2 engine's rate. A second issue the long run surfaces:
+  99% of *accepted* days have `feller < 0` (the gate doesn't reject on Feller) — Lever D. See
+  [Current status](#current-status-why-good-fits-still-reject) and the
   [Phase 3 plan](#phase-3-plan-improve-parameter-acceptance).
+
+- **Sample.** The calibration set is no longer the 5-day diagnostic week. `data/options/raw/` now
+  holds a multi-year SPX trade history (CBOE `UnderlyingOptionsTradesCalcs_*` from 2012 onward plus
+  Hanweck `UnderlyingOptionsTradesCalcsHanweck_*` files spanning 2013 and 2024), **3215 trading days
+  attempted** (1742 accepted, ~54%).
+  Accept-rate targets below are therefore stated as **proportions over the full set**, not "n of 5";
+  the 2024-10-07..11 table is retained only as a worked diagnostic example of the pegging mechanism.
 - **Specification.** The delivered routine is stated formally in `heston-calibration.tex` (model +
   pricing operators, `S_ref`, `K*`, surface construction, price-space vs IV-space objectives, the
   boundary-pegging gate).
@@ -42,7 +55,7 @@ Line numbers in any sketch below drift — match on code, not line numbers.
 | Phase 2 — one calibration per trading day | `src/calibrator_prototype.py`, `src/calibrate_heston.py` | high (schema) | ✅ done |
 | Phase 2 — IV-space acceptance gate | `src/calibrate_heston.py` | medium | ✅ done |
 | Write-desync fix | `src/calibrator_prototype.py` | low | ✅ done |
-| **Phase 3 — resolve boundary pegging (raise accept rate)** | `src/calibrate_heston.py` (+ knobs in `calibrator_prototype.py`) | medium | ⏳ **open** |
+| **Phase 3 — resolve boundary pegging (raise accept rate)** | `src/calibrate_heston.py` (+ knobs in `calibrator_prototype.py`) | medium | ⏳ **open** (1742/3215 ≈ 54% accept; levers A–E not yet implemented) |
 
 **QuantLib 1.35 API facts** (confirmed in this environment; the plan relies on no non-existent calls):
 
@@ -61,8 +74,36 @@ Line numbers in any sketch below drift — match on code, not line numbers.
 
 ## Current status: why good fits still reject
 
-Empirical state of a full `2024-10-07..11` run (5 trading days; `python src/calibrator_prototype.py`,
-best-fit params shown even where the day is rejected):
+**Full-set update (no lever implemented yet — this is the Phase 2 engine over the long sample).** A
+multi-year run **attempted 3215 trading days and accepted only 1742 (~54%)**, just under the 60% target.
+Crucially, `calibrations.csv` holds **only accepted days**, and the gate (`_on_boundary`) rejects any
+boundary-pegged fit — so its 0 pegged `kappa`/`rho` is **tautological**, *not* evidence the pegging is
+fixed. The 1473 rejected days are dropped before write, but their cause is now logged to
+`data/rejections.csv` (`reason` ∈ `no_trades/no_rate/thin/pegged/iv_miss/no_fit`), so the
+pegged-vs-thin split is no longer presumed but **measured**: **pegged 1369, iv_miss 103, no_trades 1**
+(thin/no_rate/no_fit 0). Pegging is thus confirmed the dominant cause — 1369 of 1473 rejections (93%),
+43% of all attempted days — and the open lever. What the long run *also* reveals — because the gate
+never tests it — is **Feller** in the accepted population: `feller < 0` on 1729/1742 (99%) accepted days
+and `eta > 1.5` on ~9% (161 days, max ≈2.0). For reference the accepted-day param spreads are `kappa`
+mean ≈2.76 / median ≈2.19, `rho` mean ≈−0.76, IV-RMSE median 0.0048 — but read these as "what passes the
+gate", not "the calibrator no longer pegs". Feller is Lever D; pegging is Levers A–C/E, all still open.
+
+**Per-cell IV selection (latest-trade → highest-volume).** When several trades land in one
+(`K*`, maturity) surface cell, the pivot now keeps the **highest-volume** trade's IV (sort `sel` by
+`trade_size`, then `aggfunc='last'`) rather than the chronologically last — the heaviest print is the
+least microstructure-noisy and is consistent with the volume-weighted `S_ref`. A full re-sweep shows
+this is a near-no-op at the population level: accept rate 1742/3215 (54.2%) versus the latest-trade
+run's 1699 (~54%), with the param distributions, Feller-violation share, and IV-RMSE all unchanged
+within noise. That is expected — a per-cell tie-break among trades that mostly agree does not touch the
+`(kappa, rho, eta)` skew degeneracy that drives the pegging. The next variant to test is a
+**volume-weighted mean** IV per cell (uses every trade in the cell, not one print); on `high_move` days
+it blends IVs across intraday spots, so watch those.
+
+The pegging mechanism is clearest on a small, hand-checked slice, so the worked example below is the
+`2024-10-07..11` week (5 trading days; `python src/calibrator_prototype.py`, best-fit params shown
+even where the day is rejected). The **same** pattern — good IV-RMSE, `theta`/`v0` stable, `kappa`/`rho`
+pegging at corners — recurs across the full multi-year set; re-validate against the whole sample (not
+this week) when measuring a lever's effect.
 
 | Date | theta | kappa | eta | rho | feller | IV-RMSE | result |
 |------|-------|-------|-----|-----|--------|---------|--------|
@@ -98,11 +139,13 @@ independently testable.
 
 ## Phase 3 plan: improve parameter acceptance
 
-**Goal.** Lift the accept rate (target ≥ 3/5 on this sample) by stopping the `kappa → 20` /
-`rho → −0.999` pegging, **without** lowering `IV_RMSE_ACCEPT` or relaxing the boundary-rejection — and
-while keeping `theta`/`v0` in their current tight ranges. Re-run `validate_calibrations.py` after each
-lever and compare four numbers: accept rate, pegged-bound share, `eta`/Feller flag counts, and the
-cross-day `kappa`/`rho` spread.
+**Goal.** Lift the accept rate (target: a **majority of the full set's days**, ≥ 60%) by stopping the
+`kappa → 20` / `rho → −0.999` pegging, **without** lowering `IV_RMSE_ACCEPT` or relaxing the
+boundary-rejection — and while keeping `theta`/`v0` in their current tight ranges. Re-run
+`validate_calibrations.py` over the **whole sample** after each lever and compare four numbers: accept
+rate, pegged-bound share, `eta`/Feller flag counts, and the cross-day `kappa`/`rho` spread. With
+thousands of days the metrics are now distributions, not five rows — track shares/percentiles, and
+watch for regime dependence (2012–2015 vs 2024, calm vs stressed days) rather than a single rate.
 
 **Policy — do not "fix" this by gaming the gate.** Keep `IV_RMSE_ACCEPT = 0.02` and the
 boundary-rejection. Do **not** widen `kappa`'s upper bound merely to turn a peg into a non-peg: a
@@ -169,13 +212,14 @@ model.calibrate(helpers, lm, end, constraint, weights, [False, True, False, Fals
 ```bash
 python src/calibrator_prototype.py
 python src/validate_calibrations.py
-python -c "import pandas as pd; d=pd.read_csv('data/calibrations.csv'); print(len(d),'days'); print(d[['date','kappa','rho','eta','feller','iv_rmse']])"
+# full-set summary (thousands of rows — aggregate, do not dump every day)
+python -c "import pandas as pd; d=pd.read_csv('data/calibrations.csv'); print(len(d),'days'); print('accept rate', d['accepted'].mean()); print(d[['kappa','rho','eta','feller','iv_rmse']].describe())"
 ```
 
-**Pass criteria.** A majority of days accept (≥ 3/5 here) with **no pegged bound**, `eta < 1.5`,
-Feller mostly satisfied, and `theta`/`v0` unchanged in their tight ranges; cross-day `kappa`/`rho`
-stop hitting corners. Update `CLAUDE.md`'s boundary-pegging "Known issue" bullet and the Done criteria
-below in the **same** change as whichever lever lands.
+**Pass criteria.** A majority of the full set's days accept (≥ 60%) with **no pegged bound**,
+`eta < 1.5`, Feller mostly satisfied, and `theta`/`v0` unchanged in their tight ranges; the cross-day
+`kappa`/`rho` distributions stop piling up at corners. Update `CLAUDE.md`'s boundary-pegging "Known
+issue" bullet and the Done criteria below in the **same** change as whichever lever lands.
 
 ---
 
@@ -188,6 +232,9 @@ below in the **same** change as whichever lever lands.
    move those metrics is reverted, not kept.
 3. Update `CLAUDE.md` in the **same** change as whichever lever lands (boundary-pegging bullet, any
    new knob or behaviour), and tick the Done criterion here.
+4. **Runtime.** A full run now calibrates ~2700+ days (multi-start LM each), so it is no longer
+   seconds. For fast lever iteration, develop against a representative date subset (a calm stretch and
+   a stressed one), then confirm the lever on the full set before committing the metrics.
 
 ## Done criteria
 
@@ -201,8 +248,14 @@ below in the **same** change as whichever lever lands.
       surface; single `data/calibrations.csv`, one row/day. Cross-day params tight
       (`theta` 0.029–0.031, `v0` 0.007–0.026, `eta` 0.8–1.5) versus the old cross-bucket `theta`
       0.037 → 11.93 swing; genuine fit ~0.7–1.0 vol points.
-- [ ] **Phase 3 — acceptance (open):** ≥ 3/5 sample days accept with no pegged bound, `eta < 1.5`,
-      Feller mostly satisfied, `theta`/`v0` unchanged. Pursue levers A–E above; re-measure after each.
+- [ ] **Phase 3 — acceptance (open):** ≥ 60% of the full multi-year set's days accept with no pegged
+      bound, `eta < 1.5`, Feller mostly satisfied, `theta`/`v0` unchanged. Baseline (Phase 2 engine, no
+      lever yet): **3215** attempted, **1742 accepted (~54%)** — short of the target. Accepted days are
+      pegging-free only because the gate enforces it; the 1473 rejected are now enumerated in
+      `data/rejections.csv` — **pegged 1369 (93% of rejections), iv_miss 103, no_trades 1** — so pegging
+      is confirmed (not presumed) the dominant cause. The long run also exposes Feller: `feller < 0` on
+      1729/1742 (99%) accepted days, `eta > 1.5` on ~9%. Pursue levers A–E; re-measure over the whole
+      sample after each.
 
 ---
 

@@ -76,9 +76,10 @@ Line numbers in any sketch below drift — match on code, not line numbers.
 multi-year run **attempted 3125 trading days and accepted only 1699 (~54%)**, just under the 60% target.
 Crucially, `calibrations.csv` holds **only accepted days**, and the gate (`_on_boundary`) rejects any
 boundary-pegged fit — so its 0 pegged `kappa`/`rho` is **tautological**, *not* evidence the pegging is
-fixed. The ~46% rejected (1426 days) are dropped before write and the pipeline does not persist their
-rejection cause, so the pegged-vs-thin split is **unquantified from the CSVs**; pegging remains the
-presumed dominant cause and the open lever. What the long run *does* newly reveal — because the gate
+fixed. The ~46% rejected (1426 days) are dropped before write, but their cause is now logged to
+`data/rejections.csv` (`reason` ∈ `no_trades/no_rate/thin/pegged/iv_miss/no_fit`), so the
+pegged-vs-thin split is **auditable** — `groupby('reason')` it; pegging is the presumed dominant cause
+and the open lever. What the long run *does* newly reveal — because the gate
 never tests it — is **Feller** in the accepted population: `feller < 0` on 1686/1699 (99%) accepted days
 and `eta > 1.5` on ~9.5% (max ≈2.0). For reference the accepted-day param spreads are `kappa` mean ≈2.79
 / median ≈2.14, `rho` mean ≈−0.76, IV-RMSE median 0.0043 — but read these as "what passes the gate",

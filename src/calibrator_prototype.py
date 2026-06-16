@@ -23,6 +23,14 @@ intraday spot range) -- fully regenerated each run from the accepted days. The b
 repricing diagnostics stay one-file-per-day under `data/options/calibration_tests/`. A day is
 written to calibration_tests exactly when it contributes a row, so the two outputs always describe
 the same accepted set; a rejected or too-thin day contributes no row and clears its tests file.
+
+Rejection audit: every attempted-but-rejected day contributes one row to a SEPARATE
+`data/rejections.csv` (keyed by date) recording why it was dropped -- a small `reason` category
+(no_trades/no_rate/thin/pegged/iv_miss/no_fit), the human `detail`, the `iv_rmse` where one exists,
+and the surface coverage where known. `calibrations.csv` stays accepted-only (it mirrors
+calibration_tests/ one-to-one); `rejections.csv` is the complement, so accepted + rejected together
+cover every attempted day and the pegged-vs-thin split is auditable. Both files are fully
+regenerated each run, and an empty set removes its file.
 """
 import os
 import sys
@@ -39,6 +47,10 @@ DATA = SRC.parent / "data"
 # accumulating file, not a file-per-day directory. The bulky per-day repricing diagnostics stay
 # under their own directory (one file per day) since they are large, not "parameters".
 CALIBRATIONS_FILE = DATA / "calibrations.csv"
+# The complement of calibrations.csv: one row per attempted-but-rejected day, recording why it was
+# dropped. Lets us quantify the pegged-vs-thin-vs-IV rejection split that calibrations.csv (accepted
+# only, by gate construction) cannot show.
+REJECTIONS_FILE = DATA / "rejections.csv"
 TESTS = SRC.parent / "data" / "options" / "calibration_tests"
 
 if str(SRC) not in sys.path:
@@ -69,19 +81,25 @@ MIN_CELLS = 12       # non-NaN surface cells required (target >= MIN_MATS x MIN_
 MAX_MOVE_PCT = 0.03  # intraday spot range above this flags the day (sticky-moneyness strained)
 
 
-def _skip_day(test_path, reason):
-    """Drop a day: remove any stale per-day tests file and return None (no calibrations row).
+def _skip_day(test_path, reason, detail, iv_rmse=np.nan,
+              n_maturities=np.nan, n_strikes=np.nan, n_cells=np.nan):
+    """Drop a day: clear any stale tests file and return a rejection row (one per rejected day).
 
     The single calibrations.csv is rebuilt from the accepted rows each run, so a dropped day simply
-    contributes no row -- there is nothing to delete on that side. Clearing the matching tests file
-    here keeps the two outputs describing the same accepted set (no desync)."""
+    contributes no row there -- and clearing the matching tests file keeps calibrations.csv and
+    calibration_tests/ describing the same accepted set (no desync). Separately, the returned row is
+    collected into data/rejections.csv so the rejection cause is auditable: `reason` is a small
+    category (no_trades/no_rate/thin/pegged/iv_miss/no_fit), `detail` the human string, with
+    `iv_rmse`/coverage filled where that stage reached them (NaN otherwise)."""
+    date = test_path[-14:-4]
     if os.path.exists(test_path):
         os.remove(test_path)
         note = "cleared stale tests file"
     else:
         note = "nothing written"
-    print(f"{test_path[-14:-4]}: {reason}; {note}")
-    return None
+    print(f"{date}: {detail}; {note}")
+    return {'date': date, 'reason': reason, 'detail': detail, 'iv_rmse': iv_rmse,
+            'n_maturities': n_maturities, 'n_strikes': n_strikes, 'n_cells': n_cells}
 
 
 def _select_surface(df):
@@ -113,14 +131,13 @@ def calibrate_by_day(filepath):
     df = pd.read_csv(filepath)
     df = df[(df['trade_iv'] > 0) & (df['days_to_maturity'] >= MIN_DTM)].copy()
     if df.empty:
-        return _skip_day(test_path, "no trades after IV/DTM filter")
+        return _skip_day(test_path, "no_trades", "no trades after IV/DTM filter")
     df['quote_datetime'] = pd.to_datetime(df['quote_datetime'])
     date = df['quote_datetime'].dt.floor('D').unique()[0]
     r = rg_asc['risk_free_rate'].asof(date)
     g = rg_asc['dividend_rate'].asof(date)
     if pd.isna(r) or pd.isna(g):
-        print(f"skipping {filepath}: no rate on/before {date}")
-        return None
+        return _skip_day(test_path, "no_rate", f"no rate on/before {pd.Timestamp(date).date()}")
 
     # One reference spot for the whole day (volume-weighted). The intraday range that the
     # sticky-moneyness re-centring assumes is mild; a large range strains that assumption.
@@ -139,7 +156,7 @@ def calibrate_by_day(filepath):
 
     sel = _select_surface(df)
     if sel is None:
-        return _skip_day(test_path, "no usable maturities")
+        return _skip_day(test_path, "thin", "no usable maturities")
     sel = sel.sort_values('quote_datetime')   # so pivot aggfunc='last' is the latest trade per cell
     surf = sel.pivot_table(index='Kstar', columns='days_to_maturity',
                            values='trade_iv', aggfunc='last')
@@ -148,8 +165,9 @@ def calibrate_by_day(filepath):
     n_cells = int(surf.count().sum())
     if n_mats < MIN_MATS or n_strikes < MIN_STRIKES or n_cells < MIN_CELLS:
         return _skip_day(
-            test_path,
-            f"thin surface ({n_strikes} strikes x {n_mats} maturities, {n_cells} cells)"
+            test_path, "thin",
+            f"thin surface ({n_strikes} strikes x {n_mats} maturities, {n_cells} cells)",
+            n_maturities=n_mats, n_strikes=n_strikes, n_cells=n_cells,
         )
 
     res = calibrate_heston(surf, S_ref, r, g)   # ONE calibration for the whole day (hardened engine)
@@ -157,12 +175,19 @@ def calibrate_by_day(filepath):
           f"iv_rmse={res['iv_rmse']}  price_rmse={res['rmse']}  accepted={res['accepted']}")
 
     if not res['accepted']:
-        # Distinguish the two rejection causes: a fit that passes the IV-space gate but is still
-        # rejected is boundary-pegged (a param hit a bound -> a non-fit). That is the remaining
-        # lever (kappa/rho handling) deferred from this change -- not an IV-fit-quality problem.
-        cause = ("boundary-pegged" if res['iv_rmse'] is not None and res['iv_rmse'] <= IV_RMSE_ACCEPT
-                 else f"iv_rmse={res['iv_rmse']:.4f} > {IV_RMSE_ACCEPT}")
-        return _skip_day(test_path, f"calibration rejected ({cause})")
+        # Distinguish the rejection causes. A fit that passes the IV-space gate but is still rejected
+        # is boundary-pegged (a param hit a bound -> a non-fit) -- the remaining lever (kappa/rho
+        # handling), not an IV-fit-quality problem. iv_rmse is None only when every restart failed.
+        iv = res['iv_rmse']
+        if iv is not None and iv <= IV_RMSE_ACCEPT:
+            reason, detail = "pegged", "calibration rejected (boundary-pegged)"
+        elif iv is None:
+            reason, detail = "no_fit", "calibration rejected (no finite fit)"
+        else:
+            reason, detail = "iv_miss", f"calibration rejected (iv_rmse={iv:.4f} > {IV_RMSE_ACCEPT})"
+        return _skip_day(test_path, reason, detail,
+                         iv_rmse=(iv if iv is not None else np.nan),
+                         n_maturities=n_mats, n_strikes=n_strikes, n_cells=n_cells)
 
     # ---- one calibration row, keyed by date ----
     params = ['theta', 'kappa', 'rho', 'eta', 'v0']
@@ -220,18 +245,35 @@ def main():
     files = [f for f in os.listdir(OTM) if f.endswith('.csv')]
     files = pd.Series([os.path.join(OTM, f) for f in files]).sort_values(ascending=False).reset_index(drop=True)
 
-    # Accumulate every accepted day's row into the single parameters file. The loop covers all OTM
-    # files, so this fully regenerates data/calibrations.csv each run (no stale rows survive); a run
-    # with zero accepted days removes the file rather than leaving it stale.
-    rows = [r for r in Parallel(n_jobs=max_jobs)(delayed(calibrate_by_day)(f) for f in files) if r is not None]
-    if rows:
-        out = pd.DataFrame(rows).set_index('date').sort_index()
+    # Every attempted day returns exactly one row: an accepted calibration (no 'reason' key) or a
+    # rejection (carries 'reason'). Split them into the two complementary files. The loop covers all
+    # OTM files, so both files are fully regenerated each run (no stale rows survive); an empty set
+    # removes its file rather than leaving it stale.
+    results = [r for r in Parallel(n_jobs=max_jobs)(delayed(calibrate_by_day)(f) for f in files)
+               if r is not None]
+    accepted = [r for r in results if 'reason' not in r]
+    rejected = [r for r in results if 'reason' in r]
+
+    if accepted:
+        out = pd.DataFrame(accepted).set_index('date').sort_index()
         out.to_csv(CALIBRATIONS_FILE)
-        print(f"\nwrote {len(rows)} day(s) -> {CALIBRATIONS_FILE}")
+        print(f"\nwrote {len(accepted)} accepted day(s) -> {CALIBRATIONS_FILE}")
     else:
         if CALIBRATIONS_FILE.exists():
             CALIBRATIONS_FILE.unlink()
         print(f"\nno accepted days; removed {CALIBRATIONS_FILE}")
+
+    if rejected:
+        rej = pd.DataFrame(rejected).set_index('date').sort_index()
+        rej.to_csv(REJECTIONS_FILE)
+        attempted = len(accepted) + len(rejected)
+        print(f"wrote {len(rejected)} rejected day(s) -> {REJECTIONS_FILE}")
+        print(f"accept rate {len(accepted)}/{attempted} = {len(accepted) / attempted:.1%}; "
+              f"rejections by reason: {rej['reason'].value_counts().to_dict()}")
+    else:
+        if REJECTIONS_FILE.exists():
+            REJECTIONS_FILE.unlink()
+        print("no rejected days; removed", REJECTIONS_FILE)
 
 
 if __name__ == "__main__":

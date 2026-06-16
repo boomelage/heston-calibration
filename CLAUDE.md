@@ -49,9 +49,10 @@ python -c "import sys; sys.path.insert(0,'data'); from get_rg import rg; print(r
 #          so it runs from any working directory.
 python data/extract_otms.py
 
-# Stage 3+4: calibrate ONCE per trading day. Writes params to the single data/calibrations.csv and
-#            per-day repricing diagnostics to data/options/calibration_tests/. Resolves paths from
-#            __file__, so it runs from any working directory.
+# Stage 3+4: calibrate ONCE per trading day. Writes accepted params to the single data/calibrations.csv,
+#            one row per REJECTED day (with the cause) to data/rejections.csv, and per-day repricing
+#            diagnostics to data/options/calibration_tests/. Prints the accept rate and a
+#            rejections-by-reason tally. Resolves paths from __file__, so it runs from any working dir.
 python src/calibrator_prototype.py
 
 # Validation (read-only): grade data/calibrations.csv + calibration_tests/ for fit quality, economic
@@ -67,7 +68,8 @@ are **git-ignored**; only a `.gitkeep` keeps each folder present. `data/options/
 with years of data. A fresh clone has none of them — to bootstrap, drop
 `UnderlyingOptionsTradesCalcs_*.csv` into `data/options/raw/`, run Stage 2 to materialise
 `data/options/otm/`, then Stages 3+4 (which regenerate `calibration_tests/`). Only the small derived
-artefacts are tracked (`data/calibrations.csv`, `data/options/validation/`, `data/market/`).
+artefacts are tracked (`data/calibrations.csv`, `data/rejections.csv`, `data/options/validation/`,
+`data/market/`).
 
 There is no single-test command because there are no tests. To exercise just the engine, import
 `calibrate_heston(vol_matrix, s, r, g)` from `src/calibrate_heston.py` with a strike×maturity IV
@@ -128,11 +130,14 @@ pooled, moneyness-normalised surface — not the old per-0.5-spot-bucket fits:
    `calibration_tests/cboe_spx_calibration_tests_<date>.csv`. Repricing uses each contract's
    **original** `spot_price`/`strike_price` (Heston params are spot-independent), not `S_ref`/`Kstar`.
    A rejected or too-thin day returns `None` and **removes** any stale per-day tests file.
-8. The module-level driver collects the returned rows across **all** OTM files and writes them once
-   to the single `data/calibrations.csv` (sorted by date), fully **regenerating** it each run (no
-   stale rows survive). A run with **zero** accepted days **removes** `data/calibrations.csv`. Because
-   a row is returned exactly when a tests file is written, the single params file and the per-day
-   tests files always describe the same accepted set (no desync).
+8. The module-level driver collects the returned rows across **all** OTM files and **splits** them:
+   accepted rows (no `reason` key) go to the single `data/calibrations.csv`, rejected rows (each
+   carries a `reason`) go to the complementary `data/rejections.csv` — both sorted by date and fully
+   **regenerated** each run (no stale rows survive), and an empty set **removes** its file. Accepted +
+   rejected together cover every attempted day, so the accept rate and the pegged-vs-thin-vs-IV
+   rejection split are auditable directly (the driver also prints them). Because an accepted row is
+   returned exactly when a tests file is written, `calibrations.csv` and the per-day tests files always
+   describe the same accepted set (no desync).
 
 The per-day **tests** path is derived by `filepath.replace('otm', 'calibration_tests')`, which
 rewrites **both** the `otm` directory segment and the `otm` token in the filename in one call —
@@ -183,6 +188,10 @@ breaks a downstream stage:
   `spot_price` (= `S_ref`), `risk_free_rate, dividend_rate, theta, kappa, rho, eta, v0, feller,
   iv_rmse, rmse, n_helpers, accepted, n_maturities, n_strikes, contracts_count, total_volume,
   spot_min, spot_max, spot_range_pct, high_move, calculation_date`.
+- `data/rejections.csv` schema (**single file, one row per rejected trading day**, keyed by `date` —
+  the complement of `calibrations.csv`): `reason` (category: `no_trades, no_rate, thin, pegged,
+  iv_miss, no_fit`), `detail` (human string), `iv_rmse` (NaN unless calibration ran), `n_maturities,
+  n_strikes, n_cells` (NaN unless a surface was built). `date` here is the filename date string.
 - `calibration_tests/*.csv`: the day's repriced surface contracts (original `spot_price`/`strike_price`,
   plus `Kstar`, the fitted params, `volatility` (= `trade_iv`), `black_scholes`, `heston`).
 - `ms.df_moneyness(df)` needs `w, spot_price, strike_price` (returns `spot-strike` for calls, `strike-spot` for puts).
@@ -204,9 +213,9 @@ breaks a downstream stage:
   multi-year run attempted **3125** trading days and accepted **1699 (~54%)**, just under PLAN.md's 60%
   target. The accepted set has 0 pegged `kappa`/`rho`, but that is **tautological**: the gate
   (`_on_boundary`) rejects any boundary-pegged fit, so pegged days never reach the file. The ~46%
-  rejected (1426 days) are dropped before write and the pipeline does **not** persist their rejection
-  cause, so the pegged-vs-thin-vs-IV split is **unquantified from the CSVs**; boundary-pegged `kappa`
-  (→20) / `rho` (→−0.999) remains the expected dominant cause. None of the Phase 3 levers (A–E) are
+  rejected (1426 days) are dropped before write; their cause is now logged to `data/rejections.csv`
+  (`reason` ∈ `no_trades/no_rate/thin/pegged/iv_miss/no_fit`), so the pegged-vs-thin-vs-IV split is
+  auditable — `pegged` is the expected dominant cause. None of the Phase 3 levers (A–E) are
   implemented yet (`MIN_DTM`=7, no `weights`, no `fixParameters`, no Feller penalty), so this ~54% is
   the Phase 2 engine's rate over the long sample, not a post-lever result.
 - **Feller is the standout issue in the accepted set.** The gate does **not** reject on Feller (it is a

@@ -87,41 +87,60 @@ def calibrateby_spot(filepath):
             continue
 
         lastquote_time = np.sort(snap['quote_datetime'].unique())[-1]
-        parameters = pd.Series(calibrate_heston(surf,s,r,g))   # ONE calibration per spot
-        print(parameters)
-        sparams.loc[s,parameters.index] = parameters.values
+        res = calibrate_heston(surf,s,r,g)   # ONE calibration per spot
+        print(pd.Series(res))
+        # Pricing/feller params go into sparams' fixed columns; the engine's diagnostics
+        # (rmse, n_helpers, accepted) are written scalar-wise. Rejected fits return null
+        # params -> the row is dropped by sparams.dropna() below (not written).
+        params = pd.Series({k: res[k] for k in ['theta','kappa','rho','eta','v0','feller']})
+        sparams.loc[s,params.index] = params.values
+        sparams.loc[s,'rmse'] = res['rmse']
+        sparams.loc[s,'n_helpers'] = res['n_helpers']
+        sparams.loc[s,'accepted'] = res['accepted']
         sparams.loc[s,'calculation_date'] = lastquote_time
         sparams.loc[s,'contracts_count'] = contracts_count
         sparams.loc[s,'total_volume'] = total_volume
         sparams.loc[s,'risk_free_rate'] = r
         sparams.loc[s,'dividend_rate'] = g
 
-        # reprice this spot's snapshot under the fitted params; collect for one write at the end
-        repriced = snap.copy()
-        repriced[parameters.index] = np.tile(parameters.values,(repriced.shape[0],1))
-        repriced['risk_free_rate'] = r
-        repriced['dividend_rate'] = g
-        repriced = repriced.rename(columns={'trade_iv':'volatility'})
-        try:
-            repriced['black_scholes'] = vanp.df_numpy_black_scholes(repriced)
-        except Exception:
-            repriced['black_scholes'] = np.nan
-        try:
-            repriced['heston'] = vanp.df_heston_price(repriced)
-        except Exception:
-            repriced['heston'] = np.nan
-        test_frames.append(repriced)
+        # Only repriced *accepted* fits feed the tests file, so calibrations and
+        # calibration_tests describe the same set of buckets (no desync). Rejected fits
+        # return null params -- repricing under them is meaningless (and was dropped anyway).
+        if res['accepted']:
+            repriced = snap.copy()
+            repriced[params.index] = np.tile(params.values,(repriced.shape[0],1))
+            repriced['risk_free_rate'] = r
+            repriced['dividend_rate'] = g
+            repriced = repriced.rename(columns={'trade_iv':'volatility'})
+            try:
+                repriced['black_scholes'] = vanp.df_numpy_black_scholes(repriced)
+            except Exception:
+                repriced['black_scholes'] = np.nan
+            try:
+                repriced['heston'] = vanp.df_heston_price(repriced)
+            except Exception:
+                repriced['heston'] = np.nan
+            test_frames.append(repriced)
 
+    # `calibrated` (accepted buckets) and `test_frames` (repriced accepted buckets) describe the
+    # same set, so write/skip both together. Writing only one -- the old bug -- left a stale
+    # calibrations file beside an emptied tests file whenever a day produced no accepted fit.
     calibrated = sparams.dropna()
-    if not calibrated.empty:
-        if os.path.exists(CALIBRATIONS)==False:
-            os.mkdir(CALIBRATIONS)
-        calibrated.to_csv(filepath.replace('otm','calibrations'))
+    cal_path = filepath.replace('otm','calibrations')
+    test_path = filepath.replace('otm','calibration_tests')
 
-    if test_frames:
-        if os.path.exists(TESTS)==False:
-            os.mkdir(TESTS)
-        pd.concat(test_frames,ignore_index=True).dropna().to_csv(filepath.replace('otm','calibration_tests'),index=False)
+    if calibrated.empty:
+        # Nothing accepted this day: clear any stale outputs so the pair never desyncs.
+        for stale in (cal_path, test_path):
+            if os.path.exists(stale):
+                os.remove(stale)
+        print(f"no accepted fit for {date}: cleared stale outputs")
+        return
+
+    CALIBRATIONS.mkdir(parents=True, exist_ok=True)
+    calibrated.to_csv(cal_path)
+    TESTS.mkdir(parents=True, exist_ok=True)
+    pd.concat(test_frames,ignore_index=True).dropna().to_csv(test_path,index=False)
 
 
 OTM = Path(__file__).parent.parent / "data" / "options" / "otm"

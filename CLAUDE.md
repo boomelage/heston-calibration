@@ -60,13 +60,21 @@ python src/calibrator_prototype.py
 python src/validate_calibrations.py
 ```
 
+**Data not in version control.** `data/options/raw/` (raw CBOE trade files, ~80–90 MB/day — near
+GitHub's 100 MB/file limit) and `data/options/otm/` (the OTM snapshots derived from them, ~6 MB/day)
+are **git-ignored**; only a `.gitkeep` keeps each folder present. A fresh clone has neither — to
+bootstrap, drop `UnderlyingOptionsTradesCalcs_*.csv` into `data/options/raw/`, run Stage 2 to
+materialise `data/options/otm/`, then Stages 3+4. Only the small derived artefacts are tracked
+(`data/calibrations.csv`, `data/options/calibration_tests/`, `data/options/validation/`, `data/market/`).
+
 There is no single-test command because there are no tests. To exercise just the engine, import
 `calibrate_heston(vol_matrix, s, r, g)` from `src/calibrate_heston.py` with a strike×maturity IV
 DataFrame.
 
 ## Pipeline architecture
 
-Data flows left-to-right. `raw/` and `otm/` hold one CSV per trading day; the per-day calibration
+Data flows left-to-right. `raw/` and `otm/` hold one CSV per trading day (both **git-ignored** — not
+in the repo; see the "Data not in version control" note under How to run); the per-day calibration
 parameters accumulate into a **single** `data/calibrations.csv` (one row per day), while the bulky
 per-day repricing diagnostics stay one-file-per-day under `data/options/calibration_tests/`:
 

@@ -1,5 +1,13 @@
 .DS_Store
 
+# ----- Large per-day option data: keep folders, ignore contents (see README.md / CLAUDE.md) -----
+# raw CBOE trade files ~80-90 MB/day (near GitHub's 100 MB/file limit); otm snapshots ~6 MB/day
+# and fully regenerable from raw via data/extract_otms.py. Neither belongs in version control.
+data/options/raw/*
+!data/options/raw/.gitkeep
+data/options/otm/*
+!data/options/otm/.gitkeep
+
 # ----- Python exlcusions -----
 
 # Byte-compiled / optimized / DLL files

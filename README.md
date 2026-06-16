@@ -10,3 +10,23 @@ This repository has quite convoluted logic at the moment and relies a bit too mu
 4. Run [`calibrator_prototype.py`](src/calibrator_prototype.py) to attempt calibration on various spots by its own logic and the calibration engine [`calibrate_heston.py`](src/calibrate_heston.py)
 
 As you can see the whole setup is quite dependent on a rather convoluted file structure with very specific data formats and the way the data is called in [`calibrator_prototype.py`](src/calibrator_prototype.py) is through hardcoded calls to dataframe column names.
+
+## Data files are not tracked in git
+
+The bulky per-day option data is **deliberately excluded from version control** (see [`.gitignore`](.gitignore)):
+
+- `data/options/raw/` — raw CBOE trade files (`UnderlyingOptionsTradesCalcs_*.csv`), ~80–90 MB per
+  trading day. These sit just under GitHub's hard 100 MB-per-file push limit and would blow the
+  repository's size budget within a few days, so they are never committed.
+- `data/options/otm/` — the OTM-filtered snapshots derived from `raw/` (~6 MB/day). Fully regenerable
+  from `raw/`, so they are not committed either.
+
+Each folder keeps only a `.gitkeep` so the path exists on a fresh clone. Only the small derived
+artefacts stay tracked: `data/calibrations.csv`, `data/options/calibration_tests/`,
+`data/options/validation/`, and the market rates in `data/market/`.
+
+**To run the pipeline on a fresh clone**, supply the inputs yourself:
+
+1. Drop your CBOE `UnderlyingOptionsTradesCalcs_*.csv` files into `data/options/raw/`.
+2. Run `python data/extract_otms.py` to materialise `data/options/otm/`.
+3. Run `python src/calibrator_prototype.py` (and optionally `python src/validate_calibrations.py`).

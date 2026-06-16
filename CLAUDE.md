@@ -27,7 +27,7 @@ prototype, not a clean design.
 
 ## Environment & dependencies
 
-- **Python 3.12**, **QuantLib 1.35**. Also: `pandas`, `numpy`, `scipy`, `joblib`.
+- **Python 3.12**, **QuantLib 1.35**. Also: `pandas`, `numpy`, `scipy`.
 - **Two proprietary packages by the repo author** provide the QuantLib convenience wrappers:
   - `model_settings` — exports a ready instance `ms` (used as `ms.df_moneyness(df)`).
   - `quantlib_pricers` — exports the class `vanilla_pricer` (used as `vanp = vanilla_pricer()`).
@@ -49,13 +49,14 @@ python -c "import sys; sys.path.insert(0,'data'); from get_rg import rg; print(r
 #          so it runs from any working directory.
 python data/extract_otms.py
 
-# Stage 3+4: calibrate per spot level and write params + repricing diagnostics.
-#            Safe to run from anywhere (resolves paths from __file__).
+# Stage 3+4: calibrate ONCE per trading day. Writes params to the single data/calibrations.csv and
+#            per-day repricing diagnostics to data/options/calibration_tests/. Resolves paths from
+#            __file__, so it runs from any working directory.
 python src/calibrator_prototype.py
 
-# Validation (read-only): grade the calibrations/ + calibration_tests/ output for fit quality,
-#          economic reasonability, and cross-bucket stability. Writes validation/validation_<date>.csv
-#          and prints a per-day summary. Does not modify the pipeline.
+# Validation (read-only): grade data/calibrations.csv + calibration_tests/ for fit quality, economic
+#          reasonability, and cross-day stability. Writes data/options/validation/validation.csv and
+#          prints a per-day summary plus a cross-day stability block. Does not modify the pipeline.
 python src/validate_calibrations.py
 ```
 
@@ -65,10 +66,12 @@ DataFrame.
 
 ## Pipeline architecture
 
-Data flows left-to-right through `data/options/` subfolders, one CSV per trading day:
+Data flows left-to-right. `raw/` and `otm/` hold one CSV per trading day; the per-day calibration
+parameters accumulate into a **single** `data/calibrations.csv` (one row per day), while the bulky
+per-day repricing diagnostics stay one-file-per-day under `data/options/calibration_tests/`:
 
 ```
-raw/  --extract_otms.py-->  otm/  --calibrator_prototype.py-->  calibrations/  + calibration_tests/
+raw/  --extract_otms.py-->  otm/  --calibrator_prototype.py-->  ../calibrations.csv  + calibration_tests/
 ```
 
 **Stage 1 — market rates (`data/get_rg.py`).** Imported for its side effect: building a
@@ -87,31 +90,47 @@ maps `option_type` C/P → `w` call/put, computes `days_to_maturity` (calendar d
 keeps positive IV/spot/strike, then keeps **only OTM** rows via `ms.df_moneyness` (`moneyness < 0`).
 Writes `otm/cboe_spx_otm_<lastquotedate>.csv`.
 
-**Stage 3 — orchestration (`src/calibrator_prototype.py`, `calibrateby_spot`).** The non-obvious
-core. For each OTM file it does **per-spot-level calibration**, not one snapshot per day:
+**Stage 3 — orchestration (`src/calibrator_prototype.py`, `calibrate_by_day`).** The non-obvious
+core. For each OTM file it does **one calibration per trading day** (PLAN Work item 3), over a
+pooled, moneyness-normalised surface — not the old per-0.5-spot-bucket fits:
 
-1. Look up `r`, `g` from `rg` for the file's quote date.
-2. Round spot to the nearest 0.5 (`(2*spot).round()//2`) and group trades by this rounded level.
-3. For each spot level: rank maturities by traded volume (top `max_nt`=7); for each kept maturity,
-   take the `max_nk`=7 strikes nearest the money on each wing (highest OTM puts `pK[-n:]`, lowest
-   OTM calls `cK[:n]`) from that maturity's rows only; concat into one snapshot and `pivot_table`
-   into a strike×maturity IV surface (`values='trade_iv'`), requiring ≥5 non-NaN cells.
-4. Call `calibrate_heston(surface, s, r, g)` **once per spot** over the full multi-maturity surface.
-   The engine **rejects** fits it cannot trust (returns `None` params — see Stage 4), so only
-   *accepted* spots are kept. Accumulate accepted params **plus the engine diagnostics**
-   (`rmse, n_helpers, accepted`) into a per-spot table and write
-   `calibrations/cboe_spx_calibrations_<date>.csv` **once** after the spot loop.
-5. For diagnostics, reprice **each accepted** spot's snapshot under Black–Scholes
-   (`vanp.df_numpy_black_scholes`) and Heston (`vanp.df_heston_price`) with the fitted params;
-   accumulate across accepted spots and write `calibration_tests/cboe_spx_calibration_tests_<date>.csv`
-   **once** after the spot loop. Both CSVs are written under one decision so they always describe the
-   same accepted set; on a day with **zero** accepted fits **both** files are removed (not left stale).
+1. Read trades; keep `trade_iv > 0` **and** `days_to_maturity >= MIN_DTM` (=7). Ultra-short
+   maturities are dropped: Heston fits them poorly and they drive `eta`/`kappa` to Feller-violating
+   extremes, polluting the pooled fit.
+2. Look up `r`, `g` from `rg` for the file's quote date (NaN-guarded).
+3. **Reference spot.** Compute one volume-weighted `S_ref` for the day. Record the intraday spot
+   range; if it exceeds `MAX_MOVE_PCT` (=3%) set `high_move=True` and warn (the sticky-moneyness
+   re-centring below is strained on large-move days) — the day is still written.
+4. **Moneyness normalisation.** A Heston fit has a single spot, but trades occur across the
+   intraday range. Each trade keeps its moneyness `m = strike / spot_row` but is re-struck to
+   `K* = m * S_ref` and **snapped to the SPX 5-point grid** (`STRIKE_GRID`), so trades at different
+   intraday spots share clean surface columns (`Kstar`).
+5. **Surface.** Rank maturities by traded volume (top `MAX_NT`=12); for each kept maturity take the
+   `MAX_NK`=8 nearest-money `Kstar` per wing (highest OTM puts, lowest OTM calls); `pivot_table`
+   into a `Kstar`×maturity IV surface (`values='trade_iv'`). Require richer coverage than before:
+   `>= MIN_MATS`(3) maturities, `>= MIN_STRIKES`(5) strikes, and `>= MIN_CELLS`(12) non-NaN cells.
+6. Call `calibrate_heston(surface, S_ref, r, g)` **once for the whole day**. The engine **rejects**
+   fits it cannot trust (returns `None` params — see Stage 4), printing whether the rejection was a
+   thin surface, an IV-RMSE miss, or a **boundary-pegged** param.
+7. **On accept** `calibrate_by_day` *returns* the day's **one row keyed by date** (`S_ref` as
+   `spot_price`, `r`, `g`, the five params, `feller`, `iv_rmse`, `rmse`, coverage counts, intraday
+   spot range, `high_move`) and writes the repriced surface contracts to
+   `calibration_tests/cboe_spx_calibration_tests_<date>.csv`. Repricing uses each contract's
+   **original** `spot_price`/`strike_price` (Heston params are spot-independent), not `S_ref`/`Kstar`.
+   A rejected or too-thin day returns `None` and **removes** any stale per-day tests file.
+8. The module-level driver collects the returned rows across **all** OTM files and writes them once
+   to the single `data/calibrations.csv` (sorted by date), fully **regenerating** it each run (no
+   stale rows survive). A run with **zero** accepted days **removes** `data/calibrations.csv`. Because
+   a row is returned exactly when a tests file is written, the single params file and the per-day
+   tests files always describe the same accepted set (no desync).
 
-Output routing uses `filepath.replace('otm', ...)`, which rewrites **both** the `otm` directory
-segment and the `otm` token in the filename in one call — fragile but intentional.
+The per-day **tests** path is derived by `filepath.replace('otm', 'calibration_tests')`, which
+rewrites **both** the `otm` directory segment and the `otm` token in the filename in one call —
+fragile but intentional. (The calibrations file is the fixed `data/calibrations.csv`, not derived
+from the input path.)
 
 **Stage 4 — calibration engine (`src/calibrate_heston.py`).** Pure function
-`calibrate_heston(vol_matrix, s, r, g) -> dict`, **hardened** (PLAN Work item 2). Builds a QuantLib
+`calibrate_heston(vol_matrix, s, r, g) -> dict`, **hardened** (PLAN Work items 2 & 3). Builds a QuantLib
 `HestonProcess` / `HestonModel` with an `AnalyticHestonEngine` and one `HestonModelHelper` per
 non-NaN surface cell (maturity as `Period(days, Days)`, NYSE calendar, `Date.todaysDate()` as eval
 date — immaterial under the flat-forward curves used here). It then:
@@ -119,17 +138,23 @@ date — immaterial under the flat-forward curves used here). It then:
 1. **Multiple restarts:** for each of a small data-seeded grid of starting points (`_seed_grid`),
    calibrates with Levenberg–Marquardt under **box bounds**
    (`ql.NonhomogeneousBoundaryConstraint(LOW, HIGH)`), and keeps the fit with the lowest
-   relative-price RMSE (`HestonModelHelper.calibrationError()`, the only error type SWIG exposes).
-2. **Acceptance gate:** returns the failure sentinel if the best RMSE exceeds `RMSE_ACCEPT`
-   (`0.05`, kept strict on purpose — loosening it only admits under-determined per-bucket fits) **or**
-   any parameter is pinned within `BOUND_TOL` of a bound (a boundary fit is a non-fit). The old "did
-   the params move from the fixed guess" sentinel is **removed**. Note: under this strict gate most
-   per-bucket fits are rejected; the fix is PLAN.md Work item 3 (one calibration per day), not a lower
-   threshold.
+   **IV-space RMSE**.
+2. **IV-space error (the gate metric).** Each helper's fitted model price is inverted back to a
+   Black vol via `BlackCalibrationHelper.impliedVolatility(modelValue, ...)` and compared to the
+   market vol that built it; the RMSE of those residuals is in **vol points**. This replaces the old
+   relative-price gate, which deep-OTM wings inflated (a ~1-vol-point fit scored ~0.07 price-RMSE and
+   was wrongly rejected). The relative-price RMSE is still computed and returned as `rmse`, but no
+   longer gates.
+3. **Acceptance gate:** returns the failure sentinel if the best **IV-RMSE** exceeds
+   `IV_RMSE_ACCEPT` (`0.02`, ~2 vol points) **or** any parameter is pinned within `BOUND_TOL` of a
+   bound (a boundary fit is a non-fit). The old "did the params move from the fixed guess" sentinel
+   is **removed**. Note: on the pooled per-day surfaces the genuine fit is ~0.8–1.4 vol points, so
+   IV-RMSE passes easily; the remaining rejections are **boundary-pegged** `kappa` (→20) or `rho`
+   (→−0.999) — the next lever (kappa/rho handling), not a fit-quality problem.
 
-Returns `{theta, kappa, eta, rho, v0, feller, rmse, n_helpers, accepted}` with
+Returns `{theta, kappa, eta, rho, v0, feller, iv_rmse, rmse, n_helpers, accepted}` with
 `feller = 2*kappa*theta - eta**2` for an accepted fit; a rejected fit returns params/`feller` as
-`None` but keeps `rmse`/`n_helpers`/`accepted=False` for diagnostics.
+`None` but keeps `iv_rmse`/`rmse`/`n_helpers`/`accepted=False` for diagnostics.
 **Param order matters:** `model.params()` returns `[theta, kappa, eta, rho, v0]` — the `LOW`/`HIGH`
 bounds arrays follow this exact order (get it wrong and bounds land on the wrong params).
 
@@ -139,6 +164,12 @@ Stages communicate through column names, not typed interfaces. Renaming any of t
 breaks a downstream stage:
 
 - `otm/*.csv` schema: `quote_datetime, strike_price, w, trade_size, trade_price, trade_iv, spot_price, days_to_maturity`.
+- `data/calibrations.csv` schema (**single file, one row per trading day**, keyed by `date`):
+  `spot_price` (= `S_ref`), `risk_free_rate, dividend_rate, theta, kappa, rho, eta, v0, feller,
+  iv_rmse, rmse, n_helpers, accepted, n_maturities, n_strikes, contracts_count, total_volume,
+  spot_min, spot_max, spot_range_pct, high_move, calculation_date`.
+- `calibration_tests/*.csv`: the day's repriced surface contracts (original `spot_price`/`strike_price`,
+  plus `Kstar`, the fitted params, `volatility` (= `trade_iv`), `black_scholes`, `heston`).
 - `ms.df_moneyness(df)` needs `w, spot_price, strike_price` (returns `spot-strike` for calls, `strike-spot` for puts).
 - `vanp.df_numpy_black_scholes(df)` needs `spot_price, strike_price, days_to_maturity, risk_free_rate, volatility, w`
   (note: `trade_iv` is renamed to `volatility` before this call).
@@ -148,7 +179,13 @@ breaks a downstream stage:
 
 - Output routing uses `filepath.replace('otm', ...)`, which rewrites **both** the `otm` directory
   segment and the `otm` token in the filename in one call — fragile but intentional.
-- Spot is rounded to a 0.5 grid (`(2*spot).round()//2`), so a contract that was OTM at its actual
-  spot can land with `strike_price == spot_price` (an ATM tie) in the snapshot. Harmless, but a
-  strict `K>spot`/`K<spot` OTM check will flag these ties.
+- Moneyness normalisation assumes **sticky-moneyness** (IV ~stationary in `K/S` over a session). It
+  is mild on normal days (~1% intraday range) but strained on large-move days; those are flagged
+  `high_move` (range > `MAX_MOVE_PCT`=3%) and still written — treat their `S_ref` with suspicion.
+- Snapping `Kstar` to the 5-point SPX grid is exact near the money but coarser in the far wings
+  (native grid widens to 25/50/100); harmless for QuantLib (any float strike prices) but it slightly
+  quantises deep-OTM moneyness.
+- **Most days currently reject on boundary-pegged `kappa` (→20) or `rho` (→−0.999)**, not on fit
+  quality (IV-RMSE passes). This is the known next lever (volume/vega weighting, `kappa` anchoring or
+  bound review — PLAN.md "Improving calibration performance"); until then expect few accepted days.
 - The `data/__pycache__/` holds bytecode for deleted modules (`get_data`, `get_options`, ...) — ignore it.

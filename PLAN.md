@@ -40,7 +40,8 @@ not line numbers.
 | Work item 1 — validation/diagnostics | **new** `src/validate_calibrations.py` | none (read-only) | ✅ done |
 | Work item 2 — engine hardening | `src/calibrate_heston.py` (+ small prototype edit) | medium | ✅ done (strict gate kept; per-bucket fits capped by under-determination → Item 3) |
 | Write-desync fix (newly found bug) | `src/calibrator_prototype.py` | low | ✅ done |
-| Work item 3 — one calibration per day | `src/calibrator_prototype.py` (restructure) | high (schema change) | ☐ todo |
+| Work item 3 — one calibration per day | `src/calibrator_prototype.py` (restructure) + `src/calibrate_heston.py` (IV gate) + `src/validate_calibrations.py` | high (schema change) | ✅ done (pooled per-day fit + IV-space gate; accepted days still capped by kappa/rho pegging → next lever) |
+| IV-space acceptance gate (lever 2, pulled forward) | `src/calibrate_heston.py` | medium | ✅ done (gate on IV-RMSE ≤ 0.02 vol pts; price-RMSE retained as diagnostic) |
 
 **API facts confirmed in this environment** (QuantLib 1.35), so the plan does not rely on
 non-existent calls:
@@ -316,12 +317,13 @@ nearest-money strikes per wing (`max_nk`); pivot to a `K*`×`T` IV surface. Requ
 coverage than the old `≥5 cells` — e.g. **≥3 maturities and ≥5 strikes** — so the fit is identified.
 Optionally pass `weights` to `model.calibrate` (volume- or vega-weighted) so liquid contracts dominate.
 
-**Output schema change (must be documented).** `calibrations/*.csv` becomes **one row per trading
+**Output schema change (must be documented).** Calibration output becomes **one row per trading
 day** (keyed by date, recording `S_ref`, `r`, `g`, the five params, `feller`, `rmse`, coverage
-counts) instead of one row per spot bucket. `calibration_tests/*.csv` still reprices the day's
-pooled snapshot. This **breaks the current per-spot CSV contract** — update `CLAUDE.md`'s column
-contracts and Stage 3/4 description accordingly, and note the README's "convoluted" framing improves
-here. If both granularities are ever wanted, gate per-spot behind a flag, but per-day is primary.
+counts) instead of one row per spot bucket. Because the result is one row per day, the parameters
+now accumulate into a **single `data/calibrations.csv`** (fully regenerated each run), replacing the
+old `calibrations/cboe_spx_calibrations_<date>.csv` file-per-day directory; `calibration_tests/*.csv`
+still reprices the day's pooled snapshot one-file-per-day. This **breaks the current per-spot CSV
+contract** — `CLAUDE.md`'s column contracts and Stage 3/4 description are updated accordingly.
 
 **Sketch.**
 
@@ -344,9 +346,9 @@ def calibrate_by_day(filepath):
 python src/calibrator_prototype.py
 python src/validate_calibrations.py
 python -c "
-import pandas as pd, glob
-for f in sorted(glob.glob('data/options/calibrations/*.csv')):
-    d = pd.read_csv(f); print(f.split('/')[-1], 'rows:', len(d))   # expect ~1 per day
+import pandas as pd
+d = pd.read_csv('data/calibrations.csv')   # single file, one row per accepted day
+print('days:', len(d)); print(d[['date','theta','kappa','eta','rho','v0','iv_rmse','accepted']])
 "
 ```
 
@@ -375,13 +377,14 @@ the gate and apply equally to per-bucket or per-day surfaces.
    multi-maturity surface per day gives Heston the cross-maturity/cross-strike information it needs.
    Expect boundary-rejection and `eta`/`theta` blow-ups to fall sharply. See Work item 3.
 
-2. **Gate and rank in IV space, not relative price.** `calibrationError()` is relative *price* RMSE,
-   which deep-OTM contracts inflate; that is why `RMSE_ACCEPT=0.05` is both strict *and* an imperfect
-   metric (it over-penalizes cheap wings). The natural surface-fit metric is the **vol-point
-   residual** already implemented in `validate_calibrations.py`
-   (`ql.blackFormulaImpliedStdDev` on the forward). Compute IV-RMSE inside `calibrate_heston` for the
-   best fit and gate on **~1–2 vol points** instead of price RMSE; also rank restarts by it. This is
-   interpretable and dividend-consistent. (Cost: an inversion per helper per accepted fit — cheap.)
+2. **Gate and rank in IV space, not relative price. ✅ done (pulled forward with Item 3).**
+   `calibrationError()` is relative *price* RMSE, which deep-OTM contracts inflate; that is why the
+   old `RMSE_ACCEPT=0.05` was both strict *and* an imperfect metric (it over-penalized cheap wings).
+   `calibrate_heston` now inverts each helper's fitted price back to a Black vol via
+   `BlackCalibrationHelper.impliedVolatility(modelValue, ...)`, computes the vol-point RMSE, **ranks
+   restarts by it, and gates on `IV_RMSE_ACCEPT=0.02`** (~2 vol points). The relative-price RMSE is
+   retained as the `rmse` diagnostic. This flipped the rejections from "wing-inflated price error" to
+   the genuine remaining issue (boundary pegging, lever 3/6 below).
 
 3. **Weight the objective.** Pass `weights` to `model.calibrate` so liquid / informative quotes
    dominate: **vega weighting** (down-weights deep-OTM noise, complementing lever 2) or
@@ -441,9 +444,17 @@ does not move those is not worth keeping.
       yields almost no accepted fits (~1 across 2024-10-07..11) — the standard is kept strict on
       purpose; the under-determination is what Item 3 fixes, not the threshold. **Remaining lever:**
       swap the price-space gate for the IV-space one (see Improving calibration performance).
-- [ ] **Item 3:** one calibration per trading day over a moneyness-normalized multi-maturity surface;
-      `calibrations/*.csv` is one row per day; cross-day parameter stability is tight.
-- [ ] **Item 3:** `CLAUDE.md` updated to match the new schema, engine behavior, and validation stage.
+- [x] **Item 3:** one calibration per trading day over a moneyness-normalized multi-maturity surface
+      (volume-weighted `S_ref`, `K* = (K/S_row)·S_ref` snapped to the 5-pt grid, `<7d` maturities
+      dropped); parameters land in a single `data/calibrations.csv`, one row per day. Across 2024-10-07..11 the genuine fit is now
+      **~0.8–1.4 vol points** (IV-RMSE) with **tightly clustered** params (`theta` 0.029–0.031,
+      `v0` 0.007–0.026, `eta` 0.8–1.5) — versus the old cross-bucket `theta` 0.037→11.93 swing.
+- [x] **Item 3 / lever 2:** acceptance now gates in **IV space** (`IV_RMSE_ACCEPT=0.02` vol pts),
+      not relative price; restarts are ranked by IV-RMSE; `validate_calibrations.py` is per-day with a
+      cross-day stability block. `CLAUDE.md` updated for the new schema, engine behavior, and stage.
+- [ ] **Remaining (next lever):** most days still reject on **boundary-pegged** `kappa` (→20) or
+      `rho` (→−0.999) — only ~1/5 days accept. Tame via volume/vega weighting and `kappa` anchoring
+      or a `rho`-bound review (see "Improving calibration performance" levers 3–6).
 
 ---
 

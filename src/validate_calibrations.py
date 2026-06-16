@@ -1,25 +1,24 @@
-"""Read-only validation of Heston calibration outputs (PLAN.md Work item 1).
+"""Read-only validation of Heston calibration outputs (PLAN.md Work items 1 & 3).
 
-Reads the existing ``data/options/calibrations/*.csv`` (one row per spot bucket) and the
-matching ``data/options/calibration_tests/*.csv`` (one repriced row per contract) and emits,
-per spot bucket and per trading day, a pass/fail report on:
+Reads the single ``data/calibrations.csv`` (ONE row per trading day, Work item 3) and the matching
+per-day ``data/options/calibration_tests/*.csv`` (repriced surface contracts) and emits, per trading
+day, a pass/fail report on:
 
   1. Fit quality   - relative repricing error (heston vs trade_price) and, more rigorously,
                      the IV-space residual (model-implied vol vs market vol, in vol points).
   2. Economic      - two-tier flags (hard reject / suspicious) on (theta, kappa, eta, rho, v0)
      reasonability   against SPX-plausible ranges, plus the Feller condition.
-  3. Stability     - spread of the structural params across spot buckets within a day; these
-                     should cluster tightly (they do not yet -- that is the identification bug).
+  3. Stability     - spread of the structural params **across days** (cross-day, post Work item 3);
+                     these should cluster tightly for one underlying over a short window.
 
-This module touches nothing in the pipeline. Run it before and after the deeper fixes
-(Work items 2 and 3) to measure improvement.
+This module touches nothing in the pipeline. Run it before and after the deeper fixes to measure
+improvement.
 
     python src/validate_calibrations.py
 
-Per-bucket tables are written to ``data/options/validation/validation_<date>.csv``; a per-day
-summary is printed.
+All graded rows are written to a single ``data/options/validation/validation.csv``; a per-day
+summary and a cross-day stability block are printed.
 """
-import re
 from pathlib import Path
 
 import numpy as np
@@ -27,8 +26,9 @@ import pandas as pd
 import QuantLib as ql
 
 SRC = Path(__file__).parent.resolve()
-OPTIONS = SRC.parent / "data" / "options"
-CALIBRATIONS = OPTIONS / "calibrations"
+DATA = SRC.parent / "data"
+OPTIONS = DATA / "options"
+CALIBRATIONS_FILE = DATA / "calibrations.csv"   # single one-row-per-day parameters file
 TESTS = OPTIONS / "calibration_tests"
 OUT = OPTIONS / "validation"
 
@@ -40,7 +40,7 @@ THRESHOLDS = dict(
     theta_lo=1e-4, theta_hi=1.0, theta_susp=0.25,  # long-run variance (vol>50% suspicious)
     v0_lo=1e-4, v0_hi=1.0, v0_atm_tol=0.05,        # sqrt(v0) should ~ front-month ATM IV
     kappa_lo=0.0, kappa_hi=20.0,                   # mean-reversion speed
-    iv_rmse_pts=0.02,                              # accept buckets fitting within ~2 vol points
+    iv_rmse_pts=0.02,                              # accept days fitting within ~2 vol points
 )
 
 STRUCTURAL = ["theta", "kappa", "eta", "rho", "v0"]
@@ -60,11 +60,11 @@ def implied_vol(price, w, S, K, r, g, T):
         return np.nan
 
 
-def fit_metrics(test_df):
-    """Per spot-bucket fit quality from the repriced test rows.
+def day_metrics(test_df):
+    """Day-level fit quality from the repriced surface contracts.
 
-    Returns a DataFrame indexed by spot_price with repricing error, IV-space RMSE, the
-    front-month ATM market IV (reference for the v0 check), and the contract count.
+    Returns a dict: repricing error (median/p90), IV-space RMSE (vol points), the front-month
+    nearest-ATM market IV (reference for the v0 check), and the contract count.
     """
     df = test_df.copy()
     df["rel_err"] = (df["heston"] - df["trade_price"]).abs() / df["trade_price"]
@@ -78,26 +78,22 @@ def fit_metrics(test_df):
     ]
     df["iv_resid"] = df["model_iv"] - df["volatility"]
 
-    rows = []
-    for s, g in df.groupby("spot_price"):
-        tmin = g["days_to_maturity"].min()
-        near = g[g["days_to_maturity"] == tmin]
-        atm_iv = near.iloc[(near["strike_price"] - near["spot_price"]).abs().to_numpy().argmin()]["volatility"]
-        resid = g["iv_resid"].dropna()
-        rows.append(dict(
-            spot_price=s,
-            n_contracts=len(g),
-            rel_err_median=g["rel_err"].median(),
-            rel_err_p90=g["rel_err"].quantile(0.90),
-            iv_rmse=float(np.sqrt((resid ** 2).mean())) if len(resid) else np.nan,
-            iv_resid_n=len(resid),
-            atm_iv=atm_iv,
-        ))
-    return pd.DataFrame(rows).set_index("spot_price")
+    tmin = df["days_to_maturity"].min()
+    near = df[df["days_to_maturity"] == tmin]
+    atm_iv = near.iloc[(near["strike_price"] - near["spot_price"]).abs().to_numpy().argmin()]["volatility"]
+    resid = df["iv_resid"].dropna()
+    return dict(
+        n_contracts=len(df),
+        rel_err_median=df["rel_err"].median(),
+        rel_err_p90=df["rel_err"].quantile(0.90),
+        iv_rmse=float(np.sqrt((resid ** 2).mean())) if len(resid) else np.nan,
+        iv_resid_n=len(resid),
+        atm_iv=atm_iv,
+    )
 
 
-def grade_bucket(row, atm_iv, iv_rmse):
-    """Two-tier flags for one calibrated bucket. Returns a dict of booleans + summaries."""
+def grade_day(row, atm_iv, iv_rmse):
+    """Two-tier flags for one calibrated day. Returns a dict of booleans + summaries."""
     t = THRESHOLDS
     theta, kappa, eta, rho, v0, feller = (
         row["theta"], row["kappa"], row["eta"], row["rho"], row["v0"], row["feller"],
@@ -122,15 +118,15 @@ def grade_bucket(row, atm_iv, iv_rmse):
     out = {**hard, **susp}
     out["hard_fail"] = any(hard.values())
     out["n_suspicious"] = sum(susp.values())
-    out["accepted"] = not out["hard_fail"]
+    out["val_accepted"] = not out["hard_fail"]
     return out
 
 
-def day_stability(cal):
-    """Spread of structural params across this day's spot buckets (should be tight)."""
+def cross_day_stability(cal_all):
+    """Spread of structural params across days (post Work item 3 this replaces cross-bucket)."""
     out = {}
     for c in STRUCTURAL:
-        x = cal[c].dropna()
+        x = cal_all[c].dropna()
         if x.empty:
             continue
         out[f"{c}_iqr"] = float(x.quantile(0.75) - x.quantile(0.25))
@@ -141,86 +137,79 @@ def day_stability(cal):
     return out
 
 
-def validate_file(cal_path, test_path, date):
-    cal = pd.read_csv(cal_path)
+def grade_row(row, test_path):
+    """Grade one day's calibration row against its repriced surface contracts."""
     test = pd.read_csv(test_path)
-    metrics = fit_metrics(test)
-
-    records = []
-    for _, row in cal.iterrows():
-        s = row["spot_price"]
-        m = metrics.loc[s] if s in metrics.index else pd.Series(dtype=float)
-        atm_iv = m.get("atm_iv", np.nan)
-        iv_rmse = m.get("iv_rmse", np.nan)
-        flags = grade_bucket(row, atm_iv, iv_rmse)
-        records.append({
-            "date": date,
-            **row.to_dict(),
-            "n_contracts": m.get("n_contracts", np.nan),
-            "rel_err_median": m.get("rel_err_median", np.nan),
-            "rel_err_p90": m.get("rel_err_p90", np.nan),
-            "iv_rmse": iv_rmse,
-            "atm_iv": atm_iv,
-            **flags,
-        })
-    report = pd.DataFrame(records)
-
-    OUT.mkdir(exist_ok=True)
-    report.to_csv(OUT / f"validation_{date}.csv", index=False)
-    return report, day_stability(cal)
+    m = day_metrics(test)
+    flags = grade_day(row, m["atm_iv"], m["iv_rmse"])
+    record = {**row.to_dict(),
+              "n_contracts": m["n_contracts"],
+              "rel_err_median": m["rel_err_median"], "rel_err_p90": m["rel_err_p90"],
+              "iv_rmse": m["iv_rmse"], "atm_iv": m["atm_iv"], **flags}
+    return pd.DataFrame([record])
 
 
-def print_summary(date, report, stab):
-    n = len(report)
-    acc = int(report["accepted"].sum())
-    print(f"\n=== {date}  ({n} spot buckets) ===")
-    print(f"  accepted (no hard fail) : {acc}/{n} ({acc / n:.0%})")
-    print(f"  repricing rel-err       : median {report['rel_err_median'].median():.1%}"
-          f"  p90 {report['rel_err_p90'].median():.1%}")
-    print(f"  IV-space RMSE (vol pts) : median {report['iv_rmse'].median():.4f}"
-          f"  worst {report['iv_rmse'].max():.4f}")
-    print("  flag counts:")
-    for col, label in [
-        ("rho_pegged", "rho pegged (|rho|>0.995)"),
-        ("feller_violated", "Feller violated (<0)"),
-        ("eta_susp", "eta > 1.5"),
-        ("theta_susp", "theta > 0.25"),
-        ("rho_wrong_sign", "rho > 0 (wrong sign)"),
-        ("v0_atm_mismatch", "sqrt(v0) far from ATM IV"),
-        ("kappa_degenerate", "kappa<0.1 & theta>0.5"),
-        ("fit_hard", "IV RMSE > 2 vol pts"),
-    ]:
-        print(f"    {label:32s}: {int(report[col].sum()):3d}/{n}")
-    print("  cross-bucket stability (should be tight):")
+def print_day(report):
+    r = report.iloc[0]
+    print(f"\n=== {r['date']}  (1 day,  {int(r['n_contracts'])} contracts,  "
+          f"{int(r.get('n_maturities', 0))} maturities x {int(r.get('n_strikes', 0))} strikes) ===")
+    print(f"  params : theta={r['theta']:.4f} kappa={r['kappa']:.4f} eta={r['eta']:.4f} "
+          f"rho={r['rho']:.4f} v0={r['v0']:.4f}  feller={r['feller']:.4f}")
+    print(f"  fit    : engine rmse {r.get('rmse', float('nan')):.4f}   "
+          f"repricing rel-err median {r['rel_err_median']:.1%} p90 {r['rel_err_p90']:.1%}   "
+          f"IV RMSE {r['iv_rmse']:.4f} vol pts")
+    verdict = "PASS" if r["val_accepted"] else "HARD FAIL"
+    print(f"  grade  : {verdict}   suspicious flags: {int(r['n_suspicious'])}")
+    flagged = [label for col, label in [
+        ("rho_pegged", "rho pegged"), ("rho_wrong_sign", "rho>0"), ("eta_susp", "eta>1.5"),
+        ("theta_susp", "theta>0.25"), ("v0_atm_mismatch", "sqrt(v0) far from ATM IV"),
+        ("kappa_degenerate", "kappa<0.1 & theta>0.5"), ("feller_violated", "Feller<0"),
+        ("fit_hard", "IV RMSE>2 vol pts"),
+    ] if bool(r.get(col))]
+    if flagged:
+        print(f"           flags: {', '.join(flagged)}")
+    if bool(r.get("high_move")):
+        print(f"           note : high intraday move ({r.get('spot_range_pct', float('nan')):.2%}) "
+              f"- moneyness normalisation strained")
+
+
+def print_cross_day(cal_all, stab):
+    n = len(cal_all)
+    print(f"\n=== CROSS-DAY STABILITY ({n} days; structural params should cluster tightly) ===")
     for c in STRUCTURAL:
         iqr = stab.get(f"{c}_iqr")
+        if iqr is None:
+            continue
         mm = stab.get(f"{c}_maxmin")
-        mm_s = f"  max/min {mm:8.1f}" if mm is not None else ""
-        print(f"    {c:6s} IQR {iqr:8.4f}  range [{stab.get(f'{c}_min'):.4f}, {stab.get(f'{c}_max'):.4f}]{mm_s}")
+        mm_s = f"  max/min {mm:7.2f}" if mm is not None else ""
+        print(f"    {c:6s} IQR {iqr:8.4f}  range [{stab.get(f'{c}_min'):.4f}, "
+              f"{stab.get(f'{c}_max'):.4f}]{mm_s}")
 
 
 def main():
-    cal_files = sorted(CALIBRATIONS.glob("cboe_spx_calibrations_*.csv"))
-    if not cal_files:
-        print(f"No calibration files in {CALIBRATIONS}")
+    if not CALIBRATIONS_FILE.exists():
+        print(f"No calibrations file at {CALIBRATIONS_FILE}")
         return
+    cal = pd.read_csv(CALIBRATIONS_FILE)   # one row per trading day
     all_reports = []
-    for cal_path in cal_files:
-        m = re.search(r"(\d{4}-\d{2}-\d{2})", cal_path.name)
-        date = m.group(1) if m else cal_path.stem
+    for _, row in cal.iterrows():
+        date = str(row["date"])
         test_path = TESTS / f"cboe_spx_calibration_tests_{date}.csv"
         if not test_path.exists():
             print(f"skipping {date}: no matching test file")
             continue
-        report, stab = validate_file(cal_path, test_path, date)
-        print_summary(date, report, stab)
+        report = grade_row(row, test_path)
+        print_day(report)
         all_reports.append(report)
 
     if all_reports:
         combined = pd.concat(all_reports, ignore_index=True)
-        n, acc = len(combined), int(combined["accepted"].sum())
-        print(f"\n=== ALL DAYS: {acc}/{n} buckets accepted ({acc / n:.0%}); "
-              f"per-day tables in {OUT} ===")
+        n, acc = len(combined), int(combined["val_accepted"].sum())
+        OUT.mkdir(exist_ok=True)
+        combined.to_csv(OUT / "validation.csv", index=False)
+        print_cross_day(combined, cross_day_stability(combined))
+        print(f"\n=== ALL DAYS: {acc}/{n} days pass all hard checks ({acc / n:.0%}); "
+              f"table written to {OUT / 'validation.csv'} ===")
 
 
 if __name__ == "__main__":

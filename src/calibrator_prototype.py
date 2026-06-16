@@ -1,25 +1,53 @@
+"""Heston calibration orchestration (PLAN.md Work item 3: one calibration per trading day).
+
+Replaces the old per-0.5-spot-bucket scheme (`calibrateby_spot`) with `calibrate_by_day`: a
+single calibration over one rich, moneyness-normalised, multi-maturity surface per day.
+
+Why per day. ~53 independent 5-parameter fits/day, each on a thin per-bucket slice, left Heston
+under-determined (only the product kappa*theta identified -> theta-huge/kappa-tiny degeneracy, and
+parameters that swung across adjacent spot buckets). Pooling the day's trades gives the fit the
+cross-maturity, cross-strike information it needs.
+
+Handling intraday spot movement. A Heston fit has a single spot S, but the underlying drifts through
+the session (~1% on 2024-10-07). Each trade keeps its moneyness m = K / S_row (S_row = the
+underlying at trade time) but is re-struck to K* = m * S_ref against one volume-weighted reference
+spot S_ref, then snapped to the SPX 5-point strike grid so trades at different intraday spots share
+clean surface columns. This re-centres the day under the standard sticky-moneyness assumption
+(IV ~stationary in moneyness over a session). It strains on large-move days, which are flagged
+(`high_move`) but still written. Heston params are spot-independent, so the repricing diagnostics
+below use each trade's *original* spot/strike, not the normalised K*.
+
+Output: the parameters accumulate into a SINGLE `data/calibrations.csv` (one row per trading day,
+keyed by date, recording S_ref, r, g, the five params, feller, rmse, coverage counts and the
+intraday spot range) -- fully regenerated each run from the accepted days. The bulky per-day
+repricing diagnostics stay one-file-per-day under `data/options/calibration_tests/`. A day is
+written to calibration_tests exactly when it contributes a row, so the two outputs always describe
+the same accepted set; a rejected or too-thin day contributes no row and clears its tests file.
+"""
 import os
 import sys
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from joblib import Parallel, delayed
 from quantlib_pricers import vanilla_pricer
 vanp = vanilla_pricer()
 pd.options.display.float_format = '{:.5f}'.format
 
 SRC = Path(__file__).parent.resolve()
 DATA = SRC.parent / "data"
-CALIBRATIONS = SRC.parent / "data" / "options" / "calibrations"
+# One calibration per trading day -> one row per day, so the parameters live in a single
+# accumulating file, not a file-per-day directory. The bulky per-day repricing diagnostics stay
+# under their own directory (one file per day) since they are large, not "parameters".
+CALIBRATIONS_FILE = DATA / "calibrations.csv"
 TESTS = SRC.parent / "data" / "options" / "calibration_tests"
 
 if str(SRC) not in sys.path:
-    sys.path.insert(0,str(SRC))
+    sys.path.insert(0, str(SRC))
 
-from calibrate_heston import calibrate_heston
+from calibrate_heston import calibrate_heston, IV_RMSE_ACCEPT
 
 if str(DATA) not in sys.path:
-    sys.path.insert(0,str(DATA))
+    sys.path.insert(0, str(DATA))
 
 from get_rg import rg # pyright: ignore[reportMissingImports]
 
@@ -28,127 +56,165 @@ from get_rg import rg # pyright: ignore[reportMissingImports]
 # ordering, or NaN if `date` precedes all rates.
 rg_asc = rg.sort_index()
 
-def calibrateby_spot(filepath):
+# Surface coverage / selection knobs. Pooling the whole day (one fit) lets us take more maturities
+# than the old per-spot path (was max_nt=7); the surface is built once over the full day.
+MAX_NT = 12          # maturities kept, ranked by traded volume
+MAX_NK = 8           # strikes kept per wing (highest OTM puts, lowest OTM calls), nearest the money
+STRIKE_GRID = 5.0    # SPX near-money strike increment; normalised K* is snapped to this grid
+MIN_DTM = 7          # drop ultra-short maturities (< 7 days): Heston fits them poorly and they drive
+                     # eta/kappa to extremes (Feller-violating), polluting the pooled fit
+MIN_MATS = 3         # require a genuinely multi-maturity surface (identification)
+MIN_STRIKES = 5      # require a real strike range
+MIN_CELLS = 12       # non-NaN surface cells required (target >= MIN_MATS x MIN_STRIKES)
+MAX_MOVE_PCT = 0.03  # intraday spot range above this flags the day (sticky-moneyness strained)
+
+
+def _skip_day(test_path, date, reason):
+    """Drop a day: remove any stale per-day tests file and return None (no calibrations row).
+
+    The single calibrations.csv is rebuilt from the accepted rows each run, so a dropped day simply
+    contributes no row -- there is nothing to delete on that side. Clearing the matching tests file
+    here keeps the two outputs describing the same accepted set (no desync)."""
+    if os.path.exists(test_path):
+        os.remove(test_path)
+        note = "cleared stale tests file"
+    else:
+        note = "nothing written"
+    print(f"{pd.Timestamp(date).date()}: {reason}; {note}")
+    return None
+
+
+def _select_surface(df):
+    """Pick the day's calibration surface in moneyness-normalised (K*) strike space.
+
+    Top MAX_NT maturities by traded volume; within each, the MAX_NK nearest-the-money strikes per
+    wing (highest OTM puts, lowest OTM calls) on K* (already centred on S_ref). Returns the selected
+    snapshot rows with original strike/spot retained for repricing, or None if no maturity qualifies.
+    """
+    byt = df.groupby('days_to_maturity')
+    vol_by_t = byt['trade_size'].sum().sort_values(ascending=False)
+    T = np.sort(vol_by_t.index[:MAX_NT]).tolist()
+
+    selected = []
+    for t in T:
+        dft = byt.get_group(t)
+        cK = np.sort(dft.loc[dft['w'] == 'call', 'Kstar'].unique())
+        pK = np.sort(dft.loc[dft['w'] == 'put', 'Kstar'].unique())
+        if len(cK) > 1 and len(pK) > 1:
+            keep = list(pK[-min(len(pK), MAX_NK):]) + list(cK[:min(len(cK), MAX_NK)])
+            selected.append(dft[dft['Kstar'].isin(keep)])
+    if not selected:
+        return None
+    return pd.concat(selected, ignore_index=True)
+
+
+def calibrate_by_day(filepath):
     df = pd.read_csv(filepath)
-    df = df[df['trade_iv']>0]
+    df = df[(df['trade_iv'] > 0) & (df['days_to_maturity'] >= MIN_DTM)].copy()
     df['quote_datetime'] = pd.to_datetime(df['quote_datetime'])
-    date = df['quote_datetime'].copy().dt.floor('D').unique()[0]
+    date = df['quote_datetime'].dt.floor('D').unique()[0]
     r = rg_asc['risk_free_rate'].asof(date)
     g = rg_asc['dividend_rate'].asof(date)
     if pd.isna(r) or pd.isna(g):
         print(f"skipping {filepath}: no rate on/before {date}")
-        return
-    df['spot_price'] = (2*df['spot_price']).round()//2
-    S = df['spot_price'].copy().drop_duplicates().sort_values().reset_index(drop=True)
-    bys = df.groupby('spot_price')
+        return None
 
-    # -------- Volumes filter -------
-    # volumes = pd.Series(np.tile(np.nan,len(S)),index=S)
-    # for s in S:
-    #     volumes[s] = np.sum(bys.get_group(s)['trade_size'])
-    # volumes = volumes.sort_values(ascending=False).iloc[:20]
-    # df = df[df['spot_price'].isin(volumes.index)].reset_index(drop=True)
+    test_path = filepath.replace('otm', 'calibration_tests')
 
-    sparams = pd.DataFrame(np.tile(np.nan,(max(len(S),1),6)),index=S,columns = ['theta','kappa','rho','eta','v0','feller'])
+    # One reference spot for the whole day (volume-weighted). The intraday range that the
+    # sticky-moneyness re-centring assumes is mild; a large range strains that assumption.
+    S_ref = float(np.average(df['spot_price'], weights=df['trade_size']))
+    spot_min, spot_max = float(df['spot_price'].min()), float(df['spot_price'].max())
+    spot_range_pct = spot_max / spot_min - 1.0
+    high_move = spot_range_pct > MAX_MOVE_PCT
+    if high_move:
+        print(f"WARNING {pd.Timestamp(date).date()}: intraday spot range {spot_range_pct:.2%} "
+              f"> {MAX_MOVE_PCT:.0%}; normalisation to S_ref={S_ref:.1f} may be strained")
 
-    max_nt = 7   # maturities per spot, ranked by traded volume
-    max_nk = 7   # strikes kept per wing, nearest the money
-    test_frames = []   # repriced snapshots, accumulated across spots and written once
+    # Moneyness-normalise: each trade keeps m = K / S_row but is re-struck to K* = m * S_ref and
+    # snapped to the SPX strike grid, so trades at different intraday spots align on shared columns.
+    df['Kstar'] = (df['strike_price'] / df['spot_price']) * S_ref
+    df['Kstar'] = (df['Kstar'] / STRIKE_GRID).round() * STRIKE_GRID
 
-    for s in S:
-        spot_data = df[df['spot_price']==s]
-        total_volume = sum(spot_data['trade_size'])
-        byt = spot_data.groupby('days_to_maturity')
+    sel = _select_surface(df)
+    if sel is None:
+        return _skip_day(test_path, date, "no usable maturities")
+    sel = sel.sort_values('quote_datetime')   # so pivot aggfunc='last' is the latest trade per cell
+    surf = sel.pivot_table(index='Kstar', columns='days_to_maturity',
+                           values='trade_iv', aggfunc='last')
 
-        # top maturities for this spot, ranked by traded volume
-        vol_by_t = byt['trade_size'].sum().sort_values(ascending=False)
-        T = np.sort(vol_by_t.index[:max_nt]).tolist()
+    n_strikes, n_mats = surf.shape
+    n_cells = int(surf.count().sum())
+    if n_mats < MIN_MATS or n_strikes < MIN_STRIKES or n_cells < MIN_CELLS:
+        return _skip_day(test_path, date,
+                         f"thin surface ({n_strikes} strikes x {n_mats} maturities, {n_cells} cells)")
 
-        selected = []
-        for t in T:
-            dft = byt.get_group(t)   # (A) strikes from the CURRENT maturity
-            cK = np.sort(dft.loc[dft['w']=='call','strike_price'].unique())
-            pK = np.sort(dft.loc[dft['w']=='put', 'strike_price'].unique())
-            if len(cK)>1 and len(pK)>1:
-                # (C) cap each wing with min(); nearest-money: highest OTM puts, lowest OTM calls
-                keep = list(pK[-min(len(pK),max_nk):]) + list(cK[:min(len(cK),max_nk)])
-                selected.append(dft[dft['strike_price'].isin(keep)])   # (B) this spot's rows only
+    res = calibrate_heston(surf, S_ref, r, g)   # ONE calibration for the whole day (hardened engine)
+    print(f"{pd.Timestamp(date).date()}  S_ref={S_ref:.1f}  cells={n_cells}  "
+          f"iv_rmse={res['iv_rmse']}  price_rmse={res['rmse']}  accepted={res['accepted']}")
 
-        if not selected:
-            continue
-        snap = (pd.concat(selected,ignore_index=True)
-                  .drop_duplicates(subset=['strike_price','days_to_maturity'],keep='first')
-                  .dropna()
-                  .reset_index(drop=True))
-        surf = snap.pivot_table(index='strike_price',columns='days_to_maturity',
-                                values='trade_iv',aggfunc='last')   # multi-maturity surface
-        contracts_count = int(surf.count().sum())
-        if contracts_count<5:
-            continue
+    if not res['accepted']:
+        # Distinguish the two rejection causes: a fit that passes the IV-space gate but is still
+        # rejected is boundary-pegged (a param hit a bound -> a non-fit). That is the remaining
+        # lever (kappa/rho handling) deferred from this change -- not an IV-fit-quality problem.
+        cause = ("boundary-pegged" if res['iv_rmse'] is not None and res['iv_rmse'] <= IV_RMSE_ACCEPT
+                 else f"iv_rmse={res['iv_rmse']:.4f} > {IV_RMSE_ACCEPT}")
+        return _skip_day(test_path, date, f"calibration rejected ({cause})")
 
-        lastquote_time = np.sort(snap['quote_datetime'].unique())[-1]
-        res = calibrate_heston(surf,s,r,g)   # ONE calibration per spot
-        print(pd.Series(res))
-        # Pricing/feller params go into sparams' fixed columns; the engine's diagnostics
-        # (rmse, n_helpers, accepted) are written scalar-wise. Rejected fits return null
-        # params -> the row is dropped by sparams.dropna() below (not written).
-        params = pd.Series({k: res[k] for k in ['theta','kappa','rho','eta','v0','feller']})
-        sparams.loc[s,params.index] = params.values
-        sparams.loc[s,'rmse'] = res['rmse']
-        sparams.loc[s,'n_helpers'] = res['n_helpers']
-        sparams.loc[s,'accepted'] = res['accepted']
-        sparams.loc[s,'calculation_date'] = lastquote_time
-        sparams.loc[s,'contracts_count'] = contracts_count
-        sparams.loc[s,'total_volume'] = total_volume
-        sparams.loc[s,'risk_free_rate'] = r
-        sparams.loc[s,'dividend_rate'] = g
+    # ---- one calibration row, keyed by date ----
+    params = ['theta', 'kappa', 'rho', 'eta', 'v0']
+    row = {
+        'date': pd.Timestamp(date).date(),
+        'spot_price': round(S_ref, 4),
+        'risk_free_rate': r, 'dividend_rate': g,
+        **{k: res[k] for k in params}, 'feller': res['feller'],
+        'iv_rmse': res['iv_rmse'], 'rmse': res['rmse'],
+        'n_helpers': res['n_helpers'], 'accepted': res['accepted'],
+        'n_maturities': n_mats, 'n_strikes': n_strikes, 'contracts_count': n_cells,
+        'total_volume': int(df['trade_size'].sum()),
+        'spot_min': spot_min, 'spot_max': spot_max, 'spot_range_pct': spot_range_pct,
+        'high_move': high_move,
+        'calculation_date': sel['quote_datetime'].max(),
+    }
 
-        # Only repriced *accepted* fits feed the tests file, so calibrations and
-        # calibration_tests describe the same set of buckets (no desync). Rejected fits
-        # return null params -- repricing under them is meaningless (and was dropped anyway).
-        if res['accepted']:
-            repriced = snap.copy()
-            repriced[params.index] = np.tile(params.values,(repriced.shape[0],1))
-            repriced['risk_free_rate'] = r
-            repriced['dividend_rate'] = g
-            repriced = repriced.rename(columns={'trade_iv':'volatility'})
-            try:
-                repriced['black_scholes'] = vanp.df_numpy_black_scholes(repriced)
-            except Exception:
-                repriced['black_scholes'] = np.nan
-            try:
-                repriced['heston'] = vanp.df_heston_price(repriced)
-            except Exception:
-                repriced['heston'] = np.nan
-            test_frames.append(repriced)
+    # ---- reprice the surface contracts under the fitted params ----
+    # One representative trade per surface cell (the latest), repriced at its ORIGINAL spot/strike:
+    # Heston params are spot-independent, so the honest diagnostic prices at real trade conditions,
+    # not the normalised K*/S_ref. The tests file thus mirrors the calibrated surface one-to-one.
+    repriced = (sel.drop_duplicates(subset=['Kstar', 'days_to_maturity'], keep='last')
+                   .reset_index(drop=True))
+    for k in params:
+        repriced[k] = res[k]
+    repriced['risk_free_rate'] = r
+    repriced['dividend_rate'] = g
+    repriced = repriced.rename(columns={'trade_iv': 'volatility'})
+    try:
+        repriced['black_scholes'] = vanp.df_numpy_black_scholes(repriced)
+    except Exception:
+        repriced['black_scholes'] = np.nan
+    try:
+        repriced['heston'] = vanp.df_heston_price(repriced)
+    except Exception:
+        repriced['heston'] = np.nan
 
-    # `calibrated` (accepted buckets) and `test_frames` (repriced accepted buckets) describe the
-    # same set, so write/skip both together. Writing only one -- the old bug -- left a stale
-    # calibrations file beside an emptied tests file whenever a day produced no accepted fit.
-    calibrated = sparams.dropna()
-    cal_path = filepath.replace('otm','calibrations')
-    test_path = filepath.replace('otm','calibration_tests')
-
-    if calibrated.empty:
-        # Nothing accepted this day: clear any stale outputs so the pair never desyncs.
-        for stale in (cal_path, test_path):
-            if os.path.exists(stale):
-                os.remove(stale)
-        print(f"no accepted fit for {date}: cleared stale outputs")
-        return
-
-    CALIBRATIONS.mkdir(parents=True, exist_ok=True)
-    calibrated.to_csv(cal_path)
     TESTS.mkdir(parents=True, exist_ok=True)
-    pd.concat(test_frames,ignore_index=True).dropna().to_csv(test_path,index=False)
+    repriced.dropna(subset=['heston']).to_csv(test_path, index=False)
+    return row
 
 
 OTM = Path(__file__).parent.parent / "data" / "options" / "otm"
 files = [f for f in os.listdir(OTM) if f.endswith('.csv')]
-files = pd.Series([os.path.join(OTM,f) for f in files]).sort_values(ascending=False).reset_index(drop=True)
-for f in files: calibrateby_spot(f)
+files = pd.Series([os.path.join(OTM, f) for f in files]).sort_values(ascending=False).reset_index(drop=True)
 
-
-# max_jobs = os.cpu_count() // 2
-# max_jobs = max(1,max_jobs)
-# Parallel(n_jobs=max_jobs)(delayed(calibrateby_spot)(f) for f in files)
+# Accumulate every accepted day's row into the single parameters file. The loop covers all OTM
+# files, so this fully regenerates data/calibrations.csv each run (no stale rows survive); a run
+# with zero accepted days removes the file rather than leaving it stale.
+rows = [r for r in (calibrate_by_day(f) for f in files) if r is not None]
+if rows:
+    out = pd.DataFrame(rows).set_index('date').sort_index()
+    out.to_csv(CALIBRATIONS_FILE)
+    print(f"\nwrote {len(rows)} day(s) -> {CALIBRATIONS_FILE}")
+else:
+    if CALIBRATIONS_FILE.exists():
+        CALIBRATIONS_FILE.unlink()
+    print(f"\nno accepted days; removed {CALIBRATIONS_FILE}")

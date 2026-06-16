@@ -12,13 +12,18 @@ keep `CLAUDE.md` in sync with both.
   IV-space acceptance gate. This fixed the per-bucket under-determination: the routine now produces
   one *identified*, cross-day-stable fit per day. See [Completed tasks](#completed-tasks).
 - **Phase 3 — acceptance (open, this plan).** The fits are good — days fit to ≤1 vol point — but a
-  **minority of days are accepted**: the rest peg a skew parameter to its bound. Phase 3 resolves
-  that pegging. See [Current status](#current-status-why-good-fits-still-reject) and the
+  **minority of days are accepted**: a full multi-year run **attempted 3125 days and accepted only 1699
+  (~54%)**, just under the 60% target. The rest peg a skew parameter to its bound (rejected, so absent
+  from `calibrations.csv` — its clean `kappa`/`rho` is gate-enforced, not evidence pegging is solved).
+  None of the levers A–E are implemented yet, so ~54% is the Phase 2 engine's rate. A second issue the
+  long run surfaces: 99% of *accepted* days have `feller < 0` (the gate doesn't reject on Feller) —
+  Lever D. See [Current status](#current-status-why-good-fits-still-reject) and the
   [Phase 3 plan](#phase-3-plan-improve-parameter-acceptance).
 
 - **Sample.** The calibration set is no longer the 5-day diagnostic week. `data/options/raw/` now
   holds a multi-year SPX trade history (CBOE `UnderlyingOptionsTradesCalcs_*` from 2012 onward plus
-  Hanweck `UnderlyingOptionsTradesCalcsHanweck_*` files spanning 2013 and 2024), ~2700+ trading days.
+  Hanweck `UnderlyingOptionsTradesCalcsHanweck_*` files spanning 2013 and 2024), **3125 trading days
+  attempted** (1699 accepted, ~54%).
   Accept-rate targets below are therefore stated as **proportions over the full set**, not "n of 5";
   the 2024-10-07..11 table is retained only as a worked diagnostic example of the pegging mechanism.
 - **Specification.** The delivered routine is stated formally in `heston-calibration.tex` (model +
@@ -48,7 +53,7 @@ Line numbers in any sketch below drift — match on code, not line numbers.
 | Phase 2 — one calibration per trading day | `src/calibrator_prototype.py`, `src/calibrate_heston.py` | high (schema) | ✅ done |
 | Phase 2 — IV-space acceptance gate | `src/calibrate_heston.py` | medium | ✅ done |
 | Write-desync fix | `src/calibrator_prototype.py` | low | ✅ done |
-| **Phase 3 — resolve boundary pegging (raise accept rate)** | `src/calibrate_heston.py` (+ knobs in `calibrator_prototype.py`) | medium | ⏳ **open** |
+| **Phase 3 — resolve boundary pegging (raise accept rate)** | `src/calibrate_heston.py` (+ knobs in `calibrator_prototype.py`) | medium | ⏳ **open** (1699/3125 ≈ 54% accept; levers A–E not yet implemented) |
 
 **QuantLib 1.35 API facts** (confirmed in this environment; the plan relies on no non-existent calls):
 
@@ -66,6 +71,18 @@ Line numbers in any sketch below drift — match on code, not line numbers.
 ---
 
 ## Current status: why good fits still reject
+
+**Full-set update (no lever implemented yet — this is the Phase 2 engine over the long sample).** A
+multi-year run **attempted 3125 trading days and accepted only 1699 (~54%)**, just under the 60% target.
+Crucially, `calibrations.csv` holds **only accepted days**, and the gate (`_on_boundary`) rejects any
+boundary-pegged fit — so its 0 pegged `kappa`/`rho` is **tautological**, *not* evidence the pegging is
+fixed. The ~46% rejected (1426 days) are dropped before write and the pipeline does not persist their
+rejection cause, so the pegged-vs-thin split is **unquantified from the CSVs**; pegging remains the
+presumed dominant cause and the open lever. What the long run *does* newly reveal — because the gate
+never tests it — is **Feller** in the accepted population: `feller < 0` on 1686/1699 (99%) accepted days
+and `eta > 1.5` on ~9.5% (max ≈2.0). For reference the accepted-day param spreads are `kappa` mean ≈2.79
+/ median ≈2.14, `rho` mean ≈−0.76, IV-RMSE median 0.0043 — but read these as "what passes the gate",
+not "the calibrator no longer pegs". Feller is Lever D; pegging is Levers A–C/E, all still open.
 
 The pegging mechanism is clearest on a small, hand-checked slice, so the worked example below is the
 `2024-10-07..11` week (5 trading days; `python src/calibrator_prototype.py`, best-fit params shown
@@ -217,8 +234,11 @@ issue" bullet and the Done criteria below in the **same** change as whichever le
       (`theta` 0.029–0.031, `v0` 0.007–0.026, `eta` 0.8–1.5) versus the old cross-bucket `theta`
       0.037 → 11.93 swing; genuine fit ~0.7–1.0 vol points.
 - [ ] **Phase 3 — acceptance (open):** ≥ 60% of the full multi-year set's days accept with no pegged
-      bound, `eta < 1.5`, Feller mostly satisfied, `theta`/`v0` unchanged. Pursue levers A–E above;
-      re-measure over the whole sample after each.
+      bound, `eta < 1.5`, Feller mostly satisfied, `theta`/`v0` unchanged. Baseline (Phase 2 engine, no
+      lever yet): **3125** attempted, **1699 accepted (~54%)** — short of the target. Accepted days are
+      pegging-free only because the gate enforces it; the ~46% rejected (cause not persisted) are
+      presumed mostly pegged. The long run also exposes Feller: `feller < 0` on 1686/1699 (99%) accepted
+      days, `eta > 1.5` on ~9.5%. Pursue levers A–E; re-measure over the whole sample after each.
 
 ---
 

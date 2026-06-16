@@ -158,9 +158,14 @@ date — immaterial under the flat-forward curves used here). It then:
 3. **Acceptance gate:** returns the failure sentinel if the best **IV-RMSE** exceeds
    `IV_RMSE_ACCEPT` (`0.02`, ~2 vol points) **or** any parameter is pinned within `BOUND_TOL` of a
    bound (a boundary fit is a non-fit). The old "did the params move from the fixed guess" sentinel
-   is **removed**. Note: on the pooled per-day surfaces the genuine fit is ~0.8–1.4 vol points, so
-   IV-RMSE passes easily; the remaining rejections are **boundary-pegged** `kappa` (→20) or `rho`
-   (→−0.999) — the next lever (kappa/rho handling), not a fit-quality problem.
+   is **removed**. Note: on the pooled per-day surfaces the genuine fit is excellent — across the full
+   multi-year run accepted days have IV-RMSE ~0.5 vol points (median `iv_rmse` 0.0043), so IV-RMSE
+   never gates. Accepted days are also **pegging-free by construction** (the gate rejects any
+   boundary-pegged param), so a clean `kappa`/`rho` in `calibrations.csv` is *not* evidence pegging is
+   solved — it is just what survives the gate. Over **3125** attempted days **1699 (~54%)** accept; the
+   ~46% rejected never reach `calibrations.csv` and the pipeline does not persist their rejection cause,
+   but boundary-pegged `kappa` (→20) / `rho` (→−0.999) remains the expected dominant cause — still the
+   open Phase 3 lever.
 
 Returns `{theta, kappa, eta, rho, v0, feller, iv_rmse, rmse, n_helpers, accepted}` with
 `feller = 2*kappa*theta - eta**2` for an accepted fit; a rejected fit returns params/`feller` as
@@ -195,7 +200,18 @@ breaks a downstream stage:
 - Snapping `Kstar` to the 5-point SPX grid is exact near the money but coarser in the far wings
   (native grid widens to 25/50/100); harmless for QuantLib (any float strike prices) but it slightly
   quantises deep-OTM moneyness.
-- **Most days currently reject on boundary-pegged `kappa` (→20) or `rho` (→−0.999)**, not on fit
-  quality (IV-RMSE passes). This is the known next lever (volume/vega weighting, `kappa` anchoring or
-  bound review — PLAN.md "Improving calibration performance"); until then expect few accepted days.
+- **Boundary pegging is still the open Phase 3 lever — and `calibrations.csv` cannot show it.** A
+  multi-year run attempted **3125** trading days and accepted **1699 (~54%)**, just under PLAN.md's 60%
+  target. The accepted set has 0 pegged `kappa`/`rho`, but that is **tautological**: the gate
+  (`_on_boundary`) rejects any boundary-pegged fit, so pegged days never reach the file. The ~46%
+  rejected (1426 days) are dropped before write and the pipeline does **not** persist their rejection
+  cause, so the pegged-vs-thin-vs-IV split is **unquantified from the CSVs**; boundary-pegged `kappa`
+  (→20) / `rho` (→−0.999) remains the expected dominant cause. None of the Phase 3 levers (A–E) are
+  implemented yet (`MIN_DTM`=7, no `weights`, no `fixParameters`, no Feller penalty), so this ~54% is
+  the Phase 2 engine's rate over the long sample, not a post-lever result.
+- **Feller is the standout issue in the accepted set.** The gate does **not** reject on Feller (it is a
+  *suspicious*, not hard-reject, validator flag — short-tenor Heston violates it routinely), so accepted
+  days routinely violate it: `feller = 2·kappa·theta − eta² < 0` on **1686/1699 (99%)** accepted days,
+  and `eta > 1.5` on ~9.5% (max ≈2.0, near its cap). This is PLAN.md Lever D (soft Feller penalty +
+  revisit the `eta` cap).
 - The `data/__pycache__/` holds bytecode for deleted modules (`get_data`, `get_options`, ...) — ignore it.

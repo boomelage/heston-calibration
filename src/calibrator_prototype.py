@@ -109,8 +109,11 @@ def _select_surface(df):
 
 
 def calibrate_by_day(filepath):
+    test_path = filepath.replace('otm', 'calibration_tests')
     df = pd.read_csv(filepath)
     df = df[(df['trade_iv'] > 0) & (df['days_to_maturity'] >= MIN_DTM)].copy()
+    if df.empty:
+        return _skip_day(test_path, filepath, "no trades after IV/DTM filter")
     df['quote_datetime'] = pd.to_datetime(df['quote_datetime'])
     date = df['quote_datetime'].dt.floor('D').unique()[0]
     r = rg_asc['risk_free_rate'].asof(date)
@@ -118,8 +121,6 @@ def calibrate_by_day(filepath):
     if pd.isna(r) or pd.isna(g):
         print(f"skipping {filepath}: no rate on/before {date}")
         return None
-
-    test_path = filepath.replace('otm', 'calibration_tests')
 
     # One reference spot for the whole day (volume-weighted). The intraday range that the
     # sticky-moneyness re-centring assumes is mild; a large range strains that assumption.
@@ -176,7 +177,7 @@ def calibrate_by_day(filepath):
         'high_move': high_move,
         'calculation_date': sel['quote_datetime'].max(),
     }
-
+    print(res,'\n')
     # ---- reprice the surface contracts under the fitted params ----
     # One representative trade per surface cell (the latest), repriced at its ORIGINAL spot/strike:
     # Heston params are spot-independent, so the honest diagnostic prices at real trade conditions,
@@ -202,19 +203,32 @@ def calibrate_by_day(filepath):
     return row
 
 
-OTM = Path(__file__).parent.parent / "data" / "options" / "otm"
-files = [f for f in os.listdir(OTM) if f.endswith('.csv')]
-files = pd.Series([os.path.join(OTM, f) for f in files]).sort_values(ascending=False).reset_index(drop=True)
+def main():
+    # joblib's default loky backend spawns processes; on Windows the children re-import this module,
+    # so the driver MUST live behind `if __name__ == "__main__"` (via main()) -- otherwise each worker
+    # re-runs the Parallel call below and recursively spawns process pools.
+    from joblib import Parallel, delayed
 
-# Accumulate every accepted day's row into the single parameters file. The loop covers all OTM
-# files, so this fully regenerates data/calibrations.csv each run (no stale rows survive); a run
-# with zero accepted days removes the file rather than leaving it stale.
-rows = [r for r in (calibrate_by_day(f) for f in files) if r is not None]
-if rows:
-    out = pd.DataFrame(rows).set_index('date').sort_index()
-    out.to_csv(CALIBRATIONS_FILE)
-    print(f"\nwrote {len(rows)} day(s) -> {CALIBRATIONS_FILE}")
-else:
-    if CALIBRATIONS_FILE.exists():
-        CALIBRATIONS_FILE.unlink()
-    print(f"\nno accepted days; removed {CALIBRATIONS_FILE}")
+    OTM = Path(__file__).parent.parent / "data" / "options" / "otm"
+    files = [f for f in os.listdir(OTM) if f.endswith('.csv')]
+    files = pd.Series([os.path.join(OTM, f) for f in files]).sort_values(ascending=False).reset_index(drop=True)
+
+    max_jobs = max(1, os.cpu_count() // 4)
+
+    # Accumulate every accepted day's row into the single parameters file. The loop covers all OTM
+    # files, so this fully regenerates data/calibrations.csv each run (no stale rows survive); a run
+    # with zero accepted days removes the file rather than leaving it stale.
+    rows = [r for r in Parallel(n_jobs=max_jobs)(delayed(calibrate_by_day)(f) for f in files) if r is not None]
+    if rows:
+        out = pd.DataFrame(rows).set_index('date').sort_index()
+        out.to_csv(CALIBRATIONS_FILE)
+        print(f"\nwrote {len(rows)} day(s) -> {CALIBRATIONS_FILE}")
+    else:
+        if CALIBRATIONS_FILE.exists():
+            CALIBRATIONS_FILE.unlink()
+        print(f"\nno accepted days; removed {CALIBRATIONS_FILE}")
+
+
+if __name__ == "__main__":
+    main()
+

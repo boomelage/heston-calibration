@@ -157,7 +157,7 @@ def calibrate_by_day(filepath):
     sel = _select_surface(df)
     if sel is None:
         return _skip_day(test_path, "thin", "no usable maturities")
-    sel = sel.sort_values('quote_datetime')   # so pivot aggfunc='last' is the latest trade per cell
+    sel = sel.sort_values('trade_size')   # so pivot aggfunc='last' is the latest trade per cell
     surf = sel.pivot_table(index='Kstar', columns='days_to_maturity',
                            values='trade_iv', aggfunc='last')
 
@@ -205,8 +205,8 @@ def calibrate_by_day(filepath):
         'calculation_date': sel['quote_datetime'].max(),
     }
     if res['accepted']:
-        for p in params:
-            print(p,res[p],sep=f": {(5-len(p))*' '}")
+        for p in (params + ['feller']):
+            print(p,res[p],sep=f": {(6-len(p))*' '}")
         print()
 
     # ---- reprice the surface contracts under the fitted params ----

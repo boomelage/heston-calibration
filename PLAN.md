@@ -1,15 +1,24 @@
 # PLAN.md — Heston calibration: correctness and economic-reasonability plan
 
-This file tracks the work to make the calibrated parameters in
-`data/options/calibrations/*.csv` **trustworthy**: both numerically correct (the optimizer
-actually fit the surface) and economically reasonable (the parameters describe a plausible
-SPX vol process). Keep it in sync with the code, and keep `CLAUDE.md` in sync with both.
+This file tracks the work to make the calibrated parameters in `data/calibrations.csv`
+**trustworthy**: both numerically correct (the optimizer actually fit the surface) and
+economically reasonable (the parameters describe a plausible SPX vol process). Keep it in sync
+with the code, and keep `CLAUDE.md` in sync with both.
 
 - **Phase 1 (done):** two input bugs that corrupted what `calibrate_heston` was fed —
   see [Completed tasks](#completed-tasks).
-- **Phase 2 (this plan):** the parameters themselves are still not trustworthy. See
-  [Diagnosis](#diagnosis-why-the-parameters-are-not-yet-trustworthy), then the three work
-  items below, ordered *measure first, then fix*.
+- **Phase 2 (done):** engine hardening (Work item 2) + one pooled calibration per trading day
+  (Work item 3) + an IV-space acceptance gate (lever 2, pulled forward). The per-bucket
+  under-determination diagnosed below is **fixed**: the routine now produces one *identified*
+  fit per day (IV-RMSE ~0.8–1.4 vol points, tightly clustered cross-day params) written to a
+  single `data/calibrations.csv`. The Diagnosis and Work item sections below are kept as the
+  record of *why* each change was made; the [Status table](#status-and-scope) and
+  [Done criteria](#done-criteria) carry the current state. **One lever remains open**
+  (boundary-pegged `kappa`/`rho` → only ~1/5 days accept; see
+  [Improving calibration performance](#improving-calibration-performance)).
+- **Specification.** The delivered routine is now stated formally as a constrained
+  optimization problem in `heston-calibration.tex` (model + pricing operators, `S_ref`, `K*`,
+  surface construction, price-space vs IV-space objectives, the boundary-pegging gate).
 
 Line numbers in any sketch below refer to the current revision and will drift — match on code,
 not line numbers.
@@ -59,6 +68,11 @@ non-existent calls:
 ---
 
 ## Diagnosis: why the parameters are not yet trustworthy
+
+> **Historical (pre-fix).** This section records the per-bucket failure that motivated Phase 2.
+> It describes the **old** per-0.5-spot-bucket output (`data/options/calibrations/`, since
+> removed), not the current per-day routine. Work item 3 resolved the under-determination
+> diagnosed here; see the [Done criteria](#done-criteria) for the post-fix numbers.
 
 Measured on the regenerated `cboe_spx_calibrations_2024-10-07.csv` (53 spot buckets, one trading day):
 

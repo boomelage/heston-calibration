@@ -7,6 +7,9 @@ data/options/raw/*
 !data/options/raw/.gitkeep
 data/options/otm/*
 !data/options/otm/.gitkeep
+# per-day repricing diagnostics: one file per trading day, grows with years of data
+data/options/calibration_tests/*
+!data/options/calibration_tests/.gitkeep
 
 # ----- Python exlcusions -----
 

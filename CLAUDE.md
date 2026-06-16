@@ -62,10 +62,12 @@ python src/validate_calibrations.py
 
 **Data not in version control.** `data/options/raw/` (raw CBOE trade files, ~80–90 MB/day — near
 GitHub's 100 MB/file limit) and `data/options/otm/` (the OTM snapshots derived from them, ~6 MB/day)
-are **git-ignored**; only a `.gitkeep` keeps each folder present. A fresh clone has neither — to
-bootstrap, drop `UnderlyingOptionsTradesCalcs_*.csv` into `data/options/raw/`, run Stage 2 to
-materialise `data/options/otm/`, then Stages 3+4. Only the small derived artefacts are tracked
-(`data/calibrations.csv`, `data/options/calibration_tests/`, `data/options/validation/`, `data/market/`).
+are **git-ignored**; only a `.gitkeep` keeps each folder present. `data/options/calibration_tests/`
+(per-day repricing diagnostics, one file per day) is **git-ignored** for the same reason — it grows
+with years of data. A fresh clone has none of them — to bootstrap, drop
+`UnderlyingOptionsTradesCalcs_*.csv` into `data/options/raw/`, run Stage 2 to materialise
+`data/options/otm/`, then Stages 3+4 (which regenerate `calibration_tests/`). Only the small derived
+artefacts are tracked (`data/calibrations.csv`, `data/options/validation/`, `data/market/`).
 
 There is no single-test command because there are no tests. To exercise just the engine, import
 `calibrate_heston(vol_matrix, s, r, g)` from `src/calibrate_heston.py` with a strike×maturity IV

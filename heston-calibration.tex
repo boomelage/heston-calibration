@@ -101,15 +101,15 @@
 	\end{equation}
 	and characteristic functions $f_j = \exp\bigl(C_j + D_j v_0 + i u \ln F\bigr)$ given by the standard coefficients
 	\begin{equation}
-		\begin{aligned}
-			d_j &= \sqrt{(\rho\eta i u - b_j)^2 - \eta^2(2 \mu_j i u - u^2)},  \gamma_j &= \frac{b_j - \rho\eta i u + d_j}{b_j - \rho\eta i u - d_j},
-		\end{aligned}
-	\end{equation}
-	\begin{equation}
 		\begin{gathered}
 			C_j = \frac{\kappa\theta}{\eta^2}\!\left[ (b_j - \rho\eta i u + d_j)\tau - 2\ln\!\frac{1 - \gamma_j e^{d_j\tau}}{1 - \gamma_j} \right],  \\
 			D_j = \frac{b_j - \rho\eta i u + d_j}{\eta^2} \frac{1 - e^{d_j\tau}}{1 - \gamma_j e^{d_j\tau}},
 		\end{gathered}
+	\end{equation}
+		\begin{equation}
+		\begin{aligned}
+			d_j &= \sqrt{(\rho\eta i u - b_j)^2 - \eta^2(2 \mu_j i u - u^2)},  \qquad \gamma_j &= \frac{b_j - \rho\eta i u + d_j}{b_j - \rho\eta i u - d_j},
+		\end{aligned}
 	\end{equation}
 	where $\mu_1=\tfrac12,\ \mu_2=-\tfrac12,\ b_1=\kappa-\rho\eta,\ b_2=\kappa$. In code this
 	integral is evaluated by QuantLib's \texttt{AnalyticHestonEngine} (which uses a

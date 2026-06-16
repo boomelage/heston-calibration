@@ -96,24 +96,42 @@ core. For each OTM file it does **per-spot-level calibration**, not one snapshot
    take the `max_nk`=7 strikes nearest the money on each wing (highest OTM puts `pK[-n:]`, lowest
    OTM calls `cK[:n]`) from that maturity's rows only; concat into one snapshot and `pivot_table`
    into a strike×maturity IV surface (`values='trade_iv'`), requiring ≥5 non-NaN cells.
-4. Call `calibrate_heston(surface, s, r, g)` **once per spot** over the full multi-maturity surface;
-   accumulate params into a per-spot table and write `calibrations/cboe_spx_calibrations_<date>.csv`
-   **once** after the spot loop.
-5. For diagnostics, reprice each spot's snapshot under Black–Scholes (`vanp.df_numpy_black_scholes`)
-   and Heston (`vanp.df_heston_price`) with the fitted params; accumulate across all spots and write
-   `calibration_tests/cboe_spx_calibration_tests_<date>.csv` **once** after the spot loop.
+4. Call `calibrate_heston(surface, s, r, g)` **once per spot** over the full multi-maturity surface.
+   The engine **rejects** fits it cannot trust (returns `None` params — see Stage 4), so only
+   *accepted* spots are kept. Accumulate accepted params **plus the engine diagnostics**
+   (`rmse, n_helpers, accepted`) into a per-spot table and write
+   `calibrations/cboe_spx_calibrations_<date>.csv` **once** after the spot loop.
+5. For diagnostics, reprice **each accepted** spot's snapshot under Black–Scholes
+   (`vanp.df_numpy_black_scholes`) and Heston (`vanp.df_heston_price`) with the fitted params;
+   accumulate across accepted spots and write `calibration_tests/cboe_spx_calibration_tests_<date>.csv`
+   **once** after the spot loop. Both CSVs are written under one decision so they always describe the
+   same accepted set; on a day with **zero** accepted fits **both** files are removed (not left stale).
 
 Output routing uses `filepath.replace('otm', ...)`, which rewrites **both** the `otm` directory
 segment and the `otm` token in the filename in one call — fragile but intentional.
 
 **Stage 4 — calibration engine (`src/calibrate_heston.py`).** Pure function
-`calibrate_heston(vol_matrix, s, r, g) -> dict`. Builds a QuantLib `HestonProcess` / `HestonModel`
-with an `AnalyticHestonEngine`, creates one `HestonModelHelper` per non-NaN surface cell (maturity
-as `Period(days, Days)`, NYSE calendar, `Date.todaysDate()` as eval date), and calibrates with
-Levenberg–Marquardt. Returns `{theta, kappa, eta, rho, v0, feller}` where `feller = 2*kappa*theta - eta**2`.
-**Failure sentinel:** if the optimizer never moved from the hard-coded initial guess
-(`v0=0.01, kappa=0.2, theta=0.02, rho=-0.75, eta=0.5`), it returns all-`None`.
-**Param order matters:** `model.params()` returns `[theta, kappa, eta, rho, v0]`.
+`calibrate_heston(vol_matrix, s, r, g) -> dict`, **hardened** (PLAN Work item 2). Builds a QuantLib
+`HestonProcess` / `HestonModel` with an `AnalyticHestonEngine` and one `HestonModelHelper` per
+non-NaN surface cell (maturity as `Period(days, Days)`, NYSE calendar, `Date.todaysDate()` as eval
+date — immaterial under the flat-forward curves used here). It then:
+
+1. **Multiple restarts:** for each of a small data-seeded grid of starting points (`_seed_grid`),
+   calibrates with Levenberg–Marquardt under **box bounds**
+   (`ql.NonhomogeneousBoundaryConstraint(LOW, HIGH)`), and keeps the fit with the lowest
+   relative-price RMSE (`HestonModelHelper.calibrationError()`, the only error type SWIG exposes).
+2. **Acceptance gate:** returns the failure sentinel if the best RMSE exceeds `RMSE_ACCEPT`
+   (`0.05`, kept strict on purpose — loosening it only admits under-determined per-bucket fits) **or**
+   any parameter is pinned within `BOUND_TOL` of a bound (a boundary fit is a non-fit). The old "did
+   the params move from the fixed guess" sentinel is **removed**. Note: under this strict gate most
+   per-bucket fits are rejected; the fix is PLAN.md Work item 3 (one calibration per day), not a lower
+   threshold.
+
+Returns `{theta, kappa, eta, rho, v0, feller, rmse, n_helpers, accepted}` with
+`feller = 2*kappa*theta - eta**2` for an accepted fit; a rejected fit returns params/`feller` as
+`None` but keeps `rmse`/`n_helpers`/`accepted=False` for diagnostics.
+**Param order matters:** `model.params()` returns `[theta, kappa, eta, rho, v0]` — the `LOW`/`HIGH`
+bounds arrays follow this exact order (get it wrong and bounds land on the wrong params).
 
 ## DataFrame column contracts (the "hard-coded names" the README warns about)
 

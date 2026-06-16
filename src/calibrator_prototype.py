@@ -69,7 +69,7 @@ MIN_CELLS = 12       # non-NaN surface cells required (target >= MIN_MATS x MIN_
 MAX_MOVE_PCT = 0.03  # intraday spot range above this flags the day (sticky-moneyness strained)
 
 
-def _skip_day(test_path, date, reason):
+def _skip_day(test_path, reason):
     """Drop a day: remove any stale per-day tests file and return None (no calibrations row).
 
     The single calibrations.csv is rebuilt from the accepted rows each run, so a dropped day simply
@@ -80,7 +80,7 @@ def _skip_day(test_path, date, reason):
         note = "cleared stale tests file"
     else:
         note = "nothing written"
-    print(f"{pd.Timestamp(date).date()}: {reason}; {note}")
+    print(f"{test_path[-14:-4]}: {reason}; {note}")
     return None
 
 
@@ -113,7 +113,7 @@ def calibrate_by_day(filepath):
     df = pd.read_csv(filepath)
     df = df[(df['trade_iv'] > 0) & (df['days_to_maturity'] >= MIN_DTM)].copy()
     if df.empty:
-        return _skip_day(test_path, filepath, "no trades after IV/DTM filter")
+        return _skip_day(test_path, "no trades after IV/DTM filter")
     df['quote_datetime'] = pd.to_datetime(df['quote_datetime'])
     date = df['quote_datetime'].dt.floor('D').unique()[0]
     r = rg_asc['risk_free_rate'].asof(date)
@@ -139,7 +139,7 @@ def calibrate_by_day(filepath):
 
     sel = _select_surface(df)
     if sel is None:
-        return _skip_day(test_path, date, "no usable maturities")
+        return _skip_day(test_path, "no usable maturities")
     sel = sel.sort_values('quote_datetime')   # so pivot aggfunc='last' is the latest trade per cell
     surf = sel.pivot_table(index='Kstar', columns='days_to_maturity',
                            values='trade_iv', aggfunc='last')
@@ -147,8 +147,10 @@ def calibrate_by_day(filepath):
     n_strikes, n_mats = surf.shape
     n_cells = int(surf.count().sum())
     if n_mats < MIN_MATS or n_strikes < MIN_STRIKES or n_cells < MIN_CELLS:
-        return _skip_day(test_path, date,
-                         f"thin surface ({n_strikes} strikes x {n_mats} maturities, {n_cells} cells)")
+        return _skip_day(
+            test_path,
+            f"thin surface ({n_strikes} strikes x {n_mats} maturities, {n_cells} cells)"
+        )
 
     res = calibrate_heston(surf, S_ref, r, g)   # ONE calibration for the whole day (hardened engine)
     print(f"{pd.Timestamp(date).date()}  S_ref={S_ref:.1f}  cells={n_cells}  "
@@ -160,7 +162,7 @@ def calibrate_by_day(filepath):
         # lever (kappa/rho handling) deferred from this change -- not an IV-fit-quality problem.
         cause = ("boundary-pegged" if res['iv_rmse'] is not None and res['iv_rmse'] <= IV_RMSE_ACCEPT
                  else f"iv_rmse={res['iv_rmse']:.4f} > {IV_RMSE_ACCEPT}")
-        return _skip_day(test_path, date, f"calibration rejected ({cause})")
+        return _skip_day(test_path, f"calibration rejected ({cause})")
 
     # ---- one calibration row, keyed by date ----
     params = ['theta', 'kappa', 'rho', 'eta', 'v0']
@@ -177,7 +179,11 @@ def calibrate_by_day(filepath):
         'high_move': high_move,
         'calculation_date': sel['quote_datetime'].max(),
     }
-    print(res,'\n')
+    if res['accepted']:
+        for p in params:
+            print(p,res[p],sep=f": {(5-len(p))*' '}")
+        print()
+
     # ---- reprice the surface contracts under the fitted params ----
     # One representative trade per surface cell (the latest), repriced at its ORIGINAL spot/strike:
     # Heston params are spot-independent, so the honest diagnostic prices at real trade conditions,
@@ -208,12 +214,11 @@ def main():
     # so the driver MUST live behind `if __name__ == "__main__"` (via main()) -- otherwise each worker
     # re-runs the Parallel call below and recursively spawns process pools.
     from joblib import Parallel, delayed
-
+    max_jobs = max(1, os.cpu_count() // 4)
+    
     OTM = Path(__file__).parent.parent / "data" / "options" / "otm"
     files = [f for f in os.listdir(OTM) if f.endswith('.csv')]
     files = pd.Series([os.path.join(OTM, f) for f in files]).sort_values(ascending=False).reset_index(drop=True)
-
-    max_jobs = max(1, os.cpu_count() // 4)
 
     # Accumulate every accepted day's row into the single parameters file. The loop covers all OTM
     # files, so this fully regenerates data/calibrations.csv each run (no stale rows survive); a run

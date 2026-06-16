@@ -1,268 +1,527 @@
-# PLAN.md — Remediation plan for calibration-correctness bugs
+# PLAN.md — Heston calibration: correctness and economic-reasonability plan
 
-Target file for both fixes: **`src/calibrator_prototype.py`** (function `calibrateby_spot`).
-Line numbers below refer to the current revision and will drift once edited — match on code, not line.
+This file tracks the work to make the calibrated parameters in `data/calibrations.csv`
+**trustworthy**: both numerically correct (the optimizer actually fit the surface) and
+economically reasonable (the parameters describe a plausible SPX vol process). Keep it in sync
+with the code, and keep `CLAUDE.md` in sync with both.
 
-## Scope
+- **Phase 1 (done):** two input bugs that corrupted what `calibrate_heston` was fed —
+  see [Completed tasks](#completed-tasks).
+- **Phase 2 (done):** engine hardening (Work item 2) + one pooled calibration per trading day
+  (Work item 3) + an IV-space acceptance gate (lever 2, pulled forward). The per-bucket
+  under-determination diagnosed below is **fixed**: the routine now produces one *identified*
+  fit per day (IV-RMSE ~0.8–1.4 vol points, tightly clustered cross-day params) written to a
+  single `data/calibrations.csv`. The Diagnosis and Work item sections below are kept as the
+  record of *why* each change was made; the [Status table](#status-and-scope) and
+  [Done criteria](#done-criteria) carry the current state. **One lever remains open**
+  (boundary-pegged `kappa`/`rho` → only ~1/5 days accept; see
+  [Improving calibration performance](#improving-calibration-performance)).
+- **Specification.** The delivered routine is now stated formally as a constrained
+  optimization problem in `heston-calibration.tex` (model + pricing operators, `S_ref`, `K*`,
+  surface construction, price-space vs IV-space objectives, the boundary-pegging gate).
 
-Fix the two highest-impact "Known issues" from `CLAUDE.md`:
+Line numbers in any sketch below refer to the current revision and will drift — match on code,
+not line numbers.
 
-1. **Stale rate lookup** — every calibration is fed the wrong risk-free / dividend rate.
-2. **Strike-selection slips** — the per-spot calibration surface is built from the wrong rows.
+## Table of Contents
 
-Both corrupt the *inputs* to `calibrate_heston`, so the engine itself is not touched. There is no
-test suite, so each fix ships with a concrete, runnable verification step instead.
-
-**Out of scope (but flagged):** the `filepath.replace('otm', ...)` output routing and the
-`vol_count>=5` / `contracts_count>=5` double gate. Leave them unless they block a fix.
-
-**Heads-up:** the committed `data/options/calibrations/*.csv` and `calibration_tests/*.csv` were
-produced with both bugs present and are therefore invalid. They will be regenerated when the
-pipeline is re-run after the fixes; expect them to change (rates ~0.0233 → ~0.05, surfaces differ).
-
----
-
-## Issue 1 — Stale rate lookup — ✅ DONE (Option B)
-
-Fixed in `src/calibrator_prototype.py`: a module-level `rg_asc = rg.sort_index()` plus
-`r = rg_asc['risk_free_rate'].asof(date)` / `g = rg_asc['dividend_rate'].asof(date)`, with a
-NaN guard that skips the file if no rate exists on/before `date`. Verified: the regenerated
-`calibrations/*.csv` show `risk_free_rate ≈ 0.042–0.05` for Oct-2024 (was `0.023285`).
-
-### Location
-
-`src/calibrator_prototype.py:32-33`
-
-```python
-r = rg[rg.index<=date]['risk_free_rate'].iloc[-1]
-g = rg[rg.index<=date]['dividend_rate'].iloc[-1]
-```
-
-### Root cause
-
-`rg` (from `data/get_rg.py`) is `sort_index(ascending=False)` — **newest first**. `rg[rg.index<=date]`
-keeps every row on/before the quote date but preserves that descending order, so `.iloc[-1]` is the
-**oldest row in the entire history**, not the most recent quote on/before `date`.
-
-### Evidence (reproducible now, pre-fix)
-
-```bash
-python -c "
-import sys; sys.path.insert(0,'data'); from get_rg import rg
-import pandas as pd; d = pd.Timestamp('2024-10-07')
-sub = rg[rg.index<=d]['risk_free_rate']
-print('current .iloc[-1] :', sub.iloc[-1])   # 0.023285  (2008-01-07)  <- WRONG
-print('fixed   .iloc[ 0] :', sub.iloc[0])     # 0.049994  (2024-10-07)  <- correct
-print('robust  asof      :', rg.sort_index()['risk_free_rate'].asof(d))
-"
-```
-
-The committed `calibrations/*.csv` show `risk_free_rate=0.023285`, confirming the stale 2008 value
-was used in production output.
-
-### Fix — option A (minimal)
-
-Change `.iloc[-1]` → `.iloc[0]` on both lines. Correct because, within a descending frame, the first
-row of the `<= date` slice is the largest date on/before `date`.
-
-### Fix — option B (robust, recommended)
-
-Make the lookup independent of `rg`'s sort order with `asof`:
-
-```python
-rg_asc = rg.sort_index()                       # ascending; asof requires a sorted index
-r = rg_asc['risk_free_rate'].asof(date)
-g = rg_asc['dividend_rate'].asof(date)
-```
-
-`asof` returns the last value at or before `date`, or `NaN` if none exists — it will not silently
-return a wrong row if `rg`'s ordering is ever changed. Hoisting `rg_asc` into `get_rg.py` (export a
-pre-sorted frame) avoids re-sorting per file.
-
-### Edge case to add either way
-
-If no rate exists on/before `date` (date precedes all of `rg`), option A raises `IndexError` and
-option B yields `NaN` that later breaks QuantLib. Guard it:
-
-```python
-if pd.isna(r) or pd.isna(g):
-    print(f"skipping {filepath}: no rate on/before {date}")
-    return
-```
-
-### Verification (post-fix)
-
-```bash
-python src/calibrator_prototype.py
-python -c "
-import pandas as pd, glob
-f = sorted(glob.glob('data/options/calibrations/*.csv'))[-1]
-print(pd.read_csv(f)[['spot_price','risk_free_rate','dividend_rate']].head())
-"
-```
-
-Pass criterion: `risk_free_rate ≈ 0.05` (Oct-2024), **not** `0.0233`.
+- [Status and scope](#status-and-scope)
+- [Diagnosis: why the parameters are not yet trustworthy](#diagnosis-why-the-parameters-are-not-yet-trustworthy)
+- [Work item 1: Validation and diagnostics module](#work-item-1-validation-and-diagnostics-module)
+- [Work item 2: Engine hardening](#work-item-2-engine-hardening)
+- [Work item 3: One calibration per trading day](#work-item-3-one-calibration-per-trading-day)
+- [Improving calibration performance](#improving-calibration-performance)
+- [Sequencing](#sequencing)
+- [Done criteria](#done-criteria)
+- [Completed tasks](#completed-tasks)
+  - [Issue 1: Stale rate lookup](#issue-1-stale-rate-lookup)
+  - [Issue 2: Strike selection slips](#issue-2-strike-selection-slips)
+  - [Write-desync fix](#write-desync-fix)
 
 ---
 
-## Issue 2 — Strike-selection slips — ✅ DONE (Path 2)
+## Status and scope
 
-Rewrote the per-spot loop in `calibrateby_spot`: maturities ranked by volume (top `max_nt`=7);
-each kept maturity contributes its `max_nk`=7 nearest-money strikes per wing (`pK[-n:]` puts,
-`cK[:n]` calls) — fixing (A) stale `dft` (now `byt.get_group(t)` per maturity), (B) wrong frame
-(now this spot's `dft` only), and (C) the `max`→`min` cap. The per-maturity slices are concatenated
-into one multi-maturity surface, calibrated **once per spot** (Path 2), and the repriced snapshots
-are accumulated and written to `calibration_tests/*.csv` **once** after the spot loop. Verified on
-Oct-2024: 57 spots, 20 distinct maturities survive; ≤7 strikes per wing; the only OTM-check
-"violations" are `strike==rounded_spot` ties from the 0.5 spot grid (no strike on the wrong side).
+| Item | File(s) touched | Risk | Status |
+|------|-----------------|------|--------|
+| Issue 1 — stale rate lookup | `src/calibrator_prototype.py` | low | ✅ done |
+| Issue 2 — strike-selection slips | `src/calibrator_prototype.py` | medium | ✅ done |
+| Work item 1 — validation/diagnostics | **new** `src/validate_calibrations.py` | none (read-only) | ✅ done |
+| Work item 2 — engine hardening | `src/calibrate_heston.py` (+ small prototype edit) | medium | ✅ done (strict gate kept; per-bucket fits capped by under-determination → Item 3) |
+| Write-desync fix (newly found bug) | `src/calibrator_prototype.py` | low | ✅ done |
+| Work item 3 — one calibration per day | `src/calibrator_prototype.py` (restructure) + `src/calibrate_heston.py` (IV gate) + `src/validate_calibrations.py` | high (schema change) | ✅ done (pooled per-day fit + IV-space gate; accepted days still capped by kappa/rho pegging → next lever) |
+| IV-space acceptance gate (lever 2, pulled forward) | `src/calibrate_heston.py` | medium | ✅ done (gate on IV-RMSE ≤ 0.02 vol pts; price-RMSE retained as diagnostic) |
 
-### Location
+**API facts confirmed in this environment** (QuantLib 1.35), so the plan does not rely on
+non-existent calls:
 
-`src/calibrator_prototype.py:47-76` (the per-spot loop and the inner maturity loop).
+- `ql.NonhomogeneousBoundaryConstraint(lows, highs)` **exists** → box bounds for Item 2.
+- `ql.CalibratedModel.calibrate(helpers, method, endCriteria, constraint=…, weights=…, fixParameters=…)`
+  — the `constraint` and `weights` args are available.
+- `HestonModelHelper.calibrationError()` **exists**, but `setCalibrationErrorType` and the
+  `ImpliedVolError` / `RelativePriceError` enums are **not** exposed → the in-engine error is the
+  default **relative-price** error; vol-point ("IV-space") residuals must be computed externally.
+- `quantlib_pricers.vanilla_pricer` has **no implied-vol inverter** (only forward pricers), and
+  `df_numpy_black_scholes` takes **no dividend** → the existing `black_scholes` column in
+  `calibration_tests/*.csv` is dividend-inconsistent with the `heston` column. Item 1 accounts for this.
+
+---
+
+## Diagnosis: why the parameters are not yet trustworthy
+
+> **Historical (pre-fix).** This section records the per-bucket failure that motivated Phase 2.
+> It describes the **old** per-0.5-spot-bucket output (`data/options/calibrations/`, since
+> removed), not the current per-day routine. Work item 3 resolved the under-determination
+> diagnosed here; see the [Done criteria](#done-criteria) for the post-fix numbers.
+
+Measured on the regenerated `cboe_spx_calibrations_2024-10-07.csv` (53 spot buckets, one trading day):
+
+| Symptom | Count / 53 | What it means |
+|---|---|---|
+| `rho` pinned at the boundary (`≤ −0.999`) | 17 | optimizer hit the constraint wall — the data does not pin `rho`; a non-fit. |
+| Feller violated (`2κθ − η² < 0`) | 40 | variance can reach zero; `η` (vol-of-vol) implausibly large. |
+| `eta > 1.5` | 26 | SPX vol-of-vol is realistically ~0.3–1.2; 2–3 is degenerate. |
+| `theta > 1.0` (long-run vol > 100%) | 5 | e.g. spot 5696: `θ=11.93, κ=0.0117` — long-run vol ≈ 345%. |
+
+Repricing (Heston price vs actual trade price, from `calibration_tests/*.csv`):
+**median relative error ≈ 20%, 90th percentile ≈ 54%.** That is not a calibrated model.
+
+The single most damning diagnostic: on **one day**, across **adjacent** spot buckets, `theta`
+ranges 0.037 → **11.93** and `kappa` 0.012 → **18.2**. The structural parameters of one underlying
+on one day should be near-identical from bucket 5687 to 5688. They are not. That instability is the
+proof the fit is **under-determined** — the root cause Work item 3 addresses.
+
+Two mechanisms produce this:
+
+1. **Fragmented data (identification).** ~53 independent 5-parameter fits/day, each on a thin
+   slice (often few maturities). Heston needs a rich surface — multiple maturities *and* a real
+   strike range — to separate `kappa` from `theta`. On thin/short-dated snapshots only the
+   *product* `kappa·theta` is identified, which is exactly the `θ` huge × `κ` tiny degeneracy seen above.
+2. **Unconstrained optimizer + single fixed start.** One fixed initial guess into an unbounded
+   Levenberg–Marquardt lets `rho` run to ±1 and `eta` explode, and the only failure check is
+   "did the params move from the guess" — which misses every boundary fit.
+
+The three work items attack this in increasing order of depth and risk.
+
+---
+
+## Work item 1: Validation and diagnostics module
+
+**Goal.** A standalone, **read-only** script — `src/validate_calibrations.py` — that reads the
+existing `calibrations/*.csv` and `calibration_tests/*.csv` and emits a per-bucket and per-day
+**pass/fail report**. It touches nothing in the pipeline, so it is zero-risk and can run *now* to
+establish a baseline, then again after Items 2 and 3 to **measure** the improvement.
+
+**Why first.** Right now "quality" is unmeasured: the pipeline writes numbers and computes prices
+but never grades them. Without a metric you cannot tell whether Items 2/3 helped.
+
+**What it checks.**
+
+1. **Fit quality (numerical correctness)** — per bucket, from `calibration_tests/*.csv`:
+   - *Primary, computable now:* relative repricing error of `heston` vs `trade_price`
+     (`abs(heston − trade_price)/trade_price`), reported as median and p90 per bucket and per day.
+   - *Rigorous (recommended): IV-space residual.* Invert the fitted `heston` price back to a
+     Black implied vol and compare to the market `volatility` (= `trade_iv`), in **vol points**.
+     Because `vanilla_pricer` has no inverter, use QuantLib:
+     `ql.blackFormulaImpliedStdDev(type, K, F, price, df)` with forward `F = S·exp((r−g)·T)`,
+     discount `df = exp(−r·T)`, then `iv = stddev/sqrt(T)`. This is dividend-consistent and the
+     natural surface-fit metric. Flag a bucket if RMSE(IV) exceeds ~1–2 vol points.
+   - **Do NOT** use `heston − black_scholes` as the residual: the `black_scholes` column omits
+     dividends (its pricer takes no `dividend_rate`) while `heston` includes `g`, so the difference
+     conflates fit error with a dividend mismatch. (Record this as a latent diagnostic bug; optionally
+     fix later by recomputing BS-with-dividend at market IV via `ql.blackFormula` on the forward.)
+
+2. **Economic reasonability** — per bucket, from `calibrations/*.csv`. Two tiers: a **hard reject**
+   range (physically/financially impossible) and a softer **suspicious** flag (possible but
+   atypical for SPX at these tenors):
+
+   | Param | Hard reject outside | Suspicious flag | Rationale |
+   |---|---|---|---|
+   | `rho` | `[−0.999, 0.5]` | `|rho|>0.995` (pegged) or `rho>0` (wrong sign for equities) | leverage effect ⇒ negative |
+   | `eta` | `[0.01, 2.0]` | `>1.5` | SPX vol-of-vol ~0.3–1.2 |
+   | `theta` | `[1e-4, 1.0]` | `>0.25` (long-run vol > 50%) | long-run variance |
+   | `v0` | `[1e-4, 1.0]` | `|sqrt(v0) − atm_iv| > 0.05` | should ≈ front-month ATM IV |
+   | `kappa` | `(0, 20]` | `<0.1` **and** `theta>0.5` (the unidentified-product pattern) | mean-reversion speed |
+   | `feller` | — | `< 0` (optionally treat as hard) | `2κθ ≥ η²` |
+
+   The `atm_iv` reference for the `v0` check is the shortest-maturity, nearest-ATM `volatility`
+   in that day's `calibration_tests` rows — a free sanity bound from the input surface.
+
+3. **Cross-bucket stability (per day)** — the headline metric. For each day compute the spread
+   (IQR, and max/min ratio) of `theta, kappa, eta, rho, v0` across spot buckets. Structural
+   parameters should cluster tightly; flag a day where, e.g., `theta` IQR is large or `kappa` spans
+   orders of magnitude. After Work item 3 this becomes a **cross-day** stability check instead.
+
+**Output.** A per-bucket flagged table (`validation/validation_<date>.csv`) plus a printed per-day
+summary: % of buckets passing all hard checks, repricing/IV RMSE distribution, flag counts, and the
+stability metrics. Put thresholds in a single `THRESHOLDS` dict at the top of the file so they are tunable.
+
+**Sketch.**
 
 ```python
-for s in S:
-    data = df[df['spot_price']==s]
-    ...
-    for t in T:                 # volume-ranking loop — leaves `dft` bound to the LAST t
-        dft = byt.get_group(t)
-        ...
-    ...
-    if len(T)>0:
-        for t in T:             # strike-selection loop
-            cK = np.sort(dft[dft['w']=='call']['strike_price'].unique()).tolist()   # (A) stale dft
-            pK = np.sort(dft[dft['w']=='put']['strike_price'].unique()).tolist()    # (A) stale dft
-            ...
-            if ncK>1 and npK>1:
-                K = pK[:max(npK,max_nk)] + cK[:max(ncK,max_nk)]                     # (C) max never caps
-                ct = df[((df['days_to_maturity']==t)&(df['strike_price'].isin(K)))] # (B) full df, not this spot
-                ...
+# src/validate_calibrations.py  (read-only; pandas/numpy + QuantLib for the optional IV inversion)
+import QuantLib as ql, numpy as np, pandas as pd, glob
+
+THRESHOLDS = dict(
+    rho_peg=0.995, rho_lo=-0.999, rho_hi=0.5,
+    eta_lo=0.01, eta_hi=2.0, eta_susp=1.5,
+    theta_lo=1e-4, theta_hi=1.0, theta_susp=0.25,
+    v0_lo=1e-4, v0_hi=1.0, v0_atm_tol=0.05,
+    kappa_hi=20.0, iv_rmse_pts=0.02,
+)
+
+def implied_vol(price, w, S, K, r, g, T):
+    F, df = S*np.exp((r-g)*T), np.exp(-r*T)
+    opt = ql.Option.Call if w == 'call' else ql.Option.Put
+    try:
+        sd = ql.blackFormulaImpliedStdDev(opt, K, F, price, df)
+        return sd/np.sqrt(T)
+    except RuntimeError:
+        return np.nan
+
+def grade_bucket(row): ...          # returns dict of hard/suspicious flags from THRESHOLDS
+def day_stability(cal_df): ...      # IQR / max-min ratio of structural params across buckets
+# write validation/validation_<date>.csv + print per-day summary
 ```
 
-### The three named slips
+**Verification.**
 
-- **(A) Stale `dft`.** The strike loop never reassigns `dft`, so `cK`/`pK` are taken from whatever
+```bash
+python src/validate_calibrations.py
+```
 
-  maturity the *volume-ranking* loop happened to end on — not the current `t`. Every maturity in the
-  strike loop sees the same arbitrary strike universe.
-- **(B) Wrong frame for `ct`.** `ct` is filtered from the whole-day `df` (all rounded spot levels),
-  so the per-spot snapshot is polluted with trades that occurred at other underlying levels. Should
-  filter from this spot's rows only.
-- **(C) Cap never applies.** With `max_nk=7`, `pK[:max(len(pK),7)]` slices to `max(len(pK),7) ≥ len(pK)`,
-  i.e. **all** strikes; the intended "keep ≤7" never happens. Must be `min(...)`. Once `min` actually
-  caps, *which* strikes are kept starts to matter (see decision below).
+**Pass criteria.** The script runs read-only and produces, for each existing day, (a) a repricing
+RMSE figure, (b) per-bucket hard/suspicious flag counts that reproduce the Diagnosis table
+(≈17 pegged `rho`, ≈40 Feller violations on 2024-10-07), and (c) a cross-bucket stability metric.
+This is the **baseline** to beat.
 
-### Closely related structural finding — single-maturity "surface" (decide before fixing)
+---
 
-Each `ct` appended to `cals` is a single-maturity slice (`df['days_to_maturity']==t`). In the writer
-loop (`:79-111`) every `cal` is pivoted into a one-column `surf` and calibrated separately, each
-**overwriting** `sparams.loc[s]` and re-writing the CSVs — so the stored params for a spot come from
-only its **last** maturity, and `calibration_tests/*.csv` ends up holding just the final slice of the
-final spot. Yet `calibrate_heston` loops over both `T` (columns) and `K` (rows): the engine is built
-for a **multi-maturity surface**. So the current per-maturity calibration contradicts the design.
+## Work item 2: Engine hardening
 
-**Decision (one choice drives the rest of this section):**
+**Goal.** Make `calibrate_heston` return parameters that are bounded, reproducible, and
+self-graded — replacing the brittle "did it move from the guess" sentinel with real
+bounds, multiple starts, and an explicit acceptance gate.
 
-- **Path 1 — minimal:** fix (A)(B)(C) only; keep one calibration per maturity. Lowest risk, but the
-  per-spot result stays single-maturity and the CSV-overwrite behavior remains.
-- **Path 2 — recommended:** fix (A)(B)(C) *and* build one multi-maturity surface per spot, calibrate
-  once, write once. Matches the engine's design and makes `calibration_tests` a usable per-day diagnostic.
+**File.** `src/calibrate_heston.py` (plus a small coordinating edit in `calibrator_prototype.py`
+for the new return keys — see (e)).
 
-### Strike policy (applies to both paths once (C) is fixed)
+**Changes.**
 
-`pK`/`cK` are sorted ascending. Recommend keeping the `max_nk` strikes **nearest the money** on each
-wing: highest puts (`pK[-n:]`, since OTM puts have `K<spot`) and lowest calls (`cK[:n]`, since OTM
-calls have `K>spot`). Confirm this matches the modeling intent; the alternative (deepest-OTM, i.e.
-`pK[:n]`) is what a naive `min` fix to the existing head-slice would give for puts.
-
-### Recommended corrected sketch (Path 2)
-
-Replaces the inner loops and the per-`cal` writer with one snapshot + one calibration per spot:
+**(a) Box bounds via a constraint.** Pass `ql.NonhomogeneousBoundaryConstraint(lows, highs)` to
+`model.calibrate(...)`. **Order must match `model.params()` = `[theta, kappa, eta, rho, v0]`**
+(this ordering is already a documented gotcha — get it wrong and bounds land on the wrong params):
 
 ```python
-max_nt = 7   # maturities per spot
-max_nk = 7   # strikes per wing
-
-for s in S:
-    spot_data = df[df['spot_price'] == s]            # renamed from `data` (it was clobbered below)
-    total_volume = spot_data['trade_size'].sum()
-    byt = spot_data.groupby('days_to_maturity')
-
-    vol_by_t = byt['trade_size'].sum().sort_values(ascending=False)
-    T = np.sort(vol_by_t.index[:max_nt]).tolist()    # top maturities by volume
-
-    selected = []
-    for t in T:
-        dft = byt.get_group(t)                       # (A) current maturity
-        cK = np.sort(dft.loc[dft['w'] == 'call', 'strike_price'].unique())
-        pK = np.sort(dft.loc[dft['w'] == 'put',  'strike_price'].unique())
-        if len(cK) > 1 and len(pK) > 1:
-            keep = list(pK[-min(len(pK), max_nk):]) + list(cK[:min(len(cK), max_nk)])  # (C) + nearest-money
-            selected.append(dft[dft['strike_price'].isin(keep)])                        # (B) this spot only
-
-    if not selected:
-        continue
-    snap = (pd.concat(selected, ignore_index=True)
-              .drop_duplicates(subset=['strike_price', 'days_to_maturity'], keep='first')
-              .dropna())
-    surf = snap.pivot_table(index='strike_price', columns='days_to_maturity',
-                            values='trade_iv', aggfunc='last')                          # real multi-maturity surface
-    if int(surf.count().sum()) < 5:
-        continue
-
-    params = pd.Series(calibrate_heston(surf, s, r, g))   # ONE calibration per spot
-    # write sparams.loc[s] = params (+ metadata), then reprice `snap` and APPEND to a per-day
-    # calibration_tests frame written ONCE after the `for s in S` loop (not per spot/maturity).
+#                       theta  kappa   eta    rho    v0
+lows  = ql.Array([      1e-4,  1e-2,  1e-2, -0.999, 1e-4])
+highs = ql.Array([      1.0,   20.0,   2.0,   0.5,   1.0])
+constraint = ql.NonhomogeneousBoundaryConstraint(lows, highs)
+model.calibrate(helpers, lm, ql.EndCriteria(1000, 100, 1e-8, 1e-8, 1e-8), constraint)
 ```
 
-Notes:
+**(b) Multiple restarts.** A single fixed start is fragile. Loop over a small set of starting
+points spanning plausible ranges (a fixed grid of ~5–10, or seeded random draws within the bounds),
+recalibrate from each, and keep the fit with the lowest objective:
 
-- Rename the per-spot subset (`spot_data`) so it is not overwritten by the later `data = cal...`.
-- Move the `calibration_tests` write out of the inner loop; accumulate repriced `snap`s and write
-  once at the end so all spots survive.
+```python
+def rmse(helpers):
+    e = np.array([h.calibrationError() for h in helpers])   # default: relative-price error
+    return float(np.sqrt((e**2).mean()))
+# for each start: rebuild process/model/engine, set params, calibrate, record rmse(helpers)
+# keep argmin; this also removes the dependence on one arbitrary guess.
+```
 
-### Path 1 (minimal) line edits, if Path 2 is rejected
+Note `calibrationError()` is **relative price** here (the IV-error enum is not exposed in this
+build); that is fine for *ranking* restarts and for a price-space acceptance gate. For
+interpretable vol-point error, rely on Work item 1's external IV inversion.
 
-1. Inside the strike loop, add `dft = byt.get_group(t)` as the first statement. (A)
-2. `K = pK[-min(npK,max_nk):] + cK[:min(ncK,max_nk)]`. (C + strike policy)
-3. `ct = data[(data['days_to_maturity']==t) & (data['strike_price'].isin(K))]...`. (B)
+**(c) Rejection / acceptance gate.** Return the failure sentinel (all-`None`) when any of:
+- best-fit relative-price RMSE above `RMSE_ACCEPT`, or
+- any parameter within tolerance of its bound (`rho ≤ −0.995`, `eta ≥ 1.99`, etc.) — a boundary
+  fit is a non-fit, the exact case the old sentinel missed.
 
-### Verification (post-fix)
+  *Threshold kept strict (deliberate).* `RMSE_ACCEPT` stays at **`0.05`**. Measured across
+  2024-10-07..11 the per-bucket relative-price RMSE clusters ~0.07–0.17 (median 0.11, p90 ~0.31), so
+  `0.05` rejects ~99% of per-bucket fits — and loosening it (e.g. to `0.15` ≈ p67) was **considered
+  and rejected**: it would only admit *under-determined* fits. A thin per-bucket surface cannot
+  identify five parameters, so a passing RMSE there buys a degenerate, cross-bucket-unstable result,
+  not a trustworthy one. The right response to the low accept rate is **more information per fit**
+  (Work item 3, one calibration per day), not a lower bar. Replacing this price-space gate with an
+  IV-space (vol-point) one is a separate, orthogonal improvement — see
+  [Improving calibration performance](#improving-calibration-performance).
+
+The old check (`v0==0.01 and kappa==0.2 and …`) is **removed**: with randomized starts there is no
+single guess to compare against, and it never caught boundary fits anyway.
+
+**(d) Return fit diagnostics.** Augment the dict with `rmse`, `n_helpers`, and an `accepted` bool
+so Work item 1 and the CSV can record fit quality, not just the point estimate.
+
+**(e) Coordinate the new return keys with the writer.** `calibrator_prototype.py` does
+`sparams.loc[s, parameters.index] = parameters.values` against a fixed column list
+`['theta','kappa','rho','eta','v0','feller']`; assigning unknown columns via `.loc` raises
+`KeyError`. So extend that column list (and the per-row metadata block) to include `rmse`,
+`n_helpers`, `accepted` when adding them to the return dict.
+
+**(f) Eval-date / day-count note (accuracy correction).** With **flat-forward** curves and
+`Period(days, Days)` maturities, the year fraction is `days/365` regardless of the evaluation date,
+so `Date.todaysDate()` vs the true quote date is **immaterial** here. (Do **not** spend effort
+"fixing" it.) It only starts to matter if term-structured curves are introduced later — note it for
+that future, don't act now.
+
+**Verification.**
 
 ```bash
 python src/calibrator_prototype.py
+python src/validate_calibrations.py      # compare against the Item 1 baseline
+```
+
+**Pass criteria — met (engine), with the expected caveat.** Among *accepted* (written) buckets,
+pegged-`rho` is ~0 and `eta>1.5`/`theta>1.0` are excluded **by construction** (the box bounds +
+boundary-rejection enforce it); every accepted bucket carries an `rmse ≤ RMSE_ACCEPT`. Rejected
+buckets are dropped, not silently written. The engine behaves as designed.
+
+**Caveat — capped by under-determination (the real finding).** Under the strict gate, **almost no
+per-bucket fit is accepted** (a full 2024-10-07..11 run accepted ~1 bucket): the boundary check and
+`RMSE_ACCEPT=0.05` together reject ~all of them, because per-bucket surfaces are too thin to identify
+five parameters (the Diagnosis's root cause, not an engine defect). This near-empty output is itself
+the evidence that **Work item 3 (one calibration per day) is the prerequisite** — the gate is correct
+to reject these; the data, not the standard, is what must change. We deliberately do **not** lower
+`RMSE_ACCEPT` to manufacture acceptances (see (c)): that would only record degenerate,
+cross-bucket-unstable fits. Until Item 3, treat the per-bucket output as not yet trustworthy.
+
+**Risk (realized).** Bounds and the acceptance gate reject many currently-"successful" (but
+degenerate) fits, so output row counts drop. That is the point; Item 1 quantifies the trade. The
+write path was also hardened so a day with **zero** accepted fits clears both output files instead
+of leaving a stale `calibrations` file beside an emptied `calibration_tests` file (see the
+write-desync fix in [Completed tasks](#completed-tasks)).
+
+---
+
+## Work item 3: One calibration per trading day
+
+**Goal.** Fix the identification problem at the root: calibrate **once per trading day** over a
+rich, pooled surface using the **true** spot, instead of ~53 thin per-0.5-spot-bucket fits. This is
+the deepest change and the one that should make `theta`/`kappa` stop swinging across buckets.
+
+**File.** `src/calibrator_prototype.py` (restructure `calibrateby_spot` → `calibrate_by_day`).
+
+**Why.** Per-bucket calibration starves each fit of maturities and strikes, leaving `kappa·theta`
+only jointly identified (the `θ`-huge/`κ`-tiny degeneracy in the Diagnosis). Pooling the day's
+trades into one surface gives Heston the cross-maturity, cross-strike information it needs.
+
+**Design — the key decision (analogous to the earlier Path 1/Path 2 choice): how to handle
+intraday spot movement.** A Heston calibration has a single spot `S`, but trades occur across an
+intraday range (5687→5739 on 2024-10-07, ≈0.9%).
+
+- **Recommended — moneyness normalization.** Each OTM row already carries the underlying at trade
+  time (`spot_price` = `underlying_bid`). Compute per-trade moneyness `m = K / S_row`, pick one
+  **reference spot** `S_ref` for the day (volume-weighted or closing), and re-strike every trade to
+  `K* = m · S_ref`. Build the IV surface over `(K*, T)`. This re-centers the whole day to one spot
+  under the standard sticky-moneyness assumption (IV is ~stationary in moneyness over a session).
+  The ≈0.9% move makes the correction mild but correct.
+  - *Assumption/limitation:* breaks on days with a large intraday move; flag and optionally split
+    such days. Worth a sanity check on the day's spot range before trusting `S_ref`.
+- **Alternative — keep absolute strikes at one `S_ref`** (no normalization). Simpler, but mild
+  moneyness drift biases the wings. Not recommended once normalization is available.
+
+**Surface construction (per day).** Group by `days_to_maturity`; keep the top maturities by traded
+volume (consider raising `max_nt` beyond 7 now that it is once-per-day); per maturity keep the
+nearest-money strikes per wing (`max_nk`); pivot to a `K*`×`T` IV surface. Require **richer**
+coverage than the old `≥5 cells` — e.g. **≥3 maturities and ≥5 strikes** — so the fit is identified.
+Optionally pass `weights` to `model.calibrate` (volume- or vega-weighted) so liquid contracts dominate.
+
+**Output schema change (must be documented).** Calibration output becomes **one row per trading
+day** (keyed by date, recording `S_ref`, `r`, `g`, the five params, `feller`, `rmse`, coverage
+counts) instead of one row per spot bucket. Because the result is one row per day, the parameters
+now accumulate into a **single `data/calibrations.csv`** (fully regenerated each run), replacing the
+old `calibrations/cboe_spx_calibrations_<date>.csv` file-per-day directory; `calibration_tests/*.csv`
+still reprices the day's pooled snapshot one-file-per-day. This **breaks the current per-spot CSV
+contract** — `CLAUDE.md`'s column contracts and Stage 3/4 description are updated accordingly.
+
+**Sketch.**
+
+```python
+def calibrate_by_day(filepath):
+    df = read_and_filter(filepath)                  # trade_iv>0, parse dates, rate asof(date) + NaN guard
+    S_ref = volume_weighted_spot(df)                # one reference spot for the day
+    df['Kstar'] = (df['strike_price'] / df['spot_price']) * S_ref   # moneyness-normalize to S_ref
+    snap = select_surface(df, max_nt, max_nk)       # top maturities by volume; nearest-money strikes/wing
+    surf = snap.pivot_table(index='Kstar', columns='days_to_maturity', values='trade_iv', aggfunc='last')
+    if surf.notna().sum().sum() < MIN_CELLS or surf.shape[1] < 3:
+        return                                      # require multi-maturity coverage
+    params = calibrate_heston(surf, S_ref, r, g)    # ONE calibration for the whole day (hardened engine)
+    # write ONE row keyed by date; reprice snap under params -> calibration_tests
+```
+
+**Verification.**
+
+```bash
+python src/calibrator_prototype.py
+python src/validate_calibrations.py
 python -c "
-import pandas as pd, glob
-f = sorted(glob.glob('data/options/calibration_tests/*.csv'))[-1]
-d = pd.read_csv(f)
-print('rows:', len(d), '| spots:', d['spot_price'].nunique(),
-      '| maturities:', sorted(d['days_to_maturity'].unique()))
+import pandas as pd
+d = pd.read_csv('data/calibrations.csv')   # single file, one row per accepted day
+print('days:', len(d)); print(d[['date','theta','kappa','eta','rho','v0','iv_rmse','accepted']])
 "
 ```
 
-Pass criteria:
+**Pass criteria.** One (or very few) rows per day; parameters economically plausible (Feller mostly
+satisfied, `rho` not pegged, `eta < 1.5`, `theta < 0.25`); a full-surface `rmse` reported and below
+threshold; and **cross-day** parameter stability far tighter than the old cross-bucket spread.
+`CLAUDE.md` updated for the new one-row-per-day schema.
 
-- Path 2: `maturities` has **>1** value and `spots` is **>1** (surface is multi-maturity; not just the
-  last slice survived).
-- Both paths: spot-check that every strike kept satisfies OTM (`K>spot` for calls, `K<spot` for puts)
-  and that no wing exceeds `max_nk` strikes.
+**Risk (high).** Schema change ripples to any consumer of `calibrations/*.csv` and to `CLAUDE.md`;
+the moneyness-normalization assumption must be validated on high-move days. Do this last, after
+Items 1–2 have stabilized the engine and given a baseline to compare against.
+
+---
+
+## Improving calibration performance
+
+Item 2 made fits *honest* (bounded, self-graded, no silent boundary fits) but did not make many of
+them *good*: on per-bucket data ~45% still peg a bound and accepted params still swing across spots.
+The levers below raise the share of economically-stable, well-fitting calibrations. They are ordered
+by expected payoff per unit effort. **Item 3 (one calibration per day) is the single highest-impact
+item — it attacks the root cause (identification); do it first.** The rest sharpen the engine and
+the gate and apply equally to per-bucket or per-day surfaces.
+
+1. **Pool the surface — Work item 3 (highest impact).** The boundary pegging and cross-bucket swing
+   are symptoms of an under-identified 5-parameter fit on a thin slice. One moneyness-normalized,
+   multi-maturity surface per day gives Heston the cross-maturity/cross-strike information it needs.
+   Expect boundary-rejection and `eta`/`theta` blow-ups to fall sharply. See Work item 3.
+
+2. **Gate and rank in IV space, not relative price. ✅ done (pulled forward with Item 3).**
+   `calibrationError()` is relative *price* RMSE, which deep-OTM contracts inflate; that is why the
+   old `RMSE_ACCEPT=0.05` was both strict *and* an imperfect metric (it over-penalized cheap wings).
+   `calibrate_heston` now inverts each helper's fitted price back to a Black vol via
+   `BlackCalibrationHelper.impliedVolatility(modelValue, ...)`, computes the vol-point RMSE, **ranks
+   restarts by it, and gates on `IV_RMSE_ACCEPT=0.02`** (~2 vol points). The relative-price RMSE is
+   retained as the `rmse` diagnostic. This flipped the rejections from "wing-inflated price error" to
+   the genuine remaining issue (boundary pegging, lever 3/6 below).
+
+3. **Weight the objective.** Pass `weights` to `model.calibrate` so liquid / informative quotes
+   dominate: **vega weighting** (down-weights deep-OTM noise, complementing lever 2) or
+   **volume weighting** (`trade_size`, already in the snapshot). Reduces the deep-OTM tail that the
+   relative-price metric over-penalizes and that pulls `eta` up.
+
+4. **Stronger optimization than one local LM.** The 6-point restart grid helps but is small. Options,
+   cheapest first: widen/perturb the seed grid (seeded random draws within bounds); add a short
+   global pre-search (`ql.DifferentialEvolution`/simulated annealing) to seed LM; or warm-start each
+   day from the previous day's accepted params (parameters are persistent across sessions). Keep the
+   argmin-RMSE selection.
+
+5. **Tame the Feller / `eta` degeneracy.** Many short-dated fits violate Feller (`2κθ < η²`). Either
+   add a soft Feller penalty to the objective, or tighten the `eta` upper bound once lever 1 reduces
+   the genuine need for large vol-of-vol. Do **not** hard-reject Feller violations outright — they
+   are a known Heston short-tenor limitation, not always a bad fit.
+
+6. **Two-stage / reduced identification (only if 1–5 are insufficient).** Where only the product
+   `κ·θ` is identified, fix or prior-anchor `kappa` (e.g. to a stable cross-day estimate) and fit the
+   rest, rather than letting `θ`-huge/`κ`-tiny run free. A pragmatic fallback, not a first move.
+
+7. **Term-structured curves (future, not now).** Flat-forward `r`,`g` make the eval-date immaterial
+   (Item 2(f)). If real SPX term structures are introduced later, revisit the eval-date/day-count and
+   build per-maturity discount factors. Out of scope until the surface and gate are trustworthy.
+
+**Measurement.** After each lever, re-run `validate_calibrations.py` and compare against the Item 1
+baseline (35/256 buckets, 14% accepted) and the post-Item-2 numbers: track accept rate, boundary-
+rejection share, IV-RMSE distribution, and the cross-bucket→cross-day stability metric. A lever that
+does not move those is not worth keeping.
 
 ---
 
 ## Sequencing
 
 1. Work on a branch off `master` (currently on `test`); do not edit committed CSVs by hand.
-2. Apply **Issue 1** first (smallest, unblocks correct rates), commit, run the Issue 1 verification.
-3. Decide Path 1 vs Path 2 for **Issue 2**, apply, commit, run the Issue 2 verification.
-4. Re-run the full pipeline so `calibrations/` and `calibration_tests/` are regenerated from correct
-   inputs; sanity-check a couple of spots (rate ≈ 0.05, plausible `feller`, surface coverage).
-5. Update `CLAUDE.md`: delete the two "Known issues" once verified fixed (do not leave them marked
-   "done"), and drop the `→ see PLAN.md` pointers.
+2. **Work item 1** (validation, read-only) first — establish the baseline numbers. Commit.
+3. **Work item 2** (engine hardening) — re-run pipeline, then re-run validation; confirm pegged-`rho`
+   and Feller-violation counts drop and accepted buckets carry a low `rmse`. Commit.
+4. **Decide** the Work item 3 spot-handling approach (moneyness normalization recommended), restructure
+   to one calibration per day, re-run pipeline + validation; confirm one row/day and tight cross-day
+   stability. Commit.
+5. Update `CLAUDE.md` in the **same** change as Item 3: new one-row-per-day schema, the
+   `calibrate_heston` bounds/rejection/return-keys, and the new `validate_calibrations.py` stage.
+   Remove anything this plan made stale.
 
 ## Done criteria
 
-- [x] `calibrations/*.csv` show `risk_free_rate ≈ 0.05` for the Oct-2024 files.
-- [x] `ct`/snapshot rows are sourced from the current spot **and** current maturity only.
-- [x] Strike count per wing ≤ `max_nk`; strikes are OTM and follow the agreed near/far policy.
-- [x] (Path 2) one calibration per spot over a multi-maturity surface; `calibration_tests` retains all spots.
-- [x] `CLAUDE.md` "Known issues" updated to match reality.
+- [x] **Item 1:** `src/validate_calibrations.py` runs read-only and reports per-bucket flags,
+      repricing/IV RMSE, and per-day stability; baseline reproduces the Diagnosis table
+      (2024-10-07: 17 pegged `rho`, 40 Feller violations, 26 `eta>1.5`). Across all 5 days only
+      **35/256 buckets (14%)** pass all hard checks — the baseline to beat.
+- [x] **Item 2:** `calibrate_heston` calibrates with box bounds and multiple restarts, rejects
+      boundary/high-RMSE fits (old "==guess" sentinel removed), and returns `rmse`/`accepted`;
+      `calibrator_prototype.py` records the new keys.
+- [x] **Item 2:** among *accepted* buckets, pegged-`rho` and `eta>1.5`/`theta>1.0` are excluded by
+      construction (bounds + boundary-rejection). With the strict `RMSE_ACCEPT=0.05`, per-bucket data
+      yields almost no accepted fits (~1 across 2024-10-07..11) — the standard is kept strict on
+      purpose; the under-determination is what Item 3 fixes, not the threshold. **Remaining lever:**
+      swap the price-space gate for the IV-space one (see Improving calibration performance).
+- [x] **Item 3:** one calibration per trading day over a moneyness-normalized multi-maturity surface
+      (volume-weighted `S_ref`, `K* = (K/S_row)·S_ref` snapped to the 5-pt grid, `<7d` maturities
+      dropped); parameters land in a single `data/calibrations.csv`, one row per day. Across 2024-10-07..11 the genuine fit is now
+      **~0.8–1.4 vol points** (IV-RMSE) with **tightly clustered** params (`theta` 0.029–0.031,
+      `v0` 0.007–0.026, `eta` 0.8–1.5) — versus the old cross-bucket `theta` 0.037→11.93 swing.
+- [x] **Item 3 / lever 2:** acceptance now gates in **IV space** (`IV_RMSE_ACCEPT=0.02` vol pts),
+      not relative price; restarts are ranked by IV-RMSE; `validate_calibrations.py` is per-day with a
+      cross-day stability block. `CLAUDE.md` updated for the new schema, engine behavior, and stage.
+- [ ] **Remaining (next lever):** most days still reject on **boundary-pegged** `kappa` (→20) or
+      `rho` (→−0.999) — only ~1/5 days accept. Tame via volume/vega weighting and `kappa` anchoring
+      or a `rho`-bound review (see "Improving calibration performance" levers 3–6).
+
+---
+
+## Completed tasks
+
+> Condensed records. Full pre-fix forensic detail (reproduction snippets, option/path
+> comparisons) is in git history — see commits `7481d03`, `fe0ba9d`, `bf55b7c`.
+
+### Issue 1: Stale rate lookup
+
+**Status: ✅ complete (Option B).** Every calibration was being fed the *oldest* rate in
+`rg`'s history (a 2008 value) instead of the most recent on/before the quote date, because
+`rg` is sorted newest-first and the code took `.iloc[-1]` of the `<= date` slice.
+
+- **Fix:** module-level `rg_asc = rg.sort_index()` plus
+  `r = rg_asc['risk_free_rate'].asof(date)` / `g = rg_asc['dividend_rate'].asof(date)`,
+  with a NaN guard that skips a file when no rate exists on/before its date.
+- **Location:** `src/calibrator_prototype.py` (rate lookup near the top of `calibrateby_spot`).
+- **Verified:** regenerated `calibrations/*.csv` show `risk_free_rate ≈ 0.05` for Oct-2024
+  (was the stale `0.0233`).
+
+### Issue 2: Strike selection slips
+
+**Status: ✅ complete (Path 2).** The per-spot surface was built from the wrong rows due to
+three slips: (A) a stale `dft` (strikes taken from whatever maturity the volume-ranking loop
+ended on), (B) `ct` filtered from the whole-day frame instead of the current spot, and (C) a
+`max()` cap that never actually limited the strike count.
+
+- **Fix:** maturities ranked by traded volume (top `max_nt`=7); each kept maturity contributes its
+  `max_nk`=7 nearest-money strikes per wing (`pK[-n:]` puts, `cK[:n]` calls) from **its own** rows;
+  the per-maturity slices are concatenated into one **multi-maturity** surface, calibrated **once
+  per spot**, and repriced snapshots are accumulated and written **once** after the spot loop.
+- **Location:** `src/calibrator_prototype.py`, the per-spot loop in `calibrateby_spot`.
+- **Verified:** Oct-2024 produces multi-maturity surfaces across many spots; the only OTM-check
+  "violations" are `strike == rounded_spot` ties from the 0.5 spot grid (no strike on the wrong side).
+
+These two fixes corrected the **inputs** to `calibrate_heston`. They did **not** make the output
+economically reasonable — that is Phase 2.
+
+### Write-desync fix
+
+**Status: ✅ complete.** Found while running Item 2. The two per-day outputs were written under
+independent conditions: `calibrations/*.csv` only when `sparams.dropna()` was non-empty, but
+`calibration_tests/*.csv` whenever any snapshot had been repriced. On a day with **no accepted fit**
+(now common under the Item 2 gate) this left a **stale `calibrations` file beside an emptied
+`calibration_tests` file** — mutually inconsistent outputs.
+
+- **Fix:** only *accepted* fits are repriced into `test_frames`, so calibrations and
+  calibration_tests describe the same bucket set; both are then written under one decision. When a
+  day yields zero accepted fits, **both stale files are removed** (and a notice printed) so the pair
+  can never desync.
+- **Location:** `src/calibrator_prototype.py`, end of `calibrateby_spot` (the write block) and the
+  repricing block.
+- **Verified:** full 2024-10-07..11 run — 10-07 (1 accepted) writes both files consistently;
+  10-08..11 (0 accepted) leave **neither** file. `validate_calibrations.py` skips both-absent days
+  cleanly.

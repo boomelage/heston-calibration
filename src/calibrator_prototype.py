@@ -157,7 +157,7 @@ def calibrate_by_day(filepath):
     sel = _select_surface(df)
     if sel is None:
         return _skip_day(test_path, "thin", "no usable maturities")
-    sel = sel.sort_values('trade_size')   # so pivot aggfunc='last' is the latest trade per cell
+    sel = sel.sort_values('trade_size')   # so pivot aggfunc='last' keeps the highest-volume trade per cell
     surf = sel.pivot_table(index='Kstar', columns='days_to_maturity',
                            values='trade_iv', aggfunc='last')
 
@@ -210,7 +210,8 @@ def calibrate_by_day(filepath):
         print()
 
     # ---- reprice the surface contracts under the fitted params ----
-    # One representative trade per surface cell (the latest), repriced at its ORIGINAL spot/strike:
+    # One representative trade per surface cell (the highest-volume, matching the pivot's aggfunc),
+    # repriced at its ORIGINAL spot/strike:
     # Heston params are spot-independent, so the honest diagnostic prices at real trade conditions,
     # not the normalised K*/S_ref. The tests file thus mirrors the calibrated surface one-to-one.
     repriced = (sel.drop_duplicates(subset=['Kstar', 'days_to_maturity'], keep='last')

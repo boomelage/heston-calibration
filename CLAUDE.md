@@ -119,8 +119,11 @@ pooled, moneyness-normalised surface — not the old per-0.5-spot-bucket fits:
    intraday spots share clean surface columns (`Kstar`).
 5. **Surface.** Rank maturities by traded volume (top `MAX_NT`=12); for each kept maturity take the
    `MAX_NK`=8 nearest-money `Kstar` per wing (highest OTM puts, lowest OTM calls); `pivot_table`
-   into a `Kstar`×maturity IV surface (`values='trade_iv'`). Require richer coverage than before:
-   `>= MIN_MATS`(3) maturities, `>= MIN_STRIKES`(5) strikes, and `>= MIN_CELLS`(12) non-NaN cells.
+   into a `Kstar`×maturity IV surface (`values='trade_iv'`). When several trades share a cell the
+   **highest-volume** trade's IV is kept (`sel` sorted by `trade_size`, then `aggfunc='last'`), not the
+   chronologically last — a volume-weighted mean per cell is under consideration (PLAN.md). Require
+   richer coverage than before: `>= MIN_MATS`(3) maturities, `>= MIN_STRIKES`(5) strikes, and
+   `>= MIN_CELLS`(12) non-NaN cells.
 6. Call `calibrate_heston(surface, S_ref, r, g)` **once for the whole day**. The engine **rejects**
    fits it cannot trust (returns `None` params — see Stage 4), printing whether the rejection was a
    thin surface, an IV-RMSE miss, or a **boundary-pegged** param.
@@ -164,13 +167,13 @@ date — immaterial under the flat-forward curves used here). It then:
    `IV_RMSE_ACCEPT` (`0.02`, ~2 vol points) **or** any parameter is pinned within `BOUND_TOL` of a
    bound (a boundary fit is a non-fit). The old "did the params move from the fixed guess" sentinel
    is **removed**. Note: on the pooled per-day surfaces the genuine fit is excellent — across the full
-   multi-year run accepted days have IV-RMSE ~0.5 vol points (median `iv_rmse` 0.0043), so IV-RMSE
+   multi-year run accepted days have IV-RMSE ~0.5 vol points (median `iv_rmse` 0.0048), so IV-RMSE
    never gates. Accepted days are also **pegging-free by construction** (the gate rejects any
    boundary-pegged param), so a clean `kappa`/`rho` in `calibrations.csv` is *not* evidence pegging is
-   solved — it is just what survives the gate. Over **3125** attempted days **1699 (~54%)** accept; the
-   ~46% rejected never reach `calibrations.csv` and the pipeline does not persist their rejection cause,
-   but boundary-pegged `kappa` (→20) / `rho` (→−0.999) remains the expected dominant cause — still the
-   open Phase 3 lever.
+   solved — it is just what survives the gate. Over **3215** attempted days **1742 (~54%)** accept; the
+   1473 rejected never reach `calibrations.csv`, but their cause is logged to `data/rejections.csv`,
+   which confirms boundary-pegged `kappa` (→20) / `rho` (→−0.999) as the dominant cause
+   (**pegged 1369, iv_miss 103, no_trades 1**) — still the open Phase 3 lever.
 
 Returns `{theta, kappa, eta, rho, v0, feller, iv_rmse, rmse, n_helpers, accepted}` with
 `feller = 2*kappa*theta - eta**2` for an accepted fit; a rejected fit returns params/`feller` as
@@ -210,17 +213,18 @@ breaks a downstream stage:
   (native grid widens to 25/50/100); harmless for QuantLib (any float strike prices) but it slightly
   quantises deep-OTM moneyness.
 - **Boundary pegging is still the open Phase 3 lever — and `calibrations.csv` cannot show it.** A
-  multi-year run attempted **3125** trading days and accepted **1699 (~54%)**, just under PLAN.md's 60%
+  multi-year run attempted **3215** trading days and accepted **1742 (~54%)**, just under PLAN.md's 60%
   target. The accepted set has 0 pegged `kappa`/`rho`, but that is **tautological**: the gate
-  (`_on_boundary`) rejects any boundary-pegged fit, so pegged days never reach the file. The ~46%
-  rejected (1426 days) are dropped before write; their cause is now logged to `data/rejections.csv`
-  (`reason` ∈ `no_trades/no_rate/thin/pegged/iv_miss/no_fit`), so the pegged-vs-thin-vs-IV split is
-  auditable — `pegged` is the expected dominant cause. None of the Phase 3 levers (A–E) are
-  implemented yet (`MIN_DTM`=7, no `weights`, no `fixParameters`, no Feller penalty), so this ~54% is
-  the Phase 2 engine's rate over the long sample, not a post-lever result.
+  (`_on_boundary`) rejects any boundary-pegged fit, so pegged days never reach the file. The 1473
+  rejected days are dropped before write; their cause is logged to `data/rejections.csv`
+  (`reason` ∈ `no_trades/no_rate/thin/pegged/iv_miss/no_fit`), and the split is now **measured**:
+  **pegged 1369, iv_miss 103, no_trades 1** — so `pegged` is confirmed the dominant cause (93% of
+  rejections). None of the Phase 3 levers (A–E) are implemented yet (`MIN_DTM`=7, no `weights`, no
+  `fixParameters`, no Feller penalty), so this ~54% is the Phase 2 engine's rate over the long sample,
+  not a post-lever result.
 - **Feller is the standout issue in the accepted set.** The gate does **not** reject on Feller (it is a
   *suspicious*, not hard-reject, validator flag — short-tenor Heston violates it routinely), so accepted
-  days routinely violate it: `feller = 2·kappa·theta − eta² < 0` on **1686/1699 (99%)** accepted days,
-  and `eta > 1.5` on ~9.5% (max ≈2.0, near its cap). This is PLAN.md Lever D (soft Feller penalty +
+  days routinely violate it: `feller = 2·kappa·theta − eta² < 0` on **1729/1742 (99%)** accepted days,
+  and `eta > 1.5` on ~9% (161 days, max ≈2.0, near its cap). This is PLAN.md Lever D (soft Feller penalty +
   revisit the `eta` cap).
 - The `data/__pycache__/` holds bytecode for deleted modules (`get_data`, `get_options`, ...) — ignore it.

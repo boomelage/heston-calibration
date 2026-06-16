@@ -25,7 +25,15 @@ import QuantLib as ql
 LOW = [1e-4, 1e-2, 1e-2, -0.999, 1e-4]
 HIGH = [1.0, 20.0, 2.0, 0.5, 1.0]
 
-RMSE_ACCEPT = 0.05    # max relative-price RMSE for an accepted fit
+# Acceptance gate on the engine's relative-price RMSE (HestonModelHelper.calibrationError()).
+# Kept deliberately strict. Across 2024-10-07..11 a 0.05 bar rejects ~99% of per-bucket fits, but
+# loosening it (e.g. to 0.15) only admits *under-determined* fits: a thin per-bucket surface cannot
+# identify five parameters, so a passing RMSE there buys a degenerate, cross-bucket-unstable result,
+# not a trustworthy one. The fix is more information per fit (PLAN.md Work item 3 -- one calibration
+# per day), not a lower standard. Economic reasonability and the rigorous IV-space (vol-point)
+# residual are graded downstream by validate_calibrations.py; an IV-space gate is the planned
+# replacement for this price-space proxy -- see PLAN.md "Improving calibration performance".
+RMSE_ACCEPT = 0.05    # max relative-price RMSE for an accepted fit (strict; do not loosen -- see above)
 BOUND_TOL = 1e-3      # fraction of a bound's span within which a param counts as "pegged"
 
 _FAIL = {k: None for k in ("theta", "kappa", "eta", "rho", "v0", "feller", "rmse")}

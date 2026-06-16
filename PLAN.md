@@ -21,11 +21,13 @@ not line numbers.
 - [Work item 1: Validation and diagnostics module](#work-item-1-validation-and-diagnostics-module)
 - [Work item 2: Engine hardening](#work-item-2-engine-hardening)
 - [Work item 3: One calibration per trading day](#work-item-3-one-calibration-per-trading-day)
+- [Improving calibration performance](#improving-calibration-performance)
 - [Sequencing](#sequencing)
 - [Done criteria](#done-criteria)
 - [Completed tasks](#completed-tasks)
   - [Issue 1: Stale rate lookup](#issue-1-stale-rate-lookup)
   - [Issue 2: Strike selection slips](#issue-2-strike-selection-slips)
+  - [Write-desync fix](#write-desync-fix)
 
 ---
 
@@ -36,7 +38,8 @@ not line numbers.
 | Issue 1 — stale rate lookup | `src/calibrator_prototype.py` | low | ✅ done |
 | Issue 2 — strike-selection slips | `src/calibrator_prototype.py` | medium | ✅ done |
 | Work item 1 — validation/diagnostics | **new** `src/validate_calibrations.py` | none (read-only) | ✅ done |
-| Work item 2 — engine hardening | `src/calibrate_heston.py` (+ small prototype edit) | medium | ☐ todo |
+| Work item 2 — engine hardening | `src/calibrate_heston.py` (+ small prototype edit) | medium | ✅ done (strict gate kept; per-bucket fits capped by under-determination → Item 3) |
+| Write-desync fix (newly found bug) | `src/calibrator_prototype.py` | low | ✅ done |
 | Work item 3 — one calibration per day | `src/calibrator_prototype.py` (restructure) | high (schema change) | ☐ todo |
 
 **API facts confirmed in this environment** (QuantLib 1.35), so the plan does not rely on
@@ -219,9 +222,19 @@ build); that is fine for *ranking* restarts and for a price-space acceptance gat
 interpretable vol-point error, rely on Work item 1's external IV inversion.
 
 **(c) Rejection / acceptance gate.** Return the failure sentinel (all-`None`) when any of:
-- best-fit RMSE above a threshold (e.g. relative-price RMSE > ~0.05), or
+- best-fit relative-price RMSE above `RMSE_ACCEPT`, or
 - any parameter within tolerance of its bound (`rho ≤ −0.995`, `eta ≥ 1.99`, etc.) — a boundary
   fit is a non-fit, the exact case the old sentinel missed.
+
+  *Threshold kept strict (deliberate).* `RMSE_ACCEPT` stays at **`0.05`**. Measured across
+  2024-10-07..11 the per-bucket relative-price RMSE clusters ~0.07–0.17 (median 0.11, p90 ~0.31), so
+  `0.05` rejects ~99% of per-bucket fits — and loosening it (e.g. to `0.15` ≈ p67) was **considered
+  and rejected**: it would only admit *under-determined* fits. A thin per-bucket surface cannot
+  identify five parameters, so a passing RMSE there buys a degenerate, cross-bucket-unstable result,
+  not a trustworthy one. The right response to the low accept rate is **more information per fit**
+  (Work item 3, one calibration per day), not a lower bar. Replacing this price-space gate with an
+  IV-space (vol-point) one is a separate, orthogonal improvement — see
+  [Improving calibration performance](#improving-calibration-performance).
 
 The old check (`v0==0.01 and kappa==0.2 and …`) is **removed**: with randomized starts there is no
 single guess to compare against, and it never caught boundary fits anyway.
@@ -248,14 +261,25 @@ python src/calibrator_prototype.py
 python src/validate_calibrations.py      # compare against the Item 1 baseline
 ```
 
-**Pass criteria.** On 2024-10-07, vs the baseline: pegged-`rho` count drops to ~0, `eta>1.5` and
-`theta>1.0` counts fall sharply, every *accepted* bucket carries an `rmse` below threshold, and
-rejected buckets are clearly marked (not silently written). Fewer rows is acceptable and expected —
-garbage fits are now rejected rather than recorded. Some short-dated Feller violations may remain;
-that is a known Heston limitation, not necessarily a bad fit.
+**Pass criteria — met (engine), with the expected caveat.** Among *accepted* (written) buckets,
+pegged-`rho` is ~0 and `eta>1.5`/`theta>1.0` are excluded **by construction** (the box bounds +
+boundary-rejection enforce it); every accepted bucket carries an `rmse ≤ RMSE_ACCEPT`. Rejected
+buckets are dropped, not silently written. The engine behaves as designed.
 
-**Risk.** Bounds and the acceptance gate will reject many currently-"successful" (but degenerate)
-fits, so output row counts drop. That is the point; Item 1 quantifies the trade.
+**Caveat — capped by under-determination (the real finding).** Under the strict gate, **almost no
+per-bucket fit is accepted** (a full 2024-10-07..11 run accepted ~1 bucket): the boundary check and
+`RMSE_ACCEPT=0.05` together reject ~all of them, because per-bucket surfaces are too thin to identify
+five parameters (the Diagnosis's root cause, not an engine defect). This near-empty output is itself
+the evidence that **Work item 3 (one calibration per day) is the prerequisite** — the gate is correct
+to reject these; the data, not the standard, is what must change. We deliberately do **not** lower
+`RMSE_ACCEPT` to manufacture acceptances (see (c)): that would only record degenerate,
+cross-bucket-unstable fits. Until Item 3, treat the per-bucket output as not yet trustworthy.
+
+**Risk (realized).** Bounds and the acceptance gate reject many currently-"successful" (but
+degenerate) fits, so output row counts drop. That is the point; Item 1 quantifies the trade. The
+write path was also hardened so a day with **zero** accepted fits clears both output files instead
+of leaving a stale `calibrations` file beside an emptied `calibration_tests` file (see the
+write-desync fix in [Completed tasks](#completed-tasks)).
 
 ---
 
@@ -337,6 +361,59 @@ Items 1–2 have stabilized the engine and given a baseline to compare against.
 
 ---
 
+## Improving calibration performance
+
+Item 2 made fits *honest* (bounded, self-graded, no silent boundary fits) but did not make many of
+them *good*: on per-bucket data ~45% still peg a bound and accepted params still swing across spots.
+The levers below raise the share of economically-stable, well-fitting calibrations. They are ordered
+by expected payoff per unit effort. **Item 3 (one calibration per day) is the single highest-impact
+item — it attacks the root cause (identification); do it first.** The rest sharpen the engine and
+the gate and apply equally to per-bucket or per-day surfaces.
+
+1. **Pool the surface — Work item 3 (highest impact).** The boundary pegging and cross-bucket swing
+   are symptoms of an under-identified 5-parameter fit on a thin slice. One moneyness-normalized,
+   multi-maturity surface per day gives Heston the cross-maturity/cross-strike information it needs.
+   Expect boundary-rejection and `eta`/`theta` blow-ups to fall sharply. See Work item 3.
+
+2. **Gate and rank in IV space, not relative price.** `calibrationError()` is relative *price* RMSE,
+   which deep-OTM contracts inflate; that is why `RMSE_ACCEPT=0.05` is both strict *and* an imperfect
+   metric (it over-penalizes cheap wings). The natural surface-fit metric is the **vol-point
+   residual** already implemented in `validate_calibrations.py`
+   (`ql.blackFormulaImpliedStdDev` on the forward). Compute IV-RMSE inside `calibrate_heston` for the
+   best fit and gate on **~1–2 vol points** instead of price RMSE; also rank restarts by it. This is
+   interpretable and dividend-consistent. (Cost: an inversion per helper per accepted fit — cheap.)
+
+3. **Weight the objective.** Pass `weights` to `model.calibrate` so liquid / informative quotes
+   dominate: **vega weighting** (down-weights deep-OTM noise, complementing lever 2) or
+   **volume weighting** (`trade_size`, already in the snapshot). Reduces the deep-OTM tail that the
+   relative-price metric over-penalizes and that pulls `eta` up.
+
+4. **Stronger optimization than one local LM.** The 6-point restart grid helps but is small. Options,
+   cheapest first: widen/perturb the seed grid (seeded random draws within bounds); add a short
+   global pre-search (`ql.DifferentialEvolution`/simulated annealing) to seed LM; or warm-start each
+   day from the previous day's accepted params (parameters are persistent across sessions). Keep the
+   argmin-RMSE selection.
+
+5. **Tame the Feller / `eta` degeneracy.** Many short-dated fits violate Feller (`2κθ < η²`). Either
+   add a soft Feller penalty to the objective, or tighten the `eta` upper bound once lever 1 reduces
+   the genuine need for large vol-of-vol. Do **not** hard-reject Feller violations outright — they
+   are a known Heston short-tenor limitation, not always a bad fit.
+
+6. **Two-stage / reduced identification (only if 1–5 are insufficient).** Where only the product
+   `κ·θ` is identified, fix or prior-anchor `kappa` (e.g. to a stable cross-day estimate) and fit the
+   rest, rather than letting `θ`-huge/`κ`-tiny run free. A pragmatic fallback, not a first move.
+
+7. **Term-structured curves (future, not now).** Flat-forward `r`,`g` make the eval-date immaterial
+   (Item 2(f)). If real SPX term structures are introduced later, revisit the eval-date/day-count and
+   build per-maturity discount factors. Out of scope until the surface and gate are trustworthy.
+
+**Measurement.** After each lever, re-run `validate_calibrations.py` and compare against the Item 1
+baseline (35/256 buckets, 14% accepted) and the post-Item-2 numbers: track accept rate, boundary-
+rejection share, IV-RMSE distribution, and the cross-bucket→cross-day stability metric. A lever that
+does not move those is not worth keeping.
+
+---
+
 ## Sequencing
 
 1. Work on a branch off `master` (currently on `test`); do not edit committed CSVs by hand.
@@ -356,11 +433,14 @@ Items 1–2 have stabilized the engine and given a baseline to compare against.
       repricing/IV RMSE, and per-day stability; baseline reproduces the Diagnosis table
       (2024-10-07: 17 pegged `rho`, 40 Feller violations, 26 `eta>1.5`). Across all 5 days only
       **35/256 buckets (14%)** pass all hard checks — the baseline to beat.
-- [ ] **Item 2:** `calibrate_heston` calibrates with box bounds and multiple restarts, rejects
+- [x] **Item 2:** `calibrate_heston` calibrates with box bounds and multiple restarts, rejects
       boundary/high-RMSE fits (old "==guess" sentinel removed), and returns `rmse`/`accepted`;
       `calibrator_prototype.py` records the new keys.
-- [ ] **Item 2:** post-fix validation shows pegged-`rho` ≈ 0 and sharply fewer Feller/`eta`/`theta`
-      violations than baseline.
+- [x] **Item 2:** among *accepted* buckets, pegged-`rho` and `eta>1.5`/`theta>1.0` are excluded by
+      construction (bounds + boundary-rejection). With the strict `RMSE_ACCEPT=0.05`, per-bucket data
+      yields almost no accepted fits (~1 across 2024-10-07..11) — the standard is kept strict on
+      purpose; the under-determination is what Item 3 fixes, not the threshold. **Remaining lever:**
+      swap the price-space gate for the IV-space one (see Improving calibration performance).
 - [ ] **Item 3:** one calibration per trading day over a moneyness-normalized multi-maturity surface;
       `calibrations/*.csv` is one row per day; cross-day parameter stability is tight.
 - [ ] **Item 3:** `CLAUDE.md` updated to match the new schema, engine behavior, and validation stage.
@@ -402,3 +482,21 @@ ended on), (B) `ct` filtered from the whole-day frame instead of the current spo
 
 These two fixes corrected the **inputs** to `calibrate_heston`. They did **not** make the output
 economically reasonable — that is Phase 2.
+
+### Write-desync fix
+
+**Status: ✅ complete.** Found while running Item 2. The two per-day outputs were written under
+independent conditions: `calibrations/*.csv` only when `sparams.dropna()` was non-empty, but
+`calibration_tests/*.csv` whenever any snapshot had been repriced. On a day with **no accepted fit**
+(now common under the Item 2 gate) this left a **stale `calibrations` file beside an emptied
+`calibration_tests` file** — mutually inconsistent outputs.
+
+- **Fix:** only *accepted* fits are repriced into `test_frames`, so calibrations and
+  calibration_tests describe the same bucket set; both are then written under one decision. When a
+  day yields zero accepted fits, **both stale files are removed** (and a notice printed) so the pair
+  can never desync.
+- **Location:** `src/calibrator_prototype.py`, end of `calibrateby_spot` (the write block) and the
+  repricing block.
+- **Verified:** full 2024-10-07..11 run — 10-07 (1 accepted) writes both files consistently;
+  10-08..11 (0 accepted) leave **neither** file. `validate_calibrations.py` skips both-absent days
+  cleanly.

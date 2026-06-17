@@ -1,4 +1,4 @@
-\documentclass[a4paper, 11pt]{article}
+\documentclass[a4paper, 11pt]{amsart}
 \usepackage[margin=1.5in]{geometry}
 \usepackage{hyperref}
 \usepackage{amsmath}
@@ -8,6 +8,9 @@
 \usepackage{algorithm}
 \usepackage{algorithmic}
 \usepackage{seqsplit}
+\algsetup{
+	linenosize=\tiny
+}
 
 \hypersetup{
 	colorlinks=true, 
@@ -352,12 +355,12 @@
 	rejections are boundary-pegged $\kappa$ or $\rho$ (a separate identification lever), not
 	fit-quality failures.
 	
-	\newpage
 	\section{Algorithm}\label{sec:algorithm}
 	Algorithm~\ref{alg:perday} states the per-day routine; the driver applies it to every trading
 	day and accumulates accepted rows into a single file (\S\ref{sec:output}).
 	
-	\begin{algorithm}[h]
+	\begin{algorithm}[H]
+	\tiny
 	\caption{Per-day Heston calibration}\label{alg:perday}
 	\begin{algorithmic}[1]
 		\REQUIRE day $d$ of OTM trades; rates $r(d),g(d)$; constants of Table~\ref{tab:const}
@@ -365,8 +368,8 @@
 		\IF{$r(d)$ or $g(d)$ undefined on/before $d$}
 			\STATE \textbf{return} $\varnothing$ \hfill (no rate)
 		\ENDIF
-		\STATE $S_{\mathrm{ref}} \leftarrow (\sum q_i S_i)/(\sum q_i)$;\quad
-		       $R \leftarrow \max_i S_i / \min_i S_i - 1$;\quad
+		\STATE $S_{\mathrm{ref}} \leftarrow (\sum q_i S_i)/(\sum q_i)$; \qquad
+		       $R \leftarrow \max_i S_i / \min_i S_i - 1$; \qquad
 		       $\textsc{high\_move}\leftarrow \mathbf{1}\{R>R_{\max}\}$
 		\STATE $K^\star_i \leftarrow \Delta\,\round(m_i S_{\mathrm{ref}}/\Delta)$ with $m_i=K_i/S_i$ \hfill (re-strike \eqref{eq:kstar})
 		\STATE $\mathcal{T}\leftarrow$ top-$N_t$ maturities by volume;\ \ build $\mathcal{K}_\tau$ ($n_k$ per wing);\ \ pivot to $\{\hat\sigma_{k,\tau}\}$, cells $\mathcal{N}$
@@ -432,6 +435,7 @@
 		upper $h$    & $1.0$     & $20.0$    & $2.0$     & $\phantom{-}0.5$ & $1.0$ \\
 		\bottomrule
 	\end{tabular}
+	\vspace{1em}
 	\caption{Box bounds $\mathcal{B}$, in the \texttt{model.params()} order
 	$(\theta,\kappa,\eta,\rho,v_0)$. The $\rho$ upper bound is kept slightly positive (equity
 	leverage implies $\rho<0$) and $\eta$ is capped at $2.0$ (SPX vol-of-vol $\sim 0.3$--$1.2$).}

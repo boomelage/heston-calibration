@@ -60,6 +60,15 @@
 \makeatother
 
 
+% Make section headers bold (amsart's default is small-caps, non-bold). Computer
+% Modern has no bold small-caps (OT1/cmr/bx/sc), so use bold upright instead;
+% keep amsart's centring and spacing.
+\makeatletter
+\def\section{\@startsection{section}{1}%
+  \z@{.7\linespacing\@plus\linespacing}{.5\linespacing}%
+  {\normalfont\bfseries\centering}}
+\makeatother
+
 \newcommand{\Real}{\mathbb{R}}
 \newcommand{\Cplx}{\mathbb{C}}
 \newcommand{\given}{\,\vert\,}

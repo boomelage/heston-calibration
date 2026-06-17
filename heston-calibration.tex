@@ -21,15 +21,43 @@
 
 \setcounter{tocdepth}{3}% to get subsubsections in toc
 
-\let\oldtocsection=\tocsection
+% Put each depth's section number AND its trailing dot together in a fixed-width,
+% left-aligned box, so the dot hugs the number while the title still starts at the
+% same horizontal position regardless of how many digits the number has. The
+% per-depth \hspace nests the numbers; \quad is the gap between dot and title.
+\makeatletter
+\renewcommand{\tocsection}[2]{\hspace{0em}\indentlabel{\makebox[1.5em][l]{\@ifnotempty{#1}{#1\ }#2.}\quad}}
+\renewcommand{\tocsubsection}[2]{\hspace{1em}\indentlabel{\makebox[2.0em][l]{\@ifnotempty{#1}{#1\ }#2.}\quad}}
+\renewcommand{\tocsubsubsection}[2]{\hspace{2em}\indentlabel{\makebox[2.6em][l]{\@ifnotempty{#1}{#1\ }#2.}\quad}}
+\makeatother
 
-\let\oldtocsubsection=\tocsubsection
-
-\let\oldtocsubsubsection=\tocsubsubsection
-
-\renewcommand{\tocsection}[2]{\hspace{0em}\oldtocsection{#1}{#2}}
-\renewcommand{\tocsubsection}[2]{\hspace{1em}\oldtocsubsection{#1}{#2}}
-\renewcommand{\tocsubsubsection}[2]{\hspace{2em}\oldtocsubsubsection{#1}{#2}}
+% Dotted leaders in the table of contents (amsart's \@tocline uses a plain
+% \hfil; replace it with dotted leaders running to the page number).
+\makeatletter
+\providecommand{\@dotsep}{4.5}
+\def\@tocline#1#2#3#4#5#6#7{\relax
+  \ifnum #1>\c@tocdepth % then omit
+  \else
+    \par \addpenalty\@secpenalty\addvspace{#2}%
+    \begingroup \hyphenpenalty\@M
+    \@ifempty{#4}{%
+      \@tempdima\csname r@tocindent\number#1\endcsname\relax
+    }{%
+      \@tempdima#4\relax
+    }%
+    \parindent\z@ \leftskip#3\relax \advance\leftskip\@tempdima\relax
+    \rightskip\@pnumwidth plus4em \parfillskip-\@pnumwidth
+    #5\leavevmode\hskip-\@tempdima #6\nobreak\relax
+    \ifnum #1>1
+      \leaders\hbox{$\m@th\mkern\@dotsep mu\hbox{.}\mkern\@dotsep mu$}\hfill
+    \else
+      \hfil
+    \fi
+    \hbox to\@pnumwidth{\@tocpagenum{#7}}\par
+    \nobreak
+    \endgroup
+  \fi}
+\makeatother
 
 
 \newcommand{\Real}{\mathbb{R}}
@@ -367,41 +395,6 @@
 	under it the genuine pooled-surface fit is $\approx 0.8$--$1.4$ vol points, and the residual
 	rejections are boundary-pegged $\kappa$ or $\rho$ (a separate identification lever), not
 	fit-quality failures.
-	
-	\newpage
-	\section{Algorithm}\label{sec:algorithm}
-	Algorithm~\ref{alg:perday} states the per-day routine; the driver applies it to every trading
-	day and accumulates accepted rows into a single file (\S\ref{sec:output}).
-	
-	\begin{algorithm}[H]
-	\caption{Per-day Heston calibration}\label{alg:perday}
-	\begin{algorithmic}[1]
-		\REQUIRE day $d$ of OTM trades; rates $r(d),g(d)$; constants of Table~\ref{tab:const}
-		\STATE $\mathcal{D} \leftarrow \{ i : \sigma_i>0,\ \tau_i\ge\tau_{\min}\}$ \hfill (pre-filter \eqref{eq:prefilter})
-		\IF{$r(d)$ or $g(d)$ undefined on/before $d$}
-			\STATE \textbf{return} $\varnothing$ \hfill (no rate)
-		\ENDIF
-		\STATE $S_{\mathrm{ref}} \leftarrow (\sum q_i S_i)/(\sum q_i)$; \\
-		       $R \leftarrow \max_i S_i / \min_i S_i - 1$; \\
-		       $\textsc{high\_move}\leftarrow \mathbf{1}\{R>R_{\max}\}$
-		\STATE $K^\star_i \leftarrow \Delta\,\round(m_i S_{\mathrm{ref}}/\Delta)$ with $m_i=K_i/S_i$ \hfill (re-strike \eqref{eq:kstar})
-		\STATE $\mathcal{T}\leftarrow$ top-$N_t$ maturities by volume;\ \ build $\mathcal{K}_\tau$ ($n_k$ per wing); \\ pivot to $\{\hat\sigma_{k,\tau}\}$, cells $\mathcal{N}$
-		\IF{coverage \eqref{eq:coverage} fails}
-			\STATE clear stale diagnostics;\ \textbf{return} $\varnothing$
-		\ENDIF
-		\STATE $\hat v \leftarrow \clip(\med(\hat\sigma)^2,[10^{-3},0.25])$;\ \ build seeds $\mathcal{S}$ \eqref{eq:seeds}
-		\FOR{$s \in \mathcal{S}$}
-			\STATE $\widehat\Phi_s \leftarrow$ LM-local minimiser of $J_{\mathrm{px}}$ on $\mathcal{B}$ from $s$ \hfill \eqref{eq:localproblem}
-			\STATE compute $J_{\mathrm{iv}}(\widehat\Phi_s)$ \hfill \eqref{eq:obj-iv}
-		\ENDFOR
-		\STATE $\Phi^\star \leftarrow \argmin_{s} J_{\mathrm{iv}}(\widehat\Phi_s)$ \hfill (select \eqref{eq:select})
-		\IF{$J_{\mathrm{iv}}(\Phi^\star) \le \varepsilon_{\mathrm{iv}}$ \AND $\lnot\,\textsc{pegged}(\Phi^\star)$}
-			\STATE write repriced diagnostics;\ \textbf{return} row$(d,S_{\mathrm{ref}},r,g,\Phi^\star,\mathcal{F},J_{\mathrm{iv}},J_{\mathrm{px}},\dots)$
-		\ELSE
-			\STATE clear stale diagnostics;\ \textbf{return} $\varnothing$ \hfill (rejected)
-		\ENDIF
-	\end{algorithmic}
-	\end{algorithm}
 
 	\section{Output and diagnostics}\label{sec:output}
 	An accepted day yields one parameter row keyed by date,
@@ -416,6 +409,7 @@
 	since the structural parameters are spot-independent; this gives an honest comparison against
 	the actual trade price $P_i$.
 
+	\vfill
 	\section{Constants}\label{sec:constants}
 	\begin{table}[H]
 	\centering
@@ -458,6 +452,7 @@
 	\label{tab:bounds}
 	\end{table}
 	
+	\vfill
 	\section{Example option prices}
 	\begin{figure}[H]
 		\begin{center}
@@ -467,5 +462,42 @@
 			\label{Fig:wings}
 		\end{center}
 	\end{figure}
+	\vfill
+	
+	\newpage
+	\section{Empirical findings}
+	\section{Algorithm}\label{sec:algorithm}
+	Algorithm~\ref{alg:perday} states the per-day routine; the driver applies it to every trading
+	day and accumulates accepted rows into a single file (\S\ref{sec:output}).
+	
+	\begin{algorithm}[H]
+		\caption{Per-day Heston calibration}\label{alg:perday}
+		\begin{algorithmic}[1]
+			\REQUIRE day $d$ of OTM trades; rates $r(d),g(d)$; constants of Table~\ref{tab:const}
+			\STATE $\mathcal{D} \leftarrow \{ i : \sigma_i>0,\ \tau_i\ge\tau_{\min}\}$ \hfill (pre-filter \eqref{eq:prefilter})
+			\IF{$r(d)$ or $g(d)$ undefined on/before $d$}
+			\STATE \textbf{return} $\varnothing$ \hfill (no rate)
+			\ENDIF
+			\STATE $S_{\mathrm{ref}} \leftarrow (\sum q_i S_i)/(\sum q_i)$; \\
+			$R \leftarrow \max_i S_i / \min_i S_i - 1$; \\
+			$\textsc{high\_move}\leftarrow \mathbf{1}\{R>R_{\max}\}$
+			\STATE $K^\star_i \leftarrow \Delta\,\round(m_i S_{\mathrm{ref}}/\Delta)$ with $m_i=K_i/S_i$ \hfill (re-strike \eqref{eq:kstar})
+			\STATE $\mathcal{T}\leftarrow$ top-$N_t$ maturities by volume;\ \ build $\mathcal{K}_\tau$ ($n_k$ per wing); \\ pivot to $\{\hat\sigma_{k,\tau}\}$, cells $\mathcal{N}$
+			\IF{coverage \eqref{eq:coverage} fails}
+			\STATE clear stale diagnostics;\ \textbf{return} $\varnothing$
+			\ENDIF
+			\STATE $\hat v \leftarrow \clip(\med(\hat\sigma)^2,[10^{-3},0.25])$;\ \ build seeds $\mathcal{S}$ \eqref{eq:seeds}
+			\FOR{$s \in \mathcal{S}$}
+			\STATE $\widehat\Phi_s \leftarrow$ LM-local minimiser of $J_{\mathrm{px}}$ on $\mathcal{B}$ from $s$ \hfill \eqref{eq:localproblem}
+			\STATE compute $J_{\mathrm{iv}}(\widehat\Phi_s)$ \hfill \eqref{eq:obj-iv}
+			\ENDFOR
+			\STATE $\Phi^\star \leftarrow \argmin_{s} J_{\mathrm{iv}}(\widehat\Phi_s)$ \hfill (select \eqref{eq:select})
+			\IF{$J_{\mathrm{iv}}(\Phi^\star) \le \varepsilon_{\mathrm{iv}}$ \AND $\lnot\,\textsc{pegged}(\Phi^\star)$}
+			\STATE write repriced diagnostics;\ \textbf{return} row$(d,S_{\mathrm{ref}},r,g,\Phi^\star,\mathcal{F},J_{\mathrm{iv}},J_{\mathrm{px}},\dots)$
+			\ELSE
+			\STATE clear stale diagnostics;\ \textbf{return} $\varnothing$ \hfill (rejected)
+			\ENDIF
+		\end{algorithmic}
+	\end{algorithm}
 
 \end{document}

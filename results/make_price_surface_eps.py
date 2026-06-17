@@ -71,9 +71,9 @@ TEX = r"""\documentclass[11pt,a4paper]{article}
 
 \begin{figure}
   \begin{center}
-    \includegraphics[width=6.25cm,keepaspectratio=true]{price_surface_calls.eps}%
     \includegraphics[width=6.25cm,keepaspectratio=true]{price_surface_puts.eps}
-    \caption{Heston OTM option prices: calls wing (left) and puts wing (right).}
+    \includegraphics[width=6.25cm,keepaspectratio=true]{price_surface_calls.eps}
+    \caption{Heston OTM option prices: puts wing (left) and calls wing (right).}
     \label{Fig:wings}
   \end{center}
 \end{figure}

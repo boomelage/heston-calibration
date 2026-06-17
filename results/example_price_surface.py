@@ -26,8 +26,8 @@ CALIBRATIONS_FILE = RESULTS.parent / "data" / "calibrations.csv"
 
 # Grid the surface is sampled on. Moneyness K/S around the money; maturities in calendar days
 # spanning the range the calibration sees (>= MIN_DTM=7) out to a 2y tail.
-MONEYNESS = np.round(np.arange(0.80, 1.205, 0.025), 4)   # 0.80 .. 1.20
-MATURITIES_DAYS = [30, 60, 90, 120, 180, 270, 365, 730]
+MONEYNESS = np.round(np.arange(0.75, 1.25, 0.025), 10)
+MATURITIES_DAYS = np.arange(30,365,10).tolist() # [30, 60, 90, 120, 180, 270, 365]
 
 
 def build_heston_engine(row, calculation_date):

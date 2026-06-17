@@ -8,9 +8,8 @@
 \usepackage{algorithm}
 \usepackage{algorithmic}
 \usepackage{seqsplit}
-\algsetup{
-	linenosize=\tiny
-}
+\usepackage{graphicx}
+\usepackage[font=scriptsize]{caption}
 
 \hypersetup{
 	colorlinks=true, 
@@ -20,6 +19,19 @@
 	pdfborder={0,0,0}
 }
 
+\setcounter{tocdepth}{3}% to get subsubsections in toc
+
+\let\oldtocsection=\tocsection
+
+\let\oldtocsubsection=\tocsubsection
+
+\let\oldtocsubsubsection=\tocsubsubsection
+
+\renewcommand{\tocsection}[2]{\hspace{0em}\oldtocsection{#1}{#2}}
+\renewcommand{\tocsubsection}[2]{\hspace{1em}\oldtocsubsection{#1}{#2}}
+\renewcommand{\tocsubsubsection}[2]{\hspace{2em}\oldtocsubsubsection{#1}{#2}}
+
+
 \newcommand{\Real}{\mathbb{R}}
 \newcommand{\Cplx}{\mathbb{C}}
 \newcommand{\given}{\,\vert\,}
@@ -27,6 +39,8 @@
 \DeclareMathOperator{\round}{round}
 \DeclareMathOperator{\med}{median}
 \DeclareMathOperator{\clip}{clip}
+
+
 
 \author{}
 \title{A stochastic volatility model parameter calibration routine}
@@ -88,7 +102,7 @@
 		F(S,\tau) = S\, e^{(r-g)\tau}, \qquad D(\tau) = e^{-r\tau}.
 	\end{equation}
 
-	\paragraph{Black price.} With total standard deviation $\Sigma=\sigma\sqrt{\tau}$,
+	\textbf{Black price.} With total standard deviation $\Sigma=\sigma\sqrt{\tau}$,
 	\begin{equation}\label{eq:black}
 		\begin{gathered}
 		C_{\mathrm{B}}(\sigma; S, K, \tau, w) = w\, D(\tau)\Bigl[ F\,\mathcal{N}(w d_+) - K\,\mathcal{N}(w d_-) \Bigr], \\
@@ -97,7 +111,7 @@
 	\end{equation}
 	where $\mathcal{N}$ is the standard normal CDF and $F=F(S,\tau)$.
 
-	\paragraph{Heston price.} The Heston model price $C_{\mathrm{H}}(\Phi; S,K,\tau,w)$ is
+	\textbf{Heston price.} The Heston model price $C_{\mathrm{H}}(\Phi; S,K,\tau,w)$ is
 	the semi-analytic value
 	\begin{equation}\label{eq:heston-price}
 	\begin{gathered}
@@ -127,7 +141,7 @@
 	branch-stable formulation of \eqref{eq:heston-prob}); equations
 	\eqref{eq:heston-price}--\eqref{eq:heston-prob} define the operator it realises.
 
-	\paragraph{Implied volatility.} The Black-implied volatility of a price $C$ is the inverse
+	\textbf{Implied volatility.} The Black-implied volatility of a price $C$ is the inverse
 	of \eqref{eq:black} in its first argument,
 	\begin{equation}\label{eq:ivinv}
 		\mathcal{I}(C; S,K,\tau,w)
@@ -153,7 +167,7 @@
 	dividend rates on or before $d$ (a flat-forward curve for each; under flat curves the
 	evaluation date is immaterial to $T_i$, so it is set to the QuantLib ``today'').
 
-	\paragraph{Pre-filter.} We keep only economically usable, Heston-appropriate quotes:
+	\textbf{Pre-filter.} We keep only economically usable, Heston-appropriate quotes:
 	\begin{equation}\label{eq:prefilter}
 		\mathcal{D}
 		= \bigl\{\, i \;:\; \sigma_i > 0 \ \text{ and }\ \tau_i \ge \tau_{\min} \,\bigr\}.
@@ -167,7 +181,7 @@
 	$\mathcal{D}$ occur across an intraday range of underlying levels $\{S_i\}$. We reconcile
 	the two with one reference spot and a moneyness re-striking.
 
-	\paragraph{Reference spot.} Define the volume-weighted reference spot
+	\textbf{Reference spot.} Define the volume-weighted reference spot
 	\begin{equation}\label{eq:sref}
 		S_{\mathrm{ref}} \;=\; \frac{\sum_{i\in\mathcal{D}} q_i\, S_i}{\sum_{i\in\mathcal{D}} q_i}.
 	\end{equation}
@@ -180,7 +194,7 @@
 	A flagged day ($R>R_{\max}$) is still calibrated and written, but the normalisation below
 	is recorded as strained (its $S_{\mathrm{ref}}$ should be treated with suspicion).
 
-	\paragraph{Moneyness normalisation and grid snap.} Each trade retains its moneyness at
+	\textbf{Moneyness normalisation and grid snap.} Each trade retains its moneyness at
 	trade time and is re-struck to the reference spot, then snapped to the SPX strike grid of
 	width $\Delta$:
 	\begin{equation}\label{eq:kstar}
@@ -200,14 +214,14 @@
 	From the normalised trades we build a partial $K^\star \times \tau$ implied-volatility
 	surface, selecting the most liquid, nearest-the-money quotes.
 
-	\paragraph{Maturity selection.} For each distinct maturity $\tau$ present in $\mathcal{D}$,
+	\textbf{Maturity selection.} For each distinct maturity $\tau$ present in $\mathcal{D}$,
 	let $V(\tau)=\sum_{i\in\mathcal{D}:\,\tau_i=\tau} q_i$ be its traded volume. Keep the
 	$N_t$ highest-volume maturities,
 	\begin{equation}
 		\mathcal{T} = \text{top-}N_t \text{ maturities by } V(\tau).
 	\end{equation}
 
-	\paragraph{Strike selection (per maturity, per wing).} Within each kept maturity
+	\textbf{Strike selection (per maturity, per wing).} Within each kept maturity
 	$\tau\in\mathcal{T}$, separate calls ($w_i=+1$, OTM with $K^\star_i \gtrsim S_{\mathrm{ref}}$)
 	from puts ($w_i=-1$, OTM with $K^\star_i \lesssim S_{\mathrm{ref}}$) and keep the $n_k$
 	nearest-the-money distinct strikes on each wing:
@@ -218,7 +232,7 @@
 		\underbrace{\bigl\{\text{$n_k$ smallest } K^\star \text{ among calls at } \tau\bigr\}}_{\text{call wing}} .
 	\end{equation}
 
-	\paragraph{Pivot to a surface.} For each retained cell $(k,\tau)$ with $k\in\mathcal{K}_\tau$,
+	\textbf{Pivot to a surface.} For each retained cell $(k,\tau)$ with $k\in\mathcal{K}_\tau$,
 	set the surface entry to the implied volatility of the \emph{latest} trade in that cell,
 	\begin{equation}\label{eq:pivot}
 		\hat\sigma_{k,\tau} \;=\; \sigma_{i^\star}, \qquad
@@ -231,7 +245,7 @@
 	\end{equation}
 	be the set of populated cells; these become the calibration targets (helpers).
 
-	\paragraph{Coverage requirement.} To keep the five-parameter fit identified we require a
+	\textbf{Coverage requirement.} To keep the five-parameter fit identified we require a
 	genuinely two-dimensional surface:
 	\begin{equation}\label{eq:coverage}
 		\bigl|\{\tau : (\cdot,\tau)\in\mathcal{N}\}\bigr| \ge M_t,
@@ -256,7 +270,7 @@
 	Two residual systems are used: a price-space system that the local optimizer minimises,
 	and an IV-space system that selects among restarts and gates acceptance.
 
-	\paragraph{Price-space (in-engine objective).} For each target the market value is the
+	\textbf{Price-space (in-engine objective).} For each target the market value is the
 	Black price at the quoted vol, $C^{\mathrm{mkt}}_n = C_{\mathrm{B}}(\hat\sigma_n; S_{\mathrm{ref}}, K^\star_n, T_n, w_n)$,
 	and the relative-price residual is
 	\begin{equation}\label{eq:resid-price}
@@ -271,13 +285,12 @@
 	This is the only error type QuantLib's helpers expose, and is what
 	Levenberg--Marquardt drives to a local minimum.
 
-	\paragraph{IV-space (selection and gate).} Invert each Heston price back to a Black vol via
+	\textbf{IV-space (selection and gate).} Invert each Heston price back to a Black vol via
 	\eqref{eq:ivinv} and compare to the market vol:
 	\begin{equation}\label{eq:resid-iv}
 	\begin{gathered}
 		\sigma^{\mathrm{mod}}_n(\Phi) = \mathcal{I}\!\bigl( C_{\mathrm{H}}(\Phi; S_{\mathrm{ref}}, K^\star_n, T_n, w_n);
-		    S_{\mathrm{ref}}, K^\star_n, T_n, w_n \bigr),
-		\\
+		    S_{\mathrm{ref}}, K^\star_n, T_n, w_n \bigr), \\
 		\varepsilon^{\mathrm{iv}}_n(\Phi) = \sigma^{\mathrm{mod}}_n(\Phi) - \hat\sigma_n,
 	\end{gathered}
 	\end{equation}
@@ -295,7 +308,7 @@
 	A single start into a non-convex problem is fragile, so we restart from a small,
 	data-seeded set. Let the surface variance level be
 	\begin{equation}\label{eq:varproxy}
-		\hat v = \clip\!\Bigl( \bigl(\med_{(k,\tau)\in\mathcal{N}} \hat\sigma_{k,\tau}\bigr)^2,\ [10^{-3},\ 0.25] \Bigr),
+		\hat v = \clip\Bigl(\bigl(\med_{(k,\tau)\in\mathcal{N}} \hat\sigma_{k,\tau}\bigr)^2,\ [10^{-3},\ 0.25] \Bigr),
 	\end{equation}
 	and define the seed set $\mathcal{S}=\{s_1,\dots,s_6\}\subset\mathcal{B}$ of
 	$(v_0,\kappa,\theta,\eta,\rho)$ tuples
@@ -347,7 +360,7 @@
 	violate it while remaining otherwise sound. A rejected or too-thin day yields no parameter
 	row.
 
-	\paragraph{Why an IV-space gate.} An earlier version gated on $J_{\mathrm{px}}$ directly. On a
+	\textbf{Why an IV-space gate.} An earlier version gated on $J_{\mathrm{px}}$ directly. On a
 	pooled day rich in deep-OTM wings, $J_{\mathrm{px}}$ is dominated by those cheap contracts and
 	rejects fits that are excellent in vol points. Replacing the gate metric with
 	$J_{\mathrm{iv}}$ aligns the acceptance criterion with the units the surface is quoted in;
@@ -355,12 +368,12 @@
 	rejections are boundary-pegged $\kappa$ or $\rho$ (a separate identification lever), not
 	fit-quality failures.
 	
+	\newpage
 	\section{Algorithm}\label{sec:algorithm}
 	Algorithm~\ref{alg:perday} states the per-day routine; the driver applies it to every trading
 	day and accumulates accepted rows into a single file (\S\ref{sec:output}).
 	
 	\begin{algorithm}[H]
-	\tiny
 	\caption{Per-day Heston calibration}\label{alg:perday}
 	\begin{algorithmic}[1]
 		\REQUIRE day $d$ of OTM trades; rates $r(d),g(d)$; constants of Table~\ref{tab:const}
@@ -368,11 +381,11 @@
 		\IF{$r(d)$ or $g(d)$ undefined on/before $d$}
 			\STATE \textbf{return} $\varnothing$ \hfill (no rate)
 		\ENDIF
-		\STATE $S_{\mathrm{ref}} \leftarrow (\sum q_i S_i)/(\sum q_i)$; \qquad
-		       $R \leftarrow \max_i S_i / \min_i S_i - 1$; \qquad
+		\STATE $S_{\mathrm{ref}} \leftarrow (\sum q_i S_i)/(\sum q_i)$; \\
+		       $R \leftarrow \max_i S_i / \min_i S_i - 1$; \\
 		       $\textsc{high\_move}\leftarrow \mathbf{1}\{R>R_{\max}\}$
 		\STATE $K^\star_i \leftarrow \Delta\,\round(m_i S_{\mathrm{ref}}/\Delta)$ with $m_i=K_i/S_i$ \hfill (re-strike \eqref{eq:kstar})
-		\STATE $\mathcal{T}\leftarrow$ top-$N_t$ maturities by volume;\ \ build $\mathcal{K}_\tau$ ($n_k$ per wing);\ \ pivot to $\{\hat\sigma_{k,\tau}\}$, cells $\mathcal{N}$
+		\STATE $\mathcal{T}\leftarrow$ top-$N_t$ maturities by volume;\ \ build $\mathcal{K}_\tau$ ($n_k$ per wing); \\ pivot to $\{\hat\sigma_{k,\tau}\}$, cells $\mathcal{N}$
 		\IF{coverage \eqref{eq:coverage} fails}
 			\STATE clear stale diagnostics;\ \textbf{return} $\varnothing$
 		\ENDIF
@@ -406,6 +419,7 @@
 	\section{Constants}\label{sec:constants}
 	\begin{table}[H]
 	\centering
+	\small
 	\begin{tabular}{llll}
 		\toprule
 		Symbol & Code name & Value & Role \\
@@ -422,11 +436,13 @@
 		$\delta$             & \texttt{BOUND\_TOL}      & $10^{-3}$    & boundary-pegging tolerance fraction \\
 		\bottomrule
 	\end{tabular}
+	\vspace*{-0.8em}
 	\caption{Surface, selection, and gate constants.}\label{tab:const}
 	\end{table}
-
+	\vspace{-0.8em}
 	\begin{table}[h]
 	\centering
+	\small
 	\begin{tabular}{lccccc}
 		\toprule
 		& $\theta$ & $\kappa$ & $\eta$ & $\rho$ & $v_0$ \\
@@ -435,11 +451,21 @@
 		upper $h$    & $1.0$     & $20.0$    & $2.0$     & $\phantom{-}0.5$ & $1.0$ \\
 		\bottomrule
 	\end{tabular}
-	\vspace{1em}
+	\vspace*{-1em}
 	\caption{Box bounds $\mathcal{B}$, in the \texttt{model.params()} order
 	$(\theta,\kappa,\eta,\rho,v_0)$. The $\rho$ upper bound is kept slightly positive (equity
 	leverage implies $\rho<0$) and $\eta$ is capped at $2.0$ (SPX vol-of-vol $\sim 0.3$--$1.2$).}
 	\label{tab:bounds}
 	\end{table}
+	
+	\section{Example option prices}
+	\begin{figure}[H]
+		\begin{center}
+			\includegraphics[width=6.25cm,keepaspectratio=true]{results/price_surface_puts.eps}
+			\includegraphics[width=6.25cm,keepaspectratio=true]{results/price_surface_calls.eps}
+			\caption{Heston OTM option prices: puts wing (left) and calls wing (right).}
+			\label{Fig:wings}
+		\end{center}
+	\end{figure}
 
 \end{document}

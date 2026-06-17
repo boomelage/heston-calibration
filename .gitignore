@@ -1,4 +1,6 @@
 results/example-surface-rendering
+results/*.pdf
+results/*.tex
 
 .DS_Store
 

@@ -1,3 +1,7 @@
+results/example-surface-rendering
+results/*.pdf
+results/*.tex
+
 .DS_Store
 
 # ----- Large per-day option data: keep folders, ignore contents (see README.md / CLAUDE.md) -----

@@ -43,15 +43,6 @@ pd.options.display.float_format = '{:.5f}'.format
 
 SRC = Path(__file__).parent.resolve()
 DATA = SRC.parent / "data"
-# One calibration per trading day -> one row per day, so the parameters live in a single
-# accumulating file, not a file-per-day directory. The bulky per-day repricing diagnostics stay
-# under their own directory (one file per day) since they are large, not "parameters".
-CALIBRATIONS_FILE = DATA / "calibrations.csv"
-# The complement of calibrations.csv: one row per attempted-but-rejected day, recording why it was
-# dropped. Lets us quantify the pegged-vs-thin-vs-IV rejection split that calibrations.csv (accepted
-# only, by gate construction) cannot show.
-REJECTIONS_FILE = DATA / "rejections.csv"
-TESTS = SRC.parent / "data" / "options" / "calibration_tests"
 
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
@@ -79,10 +70,21 @@ MIN_MATS = 3         # require a genuinely multi-maturity surface (identificatio
 MIN_STRIKES = 5      # require a real strike range
 MIN_CELLS = 12       # non-NaN surface cells required (target >= MIN_MATS x MIN_STRIKES)
 MAX_MOVE_PCT = 0.03  # intraday spot range above this flags the day (sticky-moneyness strained)
-OBJECTIVE = "price"  # in-engine LM objective: "price" (relative-price, default) or "vol" (IV-space).
+OBJECTIVE = "vol"  # in-engine LM objective: "price" (relative-price, default) or "vol" (IV-space).
                      # Only changes what each restart minimises; selection/gate always use IV-RMSE.
-
-
+if OBJECTIVE == "price":
+    CALIBRATIONS_FILE = DATA / "calibrations.csv"
+    REJECTIONS_FILE = DATA / "rejections.csv"
+    TESTS = SRC.parent / "data" / "options" / "calibration_tests"
+    if not TESTS.exists():
+        os.mkdir(TESTS)
+elif OBJECTIVE == "vol":
+    CALIBRATIONS_FILE = DATA / "vol_calibrations.csv"
+    REJECTIONS_FILE = DATA / "vol_rejections.csv"
+    TESTS = SRC.parent / "data" / "options" / "vol_calibration_tests"
+    if not TESTS.exists():
+        os.mkdir(TESTS)
+    
 def _skip_day(test_path, reason, detail, iv_rmse=np.nan,
               n_maturities=np.nan, n_strikes=np.nan, n_cells=np.nan):
     """Drop a day: clear any stale tests file and return a rejection row (one per rejected day).

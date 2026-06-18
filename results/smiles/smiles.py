@@ -26,6 +26,9 @@ from example_surface import make_surface # type: ignore --> Intentional Pylance 
 FIGURES = SMILES / "figures"
 FIGURES.mkdir(parents=True,exist_ok=True)
 
+# Knob for the per-row maturity key: True draws a legend, False (default) draws a colorbar.
+USE_LEGEND = True
+
 
 def _normalize_dates(dates):
     """Accept a single %Y-%m-%d date string or a list of them; return a list of strings.
@@ -35,7 +38,7 @@ def _normalize_dates(dates):
     return list(dates)
 
 
-def main(dates, OUT=None):
+def main(dates, OUT=None, use_legend=USE_LEGEND):
     dates = _normalize_dates(dates)
 
     # One pass per day: pull its surface + calibration, keep what the plot and the TeX need.
@@ -60,20 +63,27 @@ def main(dates, OUT=None):
         subfigs = [subfigs]
     rows = []
     for sf, day in zip(subfigs, days):
-        T = day['T']
+        T = sorted(day['T'])
         norm = mcolors.Normalize(vmin=min(T), vmax=max(T))
         ax_call, ax_put  = sf.subplots(1, 2, sharey=True)
         for t in T:
             df = day['surface'][day['surface']['maturity_days'] == t]
             dfc = df[df['w'] == 'call'].sort_values(by='strike')
-            ax_call.plot(dfc['strike'], dfc['price'], color=cmap(norm(t)))
+            ax_call.plot(dfc['strike'], dfc['price'], color=cmap(norm(t)), label=str(t))
             dfp = df[df['w'] == 'put'].sort_values(by='strike')
             ax_put.plot(dfp['strike'], dfp['price'], color=cmap(norm(t)))
-        ax_call.set_ylabel('Price')
+        ax_call.set_ylabel(r'Price ($C_{\mathrm{H}}(\Phi; S,K,\tau,w)$)')
         sf.suptitle(_row_caption(day), fontsize=8)
-        lbl = sf.supxlabel('Strike')
-        sm = cm.ScalarMappable(cmap=cmap, norm=norm)
-        sf.colorbar(sm, ax=(ax_call, ax_put), label='Days to maturity')
+        lbl = sf.supxlabel('Strike ($K$)')
+        # Maturity key on the right of the row: legend or colorbar. Both reserve right-side space,
+        # so the 'Strike' re-centring below works either way.
+        if use_legend:
+            handles, labels = ax_call.get_legend_handles_labels()
+            sf.legend(handles, labels, loc='outside center right',
+                      title='Days to maturity', fontsize=7, title_fontsize=8)
+        else:
+            sm = cm.ScalarMappable(cmap=cmap, norm=norm)
+            sf.colorbar(sm, ax=(ax_call, ax_put), label='Days to maturity')
         rows.append((ax_call, ax_put, lbl))
 
     # `supxlabel` centers on the whole subfigure, but the colorbar steals right-side space, so the

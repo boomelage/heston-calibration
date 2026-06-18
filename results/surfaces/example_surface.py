@@ -34,7 +34,9 @@ CALIBRATIONS_FILE = SURFACES.parent / "calibrations" / OBJECTIVE / "calibrations
 # Grid the surface is sampled on. Moneyness K/S around the money; maturities in calendar days
 # spanning the range the calibration actually sees (>= MIN_DTM=7 up to ~1y).
 MONEYNESS = np.round(np.arange(0.75, 1.205, 0.025), 4)   # 0.80 .. 1.20
-MATURITIES_DAYS = [30, 60, 90, 180, 360, 720]#np.arange(30, 750, 30).tolist()
+MATURITIES_DAYS = [
+    30, 60, 90, 180, 360, 720, 900
+]
 
 from utils import implied_vol, build_heston_engine, heston_price
 

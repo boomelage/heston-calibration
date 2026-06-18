@@ -24,7 +24,7 @@ from mpl_toolkits.mplot3d import Axes3D  # registers the '3d' projection; also t
 from pathlib import Path
 
 RESULTS = Path(__file__).parent.resolve()
-SURFACE_CSV = RESULTS / "example_price_surface.csv"
+SURFACE_CSV = RESULTS / "data" / "example_surface.csv"
 
 # Match the default LaTeX font (Computer Modern serif) so the axis text blends with the surrounding
 # document. Uses matplotlib's bundled Computer Modern (cmr10) -- no LaTeX/usetex toolchain required.
@@ -63,50 +63,20 @@ def plot_surface(grid, out_path, title=None):
     print(f"wrote {out_path.name}")
 
 
-TEX = r"""\documentclass[11pt,a4paper]{article}
-
-\usepackage{graphicx}
-
-\begin{document}
-
-\begin{figure}
-  \begin{center}
-    \includegraphics[width=6.25cm,keepaspectratio=true]{price_surface_puts.eps}
-    \includegraphics[width=6.25cm,keepaspectratio=true]{price_surface_calls.eps}
-    \caption{Heston OTM option prices: puts wing (left) and calls wing (right).}
-    \label{Fig:wings}
-  \end{center}
-\end{figure}
-
-\begin{figure}
-  \begin{center}
-    \includegraphics[width=8.0cm,keepaspectratio=true]{price_surface_both.eps}
-    \caption{Heston OTM option-price surface across strike and maturity.}
-    \label{Fig:both}
-  \end{center}
-\end{figure}
-
-\end{document}
-"""
-
-
 def main():
     if not SURFACE_CSV.exists():
-        sys.exit(f"{SURFACE_CSV} not found -- run `python results/example_price_surface.py` first.")
+        sys.exit(f"{SURFACE_CSV} not found -- run `python results/example_surface.py` first.")
     surface = pd.read_csv(SURFACE_CSV)
 
     def grid_for(side):
         df = surface if side is None else surface[surface['w'] == side]
         return df.pivot(index='strike', columns='maturity_days', values='price')
 
-    plot_surface(grid_for('call'), RESULTS / "price_surface_calls.eps")
-    plot_surface(grid_for('put'), RESULTS / "price_surface_puts.eps")
-    plot_surface(grid_for(None), RESULTS / "price_surface_both.eps")
-
+    plot_surface(grid_for('call'), RESULTS / "plots" / "price_surface_calls.eps")
+    plot_surface(grid_for('put'), RESULTS / "plots" / "price_surface_puts.eps")
+    
     tex_path = RESULTS / "price_surface.tex"
-    tex_path.write_text(TEX)
-    print(f"wrote {tex_path.name}")
 
-
+    
 if __name__ == "__main__":
     main()

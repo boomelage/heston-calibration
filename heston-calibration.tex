@@ -81,9 +81,8 @@
 \DeclareMathOperator{\clip}{clip}
 
 
-
 \author{}
-\title{A stochastic volatility model parameter calibration routine}
+\title{An automated stochastic volatility model parameter calibration routine}
 
 \begin{document}
 	\pagenumbering{gobble}
@@ -503,7 +502,7 @@
 	carry $\rho$ below $-0.99$ and none reach the $\kappa$ ceiling. A clean interior set is
 	what survives the gate, not evidence that pegging is solved on the underlying population.
 	\\ \\
-	\textbf{The Feller condition is the standout caveat.} The gate does not test Feller, and
+	\textbf{Feller condition remains a standout caveat.} The gate does not test Feller, and
 	short-tenor SPX fits violate it routinely: $\mathcal{F}(\Phi^\star)=2\kappa\theta-\eta^2<0$
 	on $1{,}729$ of $1{,}742$ accepted days ($99.3\%$), with median $\mathcal{F}=-0.53$. The
 	driver of the violation is a large vol-of-vol relative to $\kappa\theta$; $\eta$ exceeds

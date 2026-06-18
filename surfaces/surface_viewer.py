@@ -13,17 +13,17 @@ import pandas as pd
 import plotly.graph_objects as go
 from pathlib import Path
 
-RESULTS = Path(__file__).parent.resolve()
-SURFACE_TYPE = "vol"
+SURFACES = Path(__file__).parent.resolve()
+SURFACE_CSV = SURFACES / "data" / "example_surface.csv"
+
+SURFACE_TYPE = "price"
 if SURFACE_TYPE == "vol":
-    SURFACE_CSV = RESULTS / "data" / "example_surface.csv"
-    HTML_OUT = RESULTS / "plots" / "example_surface.html"
+    HTML_OUT = SURFACES / "plots" / "example_surface.html"
     ZNAME = "implied vol (%)"
     KEY = "implied_vol"
 
 if SURFACE_TYPE == "price":
-    SURFACE_CSV = RESULTS / "data" / "example_price_surface.csv"
-    HTML_OUT = RESULTS / "plots" / "example_price_surface.html"
+    HTML_OUT = SURFACES / "plots" / "example_price_surface.html"
     ZNAME = "Heston price"
     KEY = "price"
 

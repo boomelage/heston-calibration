@@ -1,4 +1,3 @@
-results/example-surface-rendering
 results/*.pdf
 results/*.tex
 
@@ -14,6 +13,8 @@ data/options/otm/*
 # per-day repricing diagnostics: one file per trading day, grows with years of data
 data/options/calibration_tests/*
 !data/options/calibration_tests/.gitkeep
+data/options/vol_calibration_tests/*
+!data/options/vol_calibration_tests/.gitkeep
 
 # ----- Python exlcusions -----
 

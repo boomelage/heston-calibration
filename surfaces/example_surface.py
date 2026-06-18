@@ -24,47 +24,16 @@ import pandas as pd
 import QuantLib as ql
 from pathlib import Path
 
-RESULTS = Path(__file__).parent.resolve()
-CALIBRATIONS_FILE = RESULTS.parent / "data" / "calibrations.csv"
+SURFACES = Path(__file__).parent.resolve()
+
+CALIBRATIONS_FILE = SURFACES.parent / "data" / "calibrations.csv"
 
 # Grid the surface is sampled on. Moneyness K/S around the money; maturities in calendar days
 # spanning the range the calibration actually sees (>= MIN_DTM=7 up to ~1y).
 MONEYNESS = np.round(np.arange(0.75, 1.205, 0.01), 4)   # 0.80 .. 1.20
 MATURITIES_DAYS = np.arange(30, 365, 5).tolist()
 
-
-def build_heston_engine(row, calculation_date):
-    """Rebuild the Heston model from one calibrations.csv row; return its pricing engine plus the
-    spot handle and term structures (reused to build the Black process the inversion runs against)."""
-    ql.Settings.instance().evaluationDate = calculation_date
-    day_count = ql.Actual365Fixed()
-    r_ts = ql.YieldTermStructureHandle(
-        ql.FlatForward(calculation_date, float(row['risk_free_rate']), day_count))
-    g_ts = ql.YieldTermStructureHandle(
-        ql.FlatForward(calculation_date, float(row['dividend_rate']), day_count))
-    s_handle = ql.QuoteHandle(ql.SimpleQuote(float(row['spot_price'])))
-    # HestonProcess constructor order: (r, g, S0, v0, kappa, theta, sigma=eta, rho)
-    process = ql.HestonProcess(
-        r_ts, g_ts, s_handle,
-        float(row['v0']), float(row['kappa']), float(row['theta']),
-        float(row['eta']), float(row['rho']),
-    )
-    engine = ql.AnalyticHestonEngine(ql.HestonModel(process))
-    return engine, s_handle, r_ts, g_ts, day_count
-
-
-def implied_vol(strike, maturity_date, spot, heston_engine, bsm_process):
-    """Price the OTM European option under Heston, invert to a Black vol. NaN if it can't converge."""
-    payoff_type = ql.Option.Call if strike >= spot else ql.Option.Put
-    option = ql.EuropeanOption(ql.PlainVanillaPayoff(payoff_type, strike),
-                               ql.EuropeanExercise(maturity_date))
-    option.setPricingEngine(heston_engine)
-    price = option.NPV()
-    try:
-        return option.impliedVolatility(price, bsm_process, 1e-6, 500, 1e-4, 5.0)
-    except RuntimeError:
-        return np.nan
-
+from utils import implied_vol, build_heston_engine, heston_price
 
 def main():
     calibrations = pd.read_csv(CALIBRATIONS_FILE)
@@ -94,26 +63,34 @@ def main():
         for m in MONEYNESS:
             strike = m * spot
             iv = implied_vol(strike, maturity_date, spot, heston_engine, bsm_process)
+            w, price = heston_price(strike, maturity_date, spot, heston_engine)
             records.append({
                 'strike': round(strike, 4),
                 'maturity_days': days,
                 'moneyness': m,
+                'w': w,
                 'implied_vol': iv,
+                'price': price
             })
 
     surface = pd.DataFrame(records)
-    long_path = RESULTS / "example_surface.csv"
+    long_path = SURFACES / "data" /"example_surface.csv"    
     surface.to_csv(long_path, index=False)
+    
+    price_grid_path = SURFACES / "data" / "example_price_surface_grid.csv"
+    price_grid = surface.pivot(index='strike', columns='maturity_days', values='price')
+    price_grid.to_csv(price_grid_path)
 
-    grid = surface.pivot(index='strike', columns='maturity_days', values='implied_vol')
-    grid_path = RESULTS / "example_surface_grid.csv"
-    grid.to_csv(grid_path)
+    vol_grid_path = SURFACES / "data" / "example_surface_grid.csv"
+    vol_grid = surface.pivot(index='strike', columns='maturity_days', values='implied_vol')
+    vol_grid.to_csv(vol_grid_path)
 
     with pd.option_context('display.float_format', '{:.4f}'.format,
                            'display.max_columns', None, 'display.width', 200):
-        print(grid)
-    print(f"\nwrote {len(surface)} grid points -> {long_path}")
-    print(f"wrote strike x maturity pivot     -> {grid_path}")
+        print(vol_grid, '\n', price_grid)
+    print(f"\nwrote {len(surface)} grid points                -> {long_path}")
+    print(f"wrote strike x maturity price pivot   -> {price_grid_path}")
+    print(f"wrote strike x maturity vol pivot     -> {vol_grid_path}")
 
 
 if __name__ == "__main__":

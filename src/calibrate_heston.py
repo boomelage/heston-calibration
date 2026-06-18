@@ -7,6 +7,9 @@ strike x maturity implied-vol surface and returns a dict. Hardening over the pro
     (no rho -> +/-1, no exploding eta). Bounds are in `model.params()` order [theta, kappa, eta, rho, v0].
   - **Multiple restarts** from a small data-seeded grid; the lowest-**IV-RMSE** fit wins (removes the
     dependence on one arbitrary initial guess).
+  - **Switchable in-engine objective** via `objective` ("price" relative-price, default, or "vol"
+    IV-space). It only changes what LM minimises per restart; selection and the gate always rank/accept
+    on IV-RMSE, so the objective is independent of how a day is chosen and accepted.
   - **Acceptance gate (IV-space).** A fit is rejected (params returned as None) if its
     implied-vol RMSE -- model-implied vol vs market vol, in vol points -- exceeds `IV_RMSE_ACCEPT`,
     or any parameter is pinned to a bound. A boundary fit is a non-fit.
@@ -42,6 +45,19 @@ BOUND_TOL = 1e-3        # fraction of a bound's span within which a param counts
 
 # IV inversion controls for BlackCalibrationHelper.impliedVolatility(price, accuracy, maxEval, lo, hi).
 _IV_ACC, _IV_MAXEVAL, _IV_LO, _IV_HI = 1e-6, 500, 1e-4, 5.0
+
+# In-engine objective the local optimizer (LM) minimises. This is independent of the selection and
+# acceptance gate, which always run off the IV-space RMSE (`_iv_rmse`): switching the objective only
+# changes what each restart converges to, not how restarts are ranked or accepted.
+#   "price" -> RelativePriceError: cheap (one Heston price per residual), the long-standing default.
+#   "vol"   -> ImpliedVolError: inverts each model price to a Black vol every LM iteration, so it is
+#              more expensive and can throw mid-search (caught per-restart), but weights cells evenly
+#              in vol points -- the units the surface and the gate are quoted in.
+_ERR = {
+    "price": ql.HestonModelHelper.RelativePriceError,
+    "vol": ql.HestonModelHelper.ImpliedVolError,
+}
+DEFAULT_OBJECTIVE = "price"
 
 _FAIL = {k: None for k in ("theta", "kappa", "eta", "rho", "v0", "feller", "rmse", "iv_rmse")}
 
@@ -86,7 +102,7 @@ def _iv_rmse(helpers, mkt_vols):
     return float(np.sqrt(np.mean(resid ** 2))) if resid.size else np.nan
 
 
-def _calibrate_once(start, surface, s, r_ts, g_ts, S_handle, constraint):
+def _calibrate_once(start, surface, s, r_ts, g_ts, S_handle, constraint, error_type):
     """One bounded calibration from `start`. Returns (params_list, iv_rmse, price_rmse, n_helpers)."""
     v0, kappa, theta, eta, rho = start
     process = ql.HestonProcess(r_ts, g_ts, S_handle, v0, kappa, theta, eta, rho)
@@ -103,7 +119,7 @@ def _calibrate_once(start, surface, s, r_ts, g_ts, S_handle, constraint):
                     ql.UnitedStates(ql.UnitedStates.NYSE),
                     float(s), float(k),
                     ql.QuoteHandle(ql.SimpleQuote(float(vol))),
-                    r_ts, g_ts,
+                    r_ts, g_ts, error_type,
                 )
                 helper.setPricingEngine(engine)
                 helpers.append(helper)
@@ -112,13 +128,17 @@ def _calibrate_once(start, surface, s, r_ts, g_ts, S_handle, constraint):
     lm = ql.LevenbergMarquardt(1e-8, 1e-8, 1e-8)
     model.calibrate(helpers, lm, ql.EndCriteria(1000, 100, 1e-8, 1e-8, 1e-8), constraint)
 
-    errs = np.array([h.calibrationError() for h in helpers])
+    # Relative-price RMSE computed directly from model/market values, so `rmse` keeps the same
+    # meaning regardless of `error_type` (h.calibrationError() would otherwise follow the objective).
+    errs = np.array([(h.modelValue() - h.marketValue()) / h.marketValue()
+                     for h in helpers if h.marketValue() != 0.0])
     price_rmse = float(np.sqrt(np.mean(errs ** 2))) if errs.size else np.nan
     iv_rmse = _iv_rmse(helpers, mkt_vols)
     return list(model.params()), iv_rmse, price_rmse, len(helpers)
 
 
-def calibrate_heston(vol_matrix, s, r, g) -> dict:
+def calibrate_heston(vol_matrix, s, r, g, objective=DEFAULT_OBJECTIVE) -> dict:
+    error_type = _ERR[objective]
     calculation_date = ql.Date.todaysDate()
     ql.Settings.instance().evaluationDate = calculation_date
     day_count = ql.Actual365Fixed()
@@ -131,7 +151,7 @@ def calibrate_heston(vol_matrix, s, r, g) -> dict:
     for start in _seed_grid(vol_matrix):
         try:
             params, iv_rmse, price_rmse, n_helpers = _calibrate_once(
-                start, vol_matrix, s, r_ts, g_ts, S_handle, constraint)
+                start, vol_matrix, s, r_ts, g_ts, S_handle, constraint, error_type)
         except RuntimeError:
             continue
         if not np.isfinite(iv_rmse):

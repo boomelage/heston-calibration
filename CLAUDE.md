@@ -72,8 +72,9 @@ artefacts are tracked (`data/calibrations.csv`, `data/rejections.csv`, `data/opt
 `data/market/`).
 
 There is no single-test command because there are no tests. To exercise just the engine, import
-`calibrate_heston(vol_matrix, s, r, g)` from `src/calibrate_heston.py` with a strike×maturity IV
-DataFrame.
+`calibrate_heston(vol_matrix, s, r, g, objective="price")` from `src/calibrate_heston.py` with a
+strike×maturity IV DataFrame. `objective` selects the in-engine LM objective ("price" relative-price,
+default, or "vol" IV-space); the orchestrator passes its `OBJECTIVE` constant through.
 
 ## Pipeline architecture
 
@@ -142,10 +143,15 @@ pooled, moneyness-normalised surface — not the old per-0.5-spot-bucket fits:
    returned exactly when a tests file is written, `calibrations.csv` and the per-day tests files always
    describe the same accepted set (no desync).
 
-The per-day **tests** path is derived by `filepath.replace('otm', 'calibration_tests')`, which
-rewrites **both** the `otm` directory segment and the `otm` token in the filename in one call —
-fragile but intentional. (The calibrations file is the fixed `data/calibrations.csv`, not derived
-from the input path.)
+The per-day **tests** path is built from `_objective_paths(OBJECTIVE)`: the tests directory
+(`calibration_tests` for `price`, `vol_calibration_tests` for `vol`) plus a basename of
+`cboe_spx_calibration_tests_<date>.csv` (`price`) or `cboe_spx_vol_calibration_tests_<date>.csv`
+(`vol`), where `<date>` is sliced out of the OTM filename. Both the directory and the `vol_` basename
+prefix depend on `OBJECTIVE`, and `validate_calibrations.py` rebuilds the identical name from its own
+`OBJECTIVE` so the two stay in lock-step. (The calibrations/rejections files are likewise objective-dependent: `data/calibrations.csv`
++ `data/rejections.csv` for `price`, `data/vol_calibrations.csv` + `data/vol_rejections.csv` for `vol`,
+both from `_objective_paths` and not derived from the input path.) The objective is selected by the
+`--OBJECTIVE {price,vol}` CLI flag (default `price`) and threaded through to `calibrate_heston`.
 
 **Stage 4 — calibration engine (`src/calibrate_heston.py`).** Pure function
 `calibrate_heston(vol_matrix, s, r, g) -> dict`, **hardened** (PLAN Work items 2 & 3). Builds a QuantLib
@@ -156,7 +162,13 @@ date — immaterial under the flat-forward curves used here). It then:
 1. **Multiple restarts:** for each of a small data-seeded grid of starting points (`_seed_grid`),
    calibrates with Levenberg–Marquardt under **box bounds**
    (`ql.NonhomogeneousBoundaryConstraint(LOW, HIGH)`), and keeps the fit with the lowest
-   **IV-space RMSE**.
+   **IV-space RMSE**. The LM objective itself is switchable via `objective` (`_ERR` maps it to the
+   `HestonModelHelper` error type): `"price"` (`RelativePriceError`, default) or `"vol"`
+   (`ImpliedVolError`). This only changes what each restart minimises; selection and the gate always
+   use IV-RMSE, so it is independent of how a day is chosen/accepted. `"vol"` is more expensive (a
+   Black-vol inversion per residual per LM iteration) and can throw mid-search (caught per-restart).
+   `rmse` (relative-price) is computed directly from model/market values, so it keeps its meaning
+   under either objective.
 2. **IV-space error (the gate metric).** Each helper's fitted model price is inverted back to a
    Black vol via `BlackCalibrationHelper.impliedVolatility(modelValue, ...)` and compared to the
    market vol that built it; the RMSE of those residuals is in **vol points**. This replaces the old
@@ -204,8 +216,10 @@ breaks a downstream stage:
 
 ## Known issues & fragility (verify before trusting outputs)
 
-- Output routing uses `filepath.replace('otm', ...)`, which rewrites **both** the `otm` directory
-  segment and the `otm` token in the filename in one call — fragile but intentional.
+- Output routing comes from `_objective_paths(OBJECTIVE)` (tests dir) plus a basename whose `vol_`
+  prefix also depends on `OBJECTIVE` (`<date>` sliced from the OTM filename). The calibrator and
+  `validate_calibrations.py` build this directory+prefix from the same `OBJECTIVE` rule; if the two
+  rules drift apart the validator stops finding the tests files.
 - Moneyness normalisation assumes **sticky-moneyness** (IV ~stationary in `K/S` over a session). It
   is mild on normal days (~1% intraday range) but strained on large-move days; those are flagged
   `high_move` (range > `MAX_MOVE_PCT`=3%) and still written — treat their `S_ref` with suspicion.
@@ -228,3 +242,15 @@ breaks a downstream stage:
   and `eta > 1.5` on ~9% (161 days, max ≈2.0, near its cap). This is PLAN.md Lever D (soft Feller penalty +
   revisit the `eta` cap).
 - The `data/__pycache__/` holds bytecode for deleted modules (`get_data`, `get_options`, ...) — ignore it.
+
+## Writing prose (`gpu-options.tex` and other `.tex` documents)
+
+When you write or edit prose in `heston-calibration.tex` or any other `.tex` document here, write it the way a careful human author would, not the way an LLM defaults to. Concretely:
+
+- **Avoid the em dash (`—`) as a sentence connector.** It is the single clearest tell of machine-written prose, and the existing text overuses it. Prefer a period, a comma, a colon, or parentheses, and rephrase so the dash is not needed. Do not replace one em dash with another piece of dashy punctuation (en dash, double hyphen) doing the same job; restructure the sentence instead. (Genuine ranges like `12–31×` and `1…8192` keep their en dash/ellipsis — this is about prose connectors, not numerics.)
+- **Keep sentences short and digestible.** One idea per sentence. Break a long sentence into two or three rather than stacking clauses with dashes, semicolons, and nested parentheticals. If a sentence needs more than one comma-separated aside to parse, split it.
+- **Prefer plain, direct phrasing over ornate constructions.** Say "the GPU is faster" rather than "the GPU exhibits a marked performance advantage." Cut filler ("it is worth noting that", "importantly", "in order to"), hedging stacks, and rule-of-three flourishes that exist only for rhythm.
+- **Match the surrounding voice.** This is a technical paper: declarative, specific, quantitative. State the result and the number; let the data carry the emphasis instead of intensifiers.
+- **Read it back as a human.** Before finishing, reread each edited sentence aloud in your head. If it sounds like a generated abstract or could not have been said plainly by a person, rewrite it.
+
+These rules apply to *new and edited* prose. Do not launch a sweeping em-dash-removal pass over untouched paragraphs unless asked, but do clean up the dashes and over-long sentences in any passage you are already editing.

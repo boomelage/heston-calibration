@@ -79,7 +79,8 @@ def _load_data():
 def write_otm_TeX(spot, date, params, market, fit):
 
     TeX = \
-r"""\begin{figure}[H]
+r"""\textbf{Example option prices} produced by the calibrated model pricing operator $C_{\mathrm{H}}(\Phi^\star)$ having started from \eqref{eq:heston-price} and ending at \eqref{eq:accept}.
+\begin{figure}[H]
     \begin{center}
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/surfaces/plots/tex/price_surface_puts.eps}
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/surfaces/plots/tex/price_surface_calls.eps}

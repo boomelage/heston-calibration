@@ -1,4 +1,4 @@
-\textbf{Example option prices} produced by $C_{\mathrm{H}}(\Phi; S,K,\tau,+1)$~\eqref{eq:heston-price}.
+\textbf{Example option prices} produced by the calibrated model pricing operator $C_{\mathrm{H}}(\Phi^\star)$ by \eqref{eq:heston-price}~\eqref{eq:accept}.
 \begin{figure}[H]
     \begin{center}
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/surfaces/plots/tex/price_surface_puts.eps}
@@ -9,11 +9,9 @@
     \begin{center}
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/surfaces/plots/tex/put_smile.eps}
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/surfaces/plots/tex/call_smile.eps}
-        \caption{All put (left) and call (right) options from Figure~\eqref{eq:heston-price}}
+        \caption{All put (left) and call (right) options from Figure~\ref{Fig:wings}}
     \end{center}
 \end{figure}
-
-\vspace{1em}
 
 \noindent The surface above is the Heston model's own implied volatility on March 16, 2020.
 The fit uses 182 calibration cells across 12 maturities and 30 strikes,

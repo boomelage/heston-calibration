@@ -35,7 +35,7 @@ CALIBRATIONS_FILE = SURFACES.parent / "calibrations" / OBJECTIVE / "calibrations
 # spanning the range the calibration actually sees (>= MIN_DTM=7 up to ~1y).
 MONEYNESS = np.round(np.arange(0.75, 1.205, 0.025), 4)   # 0.80 .. 1.20
 MATURITIES_DAYS = [
-    30, 60, 90, 180, 360, 720, 900
+    30, 60, 90, 180, 270, 350, 540 
 ]
 
 from utils import implied_vol, build_heston_engine, heston_price

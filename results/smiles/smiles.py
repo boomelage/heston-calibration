@@ -72,7 +72,7 @@ def main(dates, OUT=None, use_legend=USE_LEGEND):
             ax_call.plot(dfc['strike'], dfc['price'], color=cmap(norm(t)), label=str(t))
             dfp = df[df['w'] == 'put'].sort_values(by='strike')
             ax_put.plot(dfp['strike'], dfp['price'], color=cmap(norm(t)))
-        ax_call.set_ylabel(r'Price ($C_{\mathrm{H}}(\Phi; S,K,\tau,w)$)')
+        ax_call.set_ylabel(r'Price ($C_{\mathrm{H}}(\Phi^\star)$)')
         sf.suptitle(_row_caption(day), fontsize=8)
         lbl = sf.supxlabel('Strike ($K$)')
         # Maturity key on the right of the row: legend or colorbar. Both reserve right-side space,

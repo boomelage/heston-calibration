@@ -31,6 +31,19 @@ keep `CLAUDE.md` in sync with both.
 - **Specification.** The delivered routine is stated formally in `heston-calibration.tex` (model +
   pricing operators, `S_ref`, `K*`, surface construction, price-space vs IV-space objectives, the
   boundary-pegging gate).
+- **Objective knob.** The in-engine LM objective is switchable via the orchestrator's `OBJECTIVE`
+  constant (`calibrator_prototype.py`), passed through to `calibrate_heston(..., objective=…)`:
+  `"price"` (`RelativePriceError`, the engine default) or `"vol"` (`ImpliedVolError`). It only changes
+  what each restart minimises; restart selection and the acceptance gate always run off the IV-space
+  RMSE, so the objective does not change how a day is chosen or accepted. `"vol"` is more expensive (a
+  Black-vol inversion per residual per LM iteration) and can throw mid-search (caught per-restart).
+  **Output routing follows the knob:** `"price"` writes `data/calibrations.csv`, `data/rejections.csv`,
+  and `data/options/calibration_tests/`; `"vol"` writes the parallel `data/vol_calibrations.csv`,
+  `data/vol_rejections.csv`, and `data/options/vol_calibration_tests/`, so the two objectives' runs do
+  not clobber each other. The orchestrator currently ships set to **`OBJECTIVE = "vol"`**. **All the
+  full-set acceptance numbers in this plan (3215 attempted, 1742 accepted ≈54%, the rejection split,
+  the Feller/`eta` shares) are the committed `"price"`-objective baseline** in `data/calibrations.csv`;
+  re-measure under `"vol"` against `data/vol_calibrations.csv` before comparing.
 
 Line numbers in any sketch below drift — match on code, not line numbers.
 
@@ -62,10 +75,12 @@ Line numbers in any sketch below drift — match on code, not line numbers.
 - `ql.NonhomogeneousBoundaryConstraint(lows, highs)` exists → box bounds (Phase 2, in use).
 - `ql.CalibratedModel.calibrate(helpers, method, endCriteria, constraint=…, weights=…, fixParameters=…)`
   — `weights` (Phase 3 lever B) and `fixParameters` (Phase 3 lever C) are both available.
-- `HestonModelHelper.calibrationError()` exists, but `setCalibrationErrorType` and the
-  `ImpliedVolError` / `RelativePriceError` enums are **not** exposed → the in-engine error is
-  relative price; vol-point residuals are computed externally (and, in the engine, via
-  `BlackCalibrationHelper.impliedVolatility`).
+- `HestonModelHelper.calibrationError()` exists. The `RelativePriceError` (=0) and `ImpliedVolError`
+  (=2) enums **are** exposed and are passed as the helper constructor's `error_type` argument, so the
+  in-engine LM objective is **switchable** (the `OBJECTIVE` knob, lever-adjacent — see below). Only the
+  post-construction `setCalibrationErrorType` setter is absent. Regardless of the objective, the
+  acceptance gate's vol-point residuals are computed in-engine via
+  `BlackCalibrationHelper.impliedVolatility` (the same inversion the validator uses externally).
 - `quantlib_pricers.vanilla_pricer` has no implied-vol inverter and `df_numpy_black_scholes` takes no
   dividend → the `black_scholes` column in `calibration_tests/*.csv` is dividend-inconsistent with
   `heston`; never use `heston − black_scholes` as a residual (the validator inverts to IV instead).
@@ -212,7 +227,9 @@ model.calibrate(helpers, lm, end, constraint, weights, [False, True, False, Fals
 ```bash
 python src/calibrator_prototype.py
 python src/validate_calibrations.py
-# full-set summary (thousands of rows — aggregate, do not dump every day)
+# full-set summary (thousands of rows — aggregate, do not dump every day).
+# NOTE: reads data/calibrations.csv (the "price" objective output). With OBJECTIVE="vol" the run
+# writes data/vol_calibrations.csv instead — point the path at whichever objective you just ran.
 python -c "import pandas as pd; d=pd.read_csv('data/calibrations.csv'); print(len(d),'days'); print('accept rate', d['accepted'].mean()); print(d[['kappa','rho','eta','feller','iv_rmse']].describe())"
 ```
 

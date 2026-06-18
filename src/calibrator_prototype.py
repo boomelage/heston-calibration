@@ -161,7 +161,7 @@ def calibrate_by_day(filepath):
     sel = _select_surface(df)
     if sel is None:
         return _skip_day(test_path, "thin", "no usable maturities")
-    sel = sel.sort_values('trade_size')   # so pivot aggfunc='last' keeps the highest-volume trade per cell
+    sel = sel.sort_values('trade_size')
     surf = sel.pivot_table(index='Kstar', columns='days_to_maturity',
                            values='trade_iv', aggfunc='last')
 

@@ -106,11 +106,11 @@ def main():
             })
 
     surface = pd.DataFrame(records)
-    long_path = RESULTS / "example_price_surface.csv"
+    long_path = RESULTS / "data" /"example_price_surface.csv"
     surface.to_csv(long_path, index=False)
 
     grid = surface.pivot(index='strike', columns='maturity_days', values='price')
-    grid_path = RESULTS / "example_price_surface_grid.csv"
+    grid_path = RESULTS / "data" / "example_price_surface_grid.csv"
     grid.to_csv(grid_path)
 
     with pd.option_context('display.float_format', '{:.4f}'.format,

@@ -2,6 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Git hygiene
+
+Never include Claude-Session links, claude.ai URLs, or any other references that reveal a connection
+to Claude or Anthropic tooling in commit messages, comments, or any tracked file. Strip such
+references before committing if they appear in generated content.
+
 ## Maintaining this file
 
 Keep this document in sync with the code as you work. When a change alters anything described here —

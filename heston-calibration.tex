@@ -1,4 +1,4 @@
-\documentclass[a4paper, 11pt]{amsart}
+\documentclass[a4paper, 11pt, reqno]{amsart}
 \usepackage[margin=1.5in]{geometry}
 \usepackage{hyperref}
 \usepackage{amsmath}
@@ -9,6 +9,7 @@
 \usepackage{algorithmic}
 \usepackage{seqsplit}
 \usepackage{graphicx}
+
 \usepackage[font=scriptsize]{caption}
 
 \hypersetup{
@@ -26,9 +27,9 @@
 % same horizontal position regardless of how many digits the number has. The
 % per-depth \hspace nests the numbers; \quad is the gap between dot and title.
 \makeatletter
-\renewcommand{\tocsection}[2]{\hspace{0em}\indentlabel{\makebox[1.5em][l]{\@ifnotempty{#1}{#1\ }#2.}\quad}}
-\renewcommand{\tocsubsection}[2]{\hspace{1em}\indentlabel{\makebox[2.0em][l]{\@ifnotempty{#1}{#1\ }#2.}\quad}}
-\renewcommand{\tocsubsubsection}[2]{\hspace{2em}\indentlabel{\makebox[2.6em][l]{\@ifnotempty{#1}{#1\ }#2.}\quad}}
+\renewcommand{\tocsection}[3]{\hspace{0em}\indentlabel{\@ifnotempty{#2}{\@ifempty{#1}{\makebox[1.5em][l]{#2.}\quad}{#1\ #2.\quad}}}#3}
+\renewcommand{\tocsubsection}[3]{\hspace{1em}\indentlabel{\makebox[2.0em][l]{\@ifnotempty{#1}{#1\ }#2.}\quad}#3}
+\renewcommand{\tocsubsubsection}[3]{\hspace{2em}\indentlabel{\makebox[2.6em][l]{\@ifnotempty{#1}{#1\ }#2.}\quad}#3}
 \makeatother
 
 % Dotted leaders in the table of contents (amsart's \@tocline uses a plain
@@ -81,8 +82,8 @@
 \DeclareMathOperator{\clip}{clip}
 
 
-\author{}
-\title{An automated stochastic volatility model parameter calibration routine}
+\author[R. Briciu]{Radu Briciu}
+\title[A stochastic volatility model parameter calibration routine]{An automated intraday stochastic volatility model parameter calibration routine}
 
 \begin{document}
 	\pagenumbering{gobble}
@@ -524,39 +525,7 @@
 	\vfill
 	
 	\newpage
-	\section{Algorithm}\label{sec:algorithm}
-	Algorithm~\ref{alg:perday} states the per-day routine; the driver applies it to every trading
-	day and accumulates accepted rows into a single file (\S\ref{sec:output}).
 	
-	\begin{algorithm}[H]
-		\caption{Per-day Heston calibration}\label{alg:perday}
-		\begin{algorithmic}[1]
-			\REQUIRE day $d$ of OTM trades; rates $r(d),g(d)$; constants of Table~\ref{tab:const}
-			\STATE $\mathcal{D} \leftarrow \{ i : \sigma_i>0,\ \tau_i\ge\tau_{\min}\}$ \hfill (pre-filter \eqref{eq:prefilter})
-			\IF{$r(d)$ or $g(d)$ undefined on/before $d$}
-			\STATE \textbf{return} $\varnothing$ \hfill (no rate)
-			\ENDIF
-			\STATE $S_{\mathrm{ref}} \leftarrow (\sum q_i S_i)/(\sum q_i)$; \\
-			$R \leftarrow \max_i S_i / \min_i S_i - 1$; \\
-			$\textsc{high\_move}\leftarrow \mathbf{1}\{R>R_{\max}\}$
-			\STATE $K^\star_i \leftarrow \Delta\,\round(m_i S_{\mathrm{ref}}/\Delta)$ with $m_i=K_i/S_i$ \hfill (re-strike \eqref{eq:kstar})
-			\STATE $\mathcal{T}\leftarrow$ top-$N_t$ maturities by volume;\ \ build $\mathcal{K}_\tau$ ($n_k$ per wing); \\ pivot to $\{\hat\sigma_{k,\tau}\}$, cells $\mathcal{N}$
-			\IF{coverage \eqref{eq:coverage} fails}
-			\STATE clear stale diagnostics;\ \textbf{return} $\varnothing$
-			\ENDIF
-			\STATE $\hat v \leftarrow \clip(\med(\hat\sigma)^2,[10^{-3},0.25])$;\ \ build seeds $\mathcal{S}$ \eqref{eq:seeds}
-			\FOR{$s \in \mathcal{S}$}
-			\STATE $\widehat\Phi_s \leftarrow$ LM minimiser of $\sum_n(\varepsilon^{\mathrm{px}}_n)^2$ on $\mathcal{B}$ from $s$ \hfill \eqref{eq:localproblem}
-			\STATE compute $J_{\mathrm{iv}}(\widehat\Phi_s)$ \hfill \eqref{eq:obj-iv}
-			\ENDFOR
-			\STATE $\Phi^\star \leftarrow \argmin_{s} J_{\mathrm{iv}}(\widehat\Phi_s)$ \hfill (select \eqref{eq:select})
-			\IF{$J_{\mathrm{iv}}(\Phi^\star) \le \varepsilon_{\mathrm{iv}}$ \AND $\lnot\,\textsc{pegged}(\Phi^\star)$}
-			\STATE write repriced diagnostics;\ \textbf{return} row$(d,S_{\mathrm{ref}},r,g,\Phi^\star,\mathcal{F},J_{\mathrm{iv}},J_{\mathrm{px}},\dots)$
-			\ELSE
-			\STATE clear stale diagnostics;\ \textbf{return} $\varnothing$ \hfill (rejected)
-			\ENDIF
-		\end{algorithmic}
-	\end{algorithm}
 	
 	{\small \begin{thebibliography}{9}
 
@@ -604,6 +573,41 @@
 		version 1.35.
 		\url{https://www.quantlib.org}.
 
-		\end{thebibliography}}
-
+	\end{thebibliography}}
+	
+	\appendix
+	\section{Algorithm}\label{sec:algorithm}
+	Algorithm~\ref{alg:perday} states the per-day routine; the driver applies it to every trading
+	day and accumulates accepted rows into a single file (\S\ref{sec:output}).
+	
+	\begin{algorithm}[H]
+		\caption{Per-day Heston calibration}\label{alg:perday}
+		\begin{algorithmic}[1]
+			\REQUIRE day $d$ of OTM trades; rates $r(d),g(d)$; constants of Table~\ref{tab:const}
+			\STATE $\mathcal{D} \leftarrow \{ i : \sigma_i>0,\ \tau_i\ge\tau_{\min}\}$ \hfill (pre-filter \eqref{eq:prefilter})
+			\IF{$r(d)$ or $g(d)$ undefined on/before $d$}
+			\STATE \textbf{return} $\varnothing$ \hfill (no rate)
+			\ENDIF
+			\STATE $S_{\mathrm{ref}} \leftarrow (\sum q_i S_i)/(\sum q_i)$; \\
+			$R \leftarrow \max_i S_i / \min_i S_i - 1$; \\
+			$\textsc{high\_move}\leftarrow \mathbf{1}\{R>R_{\max}\}$
+			\STATE $K^\star_i \leftarrow \Delta\,\round(m_i S_{\mathrm{ref}}/\Delta)$ with $m_i=K_i/S_i$ \hfill (re-strike \eqref{eq:kstar})
+			\STATE $\mathcal{T}\leftarrow$ top-$N_t$ maturities by volume;\ \ build $\mathcal{K}_\tau$ ($n_k$ per wing); \\ pivot to $\{\hat\sigma_{k,\tau}\}$, cells $\mathcal{N}$
+			\IF{coverage \eqref{eq:coverage} fails}
+			\STATE clear stale diagnostics;\ \textbf{return} $\varnothing$
+			\ENDIF
+			\STATE $\hat v \leftarrow \clip(\med(\hat\sigma)^2,[10^{-3},0.25])$;\ \ build seeds $\mathcal{S}$ \eqref{eq:seeds}
+			\FOR{$s \in \mathcal{S}$}
+			\STATE $\widehat\Phi_s \leftarrow$ LM minimiser of $\sum_n(\varepsilon^{\mathrm{px}}_n)^2$ on $\mathcal{B}$ from $s$ \hfill \eqref{eq:localproblem}
+			\STATE compute $J_{\mathrm{iv}}(\widehat\Phi_s)$ \hfill \eqref{eq:obj-iv}
+			\ENDFOR
+			\STATE $\Phi^\star \leftarrow \argmin_{s} J_{\mathrm{iv}}(\widehat\Phi_s)$ \hfill (select \eqref{eq:select})
+			\IF{$J_{\mathrm{iv}}(\Phi^\star) \le \varepsilon_{\mathrm{iv}}$ \AND $\lnot\,\textsc{pegged}(\Phi^\star)$}
+			\STATE write repriced diagnostics;\ \textbf{return} row$(d,S_{\mathrm{ref}},r,g,\Phi^\star,\mathcal{F},J_{\mathrm{iv}},J_{\mathrm{px}},\dots)$
+			\ELSE
+			\STATE clear stale diagnostics;\ \textbf{return} $\varnothing$ \hfill (rejected)
+			\ENDIF
+		\end{algorithmic}
+	\end{algorithm}
+	
 \end{document}

@@ -1,6 +1,8 @@
 \documentclass[border=5pt]{standalone}
 \usepackage{pgfplots}
 \pgfplotsset{compat=1.18}
+\usepgfplotslibrary{groupplots}
+\usetikzlibrary{calc}
 
 \begin{document}
 % Data path differs by compile context: relative to this file when built
@@ -11,18 +13,23 @@
     \def\smiledatadir{results/smiles/data/surface_2020-3-16}
 \fi
 \begin{tikzpicture}
-    \begin{axis}[
-        xlabel={Strike},
-        ylabel={Price},
+    \begin{groupplot}[
+        group style={
+            group size=2 by 1,
+            horizontal sep=8pt,
+            ylabels at=edge left,
+            yticklabels at=edge left,
+        },
+        width=7cm,
+        height=7cm,
         colormap name=viridis,
-        colorbar,
         point meta min=30,
         point meta max=720,
-        colorbar style={ylabel={Days to maturity}},
+        ymin=0, ymax=820,
     ]
-        % All call maturities (30..720 days): strike (x) vs price (y),
-        % each curve coloured by its days-to-maturity via the viridis map,
-        % with a colorbar keyed by maturity.
+        % Left: call maturities (30..720 days), strike (x) vs price (y),
+        % each curve coloured by its days-to-maturity via the viridis map.
+        \nextgroupplot[ylabel={Price}, title={Calls}]
         \foreach \t in {30,60,...,720} {
             \edef\plotcmd{%
                 \noexpand\addplot[
@@ -33,6 +40,26 @@
             }
             \plotcmd
         }
-    \end{axis}
+        % Right: put maturities, shared price axis, single common colorbar.
+        \nextgroupplot[
+            title={Puts},
+            colorbar,
+            colorbar style={ylabel={Days to maturity}},
+        ]
+        \foreach \t in {30,60,...,720} {
+            \edef\plotcmd{%
+                \noexpand\addplot[
+                    mark=none,
+                    color of colormap={(\t-30)/0.69},
+                ] table[col sep=comma, x=strike, y=price] {%
+                    \smiledatadir/plot_puts_\t-day_2020-3-16.csv};%
+            }
+            \plotcmd
+        }
+    \end{groupplot}
+    % Single x-axis label centred between the two panels.
+    \node[anchor=north, yshift=-1.1em]
+        at ($(group c1r1.south west)!0.5!(group c2r1.south east)$)
+        {Strike};
 \end{tikzpicture}
 \end{document}

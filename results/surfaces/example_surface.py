@@ -39,9 +39,15 @@ MATURITIES_DAYS = np.arange(30, 750, 30).tolist()
 
 from utils import implied_vol, build_heston_engine, heston_price
 
-def main():
-    calibrations = pd.read_csv(CALIBRATIONS_FILE)
-    row = calibrations.iloc[0]
+def main(target_date=None):
+    calibrations = pd.read_csv(CALIBRATIONS_FILE, parse_dates=['date'])
+    calibrations = calibrations.set_index('date').sort_index()
+    if target_date is not None:
+        ts = pd.Timestamp(year=target_date[0], month=target_date[1], day=target_date[2])
+        row = calibrations.asof(ts)
+    else:
+        row = calibrations.iloc[0]
+    row['date'] = row.name
     spot = float(row['spot_price'])
 
     # Evaluation date: the row's own trading date, so day-count maturities line up with reality.
@@ -86,4 +92,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main(target_date=(2020,3,16))

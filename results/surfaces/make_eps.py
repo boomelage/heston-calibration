@@ -81,7 +81,7 @@ r"""\begin{figure}[H]
     \begin{center}
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/surfaces/plots/tex/price_surface_puts.eps}
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/surfaces/plots/tex/price_surface_calls.eps}
-        \caption{Heston OTM option prices for snapped $S_{\mathrm{ref}}$ <spot> on <date>: puts wing (left) and calls wing (right).}
+        \caption{Heston OTM option prices for $S_{\mathrm{ref}}$ <spot> on <date>: puts wing (left) and calls wing (right).}
         \label{Fig:wings}
     \end{center}
 \end{figure}

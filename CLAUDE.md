@@ -72,8 +72,9 @@ artefacts are tracked (`data/calibrations.csv`, `data/rejections.csv`, `data/opt
 `data/market/`).
 
 There is no single-test command because there are no tests. To exercise just the engine, import
-`calibrate_heston(vol_matrix, s, r, g)` from `src/calibrate_heston.py` with a strike×maturity IV
-DataFrame.
+`calibrate_heston(vol_matrix, s, r, g, objective="price")` from `src/calibrate_heston.py` with a
+strike×maturity IV DataFrame. `objective` selects the in-engine LM objective ("price" relative-price,
+default, or "vol" IV-space); the orchestrator passes its `OBJECTIVE` constant through.
 
 ## Pipeline architecture
 
@@ -156,7 +157,13 @@ date — immaterial under the flat-forward curves used here). It then:
 1. **Multiple restarts:** for each of a small data-seeded grid of starting points (`_seed_grid`),
    calibrates with Levenberg–Marquardt under **box bounds**
    (`ql.NonhomogeneousBoundaryConstraint(LOW, HIGH)`), and keeps the fit with the lowest
-   **IV-space RMSE**.
+   **IV-space RMSE**. The LM objective itself is switchable via `objective` (`_ERR` maps it to the
+   `HestonModelHelper` error type): `"price"` (`RelativePriceError`, default) or `"vol"`
+   (`ImpliedVolError`). This only changes what each restart minimises; selection and the gate always
+   use IV-RMSE, so it is independent of how a day is chosen/accepted. `"vol"` is more expensive (a
+   Black-vol inversion per residual per LM iteration) and can throw mid-search (caught per-restart).
+   `rmse` (relative-price) is computed directly from model/market values, so it keeps its meaning
+   under either objective.
 2. **IV-space error (the gate metric).** Each helper's fitted model price is inverted back to a
    Black vol via `BlackCalibrationHelper.impliedVolatility(modelValue, ...)` and compared to the
    market vol that built it; the RMSE of those residuals is in **vol points**. This replaces the old

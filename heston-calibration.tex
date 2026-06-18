@@ -83,7 +83,7 @@
 
 
 \author{}
-\title{An automatic stochastic volatility model parameter calibration routine}
+\title{A stochastic volatility model parameter calibration routine}
 
 \begin{document}
 	\pagenumbering{gobble}
@@ -307,7 +307,11 @@
 
 	\subsection{Residuals}
 	Two residual systems are used: a price-space system that the local optimizer minimises,
-	and an IV-space system that selects among restarts and gates acceptance.
+	and an IV-space system that selects among restarts and gates acceptance. The in-engine
+		objective is configurable. It defaults to the price-space system below, and can instead be set
+		to the IV-space system of \eqref{eq:resid-iv}. The choice changes only what each restart
+		minimises. Selection \eqref{eq:select} and the acceptance gate \eqref{eq:accept} always run on
+		the IV-space error $J_{\mathrm{iv}}$, so they are unaffected by it.
 
 	\textbf{Price-space (in-engine objective).} For each target the market value is the
 	Black price at the quoted vol, $C^{\mathrm{mkt}}_n = C_{\mathrm{B}}(\hat\sigma_n; S_{\mathrm{ref}}, K^\star_n, T_n, w_n)$,
@@ -489,7 +493,7 @@
 	($J_{\mathrm{iv}}>\varepsilon_{\mathrm{iv}}$), and $1$ for having no usable trades.
 	Pegging (almost always $\kappa\!\to\!20$ or $\rho\!\to\!-0.999$ hitting the box wall)
 	is therefore the binding constraint on the accept rate, not surface quality.
-
+	\\ \vfill
 	\textbf{Fit quality.} On the accepted set the surface fit is excellent. The IV-space
 	error \eqref{eq:obj-iv} has a median of $0.48$ vol points (mean $0.55$, $90$th percentile
 	$0.90$, maximum $1.95$), so $J_{\mathrm{iv}}$ sits far inside the $2$-vol-point gate on
@@ -501,7 +505,7 @@
 	relative one. This is exactly the effect that motivated gating in IV space rather than price space
 	(\S\ref{sec:gate}). A separate validator clears $1{,}737$ of $1{,}742$ accepted days
 	($99.7\%$); the $5$ hard failures are repricing-fit outliers, not parameter pathologies.
-
+	\\ \vfill
 	\textbf{Parameter levels.} The accepted parameters are economically sensible and stable
 	across the twelve-year sample. The leverage correlation is consistently and strongly
 	negative, $\med\rho=-0.78$ (10th--90th percentile $[-0.89,-0.61]$), as equity-index
@@ -512,7 +516,7 @@
 	any boundary-pegged fit, the accepted set is pegging-free by construction: only $15$ days
 	carry $\rho$ below $-0.99$ and none reach the $\kappa$ ceiling. A clean interior set is
 	what survives the gate, not evidence that pegging is solved on the underlying population.
-
+	\\ \vfill
 	\textbf{The Feller condition is the standout caveat.} The gate does not test Feller, and
 	short-tenor SPX fits violate it routinely: $\mathcal{F}(\Phi^\star)=2\kappa\theta-\eta^2<0$
 	on $1{,}729$ of $1{,}742$ accepted days ($99.3\%$), with median $\mathcal{F}=-0.53$. The
@@ -523,6 +527,7 @@
 	the most common. Together they mark these fits as ones whose variance path can reach zero,
 	even where the surface fit itself is tight.
 	
+	\newpage
 	\section{Algorithm}\label{sec:algorithm}
 	Algorithm~\ref{alg:perday} states the per-day routine; the driver applies it to every trading
 	day and accumulates accepted rows into a single file (\S\ref{sec:output}).
@@ -557,7 +562,7 @@
 		\end{algorithmic}
 	\end{algorithm}
 	
-	\begin{thebibliography}{9}
+	{\small \begin{thebibliography}{9}
 
 		\bibitem[Black(1976)]{black1976}
 		Black, F. (1976).
@@ -603,6 +608,6 @@
 		version 1.35.
 		\url{https://www.quantlib.org}.
 
-		\end{thebibliography}
+		\end{thebibliography}}
 
 \end{document}

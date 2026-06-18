@@ -79,6 +79,8 @@ MIN_MATS = 3         # require a genuinely multi-maturity surface (identificatio
 MIN_STRIKES = 5      # require a real strike range
 MIN_CELLS = 12       # non-NaN surface cells required (target >= MIN_MATS x MIN_STRIKES)
 MAX_MOVE_PCT = 0.03  # intraday spot range above this flags the day (sticky-moneyness strained)
+OBJECTIVE = "price"  # in-engine LM objective: "price" (relative-price, default) or "vol" (IV-space).
+                     # Only changes what each restart minimises; selection/gate always use IV-RMSE.
 
 
 def _skip_day(test_path, reason, detail, iv_rmse=np.nan,
@@ -170,7 +172,7 @@ def calibrate_by_day(filepath):
             n_maturities=n_mats, n_strikes=n_strikes, n_cells=n_cells,
         )
 
-    res = calibrate_heston(surf, S_ref, r, g)   # ONE calibration for the whole day (hardened engine)
+    res = calibrate_heston(surf, S_ref, r, g, objective=OBJECTIVE)   # ONE calibration for the whole day (hardened engine)
     print(f"{pd.Timestamp(date).date()}  S_ref={S_ref:.1f}  cells={n_cells}  "
           f"iv_rmse={res['iv_rmse']}  price_rmse={res['rmse']}  accepted={res['accepted']}")
 

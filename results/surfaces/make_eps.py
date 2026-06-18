@@ -145,7 +145,7 @@ def smile_for(df, side):
     
 def main():
     from example_surface import make_surface
-    make_surface(target_date=(2020,3,16))
+    make_surface(target_date=r'2020-03-16')
     if not SURFACE_CSV.exists():
         sys.exit(f"{SURFACE_CSV} not found -- run `python results/example_surface.py` first.")
     df, day_results = _load_data()

@@ -33,8 +33,8 @@ CALIBRATIONS_FILE = SURFACES.parent / "calibrations" / OBJECTIVE / "calibrations
 
 # Grid the surface is sampled on. Moneyness K/S around the money; maturities in calendar days
 # spanning the range the calibration actually sees (>= MIN_DTM=7 up to ~1y).
-MONEYNESS = np.round(np.arange(0.75, 1.205, 0.01), 4)   # 0.80 .. 1.20
-MATURITIES_DAYS = np.arange(30, 750, 30).tolist()
+MONEYNESS = np.round(np.arange(0.75, 1.205, 0.025), 4)   # 0.80 .. 1.20
+MATURITIES_DAYS = [30, 60, 90, 180, 360, 720]#np.arange(30, 750, 30).tolist()
 
 from utils import implied_vol, build_heston_engine, heston_price
 
@@ -44,7 +44,7 @@ def make_surface(target_date=None, OUT=DATA, SAVE=True):
     calibrations = pd.read_csv(CALIBRATIONS_FILE, parse_dates=['date'])
     calibrations = calibrations.set_index('date').sort_index()
     if target_date is not None:
-        ts = pd.Timestamp(year=target_date[0], month=target_date[1], day=target_date[2])
+        ts = pd.Timestamp(pd.to_datetime(target_date, format=r"%Y-%m-%d"))
         row = calibrations.asof(ts)
     else:
         row = calibrations.iloc[0]

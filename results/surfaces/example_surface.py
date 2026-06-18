@@ -38,7 +38,8 @@ MATURITIES_DAYS = np.arange(30, 750, 30).tolist()
 
 from utils import implied_vol, build_heston_engine, heston_price
 
-def main(target_date=None):
+def make_surface(target_date=None, OUT=DATA, SAVE=True):
+    OUT.mkdir(parents=True, exist_ok=True)
     calibrations = pd.read_csv(CALIBRATIONS_FILE, parse_dates=['date'])
     calibrations = calibrations.set_index('date').sort_index()
     if target_date is not None:
@@ -85,8 +86,9 @@ def main(target_date=None):
                 })
 
     surface = pd.DataFrame(records)
-    long_path = DATA / r"example_surface.csv"    
-    surface.to_csv(long_path, index=False)
+    long_path = OUT / r"example_surface.csv"  
+    if SAVE:  
+        surface.to_csv(long_path, index=False)
     high_move = row['high_move']
     if not isinstance(high_move, (bool, np.bool_)):
         high_move = str(high_move).strip().lower() == 'true'
@@ -112,9 +114,8 @@ def main(target_date=None):
             "high_move": bool(high_move),
         },
     }
-    with open(DATA/'day_results.pkl', 'wb') as file:
-        pickle.dump(day_results, file)
+    if SAVE:
+        with open(OUT/'day_results.pkl', 'wb') as file:
+            pickle.dump(day_results, file)
     
-    
-if __name__ == "__main__":
-    main(target_date=(2020,3,16))
+    return (surface, day_results)

@@ -253,7 +253,7 @@ def calibrate_by_day(filepath, OBJECTIVE):
 
 def main():
     parser = argparse.ArgumentParser(description="Attempt per-day calibration of Heston paramaters off option trades data")
-    parser.add_argument("--OBJECTIVE", type=str, default="vol", choices=["price", "vol"],
+    parser.add_argument("--OBJECTIVE", type=str, default="price", choices=["price", "vol"],
                         help="Decide whether to minimize residuals of `price` or `vol`")
     args = parser.parse_args()
 

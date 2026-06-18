@@ -9,6 +9,7 @@
 \usepackage{algorithmic}
 \usepackage{seqsplit}
 \usepackage{graphicx}
+%\usepackage{parskip}
 
 \usepackage[font=scriptsize]{caption}
 
@@ -68,6 +69,11 @@
 \def\section{\@startsection{section}{1}%
   \z@{.7\linespacing\@plus\linespacing}{.5\linespacing}%
   {\normalfont\bfseries\centering}}
+% amsart's subsubsection is an italic run-in heading; make it bold instead
+% (subsection is already bold). Keep amsart's spacing and run-in behaviour.
+\def\subsubsection{\@startsection{subsubsection}{3}%
+  \z@{.5\linespacing\@plus.7\linespacing}{-.5em}%
+  {\normalfont\bfseries}}
 % Section number itself defaults to \mdseries in amsart; make it bold too.
 \def\@secnumfont{\bfseries}
 \makeatother
@@ -471,48 +477,79 @@
 	
 	\section{Empirical findings}\label{sec:empirical}
 	We ran the routine over the full CBOE SPX trade history available to us,
-	spanning $3{,}215$ trading days from 3~January~2012 to 9~October~2024. Of these,
-	$1{,}742$ days ($54.2\%$) passed the acceptance gate \eqref{eq:accept} and
-	contribute a parameter row; the $1{,}473$ rejected days are logged with their cause.
-	The rejection split is dominated by boundary pegging: $1{,}369$ days
+	spanning $3{,}215$ trading days from 3~January~2012 to 9~October~2024. Unless
+	noted, the figures below are for the default price-space objective
+	\eqref{eq:obj-price}; the IV-space objective \eqref{eq:obj-iv} is compared at the
+	end of the section. Of these days,
+	$1{,}713$ ($53.3\%$) passed the acceptance gate \eqref{eq:accept} and
+	contribute a parameter row; the $1{,}502$ rejected days are logged with their cause.
+	The rejection split is dominated by boundary pegging: $1{,}398$ days
 	($93\%$ of rejections) are rejected for a pegged parameter, $103$ for an IV-space miss
 	($J_{\mathrm{iv}}>\varepsilon_{\mathrm{iv}}$), and $1$ for having no usable trades.
 	Pegging (almost always $\kappa\!\to\!20$ or $\rho\!\to\!-0.999$ hitting the box wall)
 	is therefore the binding constraint on the accept rate, not surface quality.
-	\\ \\
+	\\ 
 	\textbf{Fit quality.} On the accepted set the surface fit is excellent. The IV-space
 	error \eqref{eq:obj-iv} has a median of $0.48$ vol points (mean $0.55$, $90$th percentile
-	$0.90$, maximum $1.95$), so $J_{\mathrm{iv}}$ sits far inside the $2$-vol-point gate on
+	$0.89$, maximum $1.93$), so $J_{\mathrm{iv}}$ sits far inside the $2$-vol-point gate on
 	essentially every accepted day and never binds in practice. Acceptance is governed by
 	the no-pegging clause alone. An independent repricing check (each contract valued under
 	$\Phi^\star$ at its \emph{original} $(S_i,K_i)$ and compared to the trade price) confirms
-	this: the per-day median relative price error is $6.6\%$ and its $90$th percentile $10.5\%$,
+	this: the per-day median relative price error is $6.7\%$ and its $90$th percentile $10.6\%$,
 	figures inflated by the deep-OTM wings whose near-zero prices make any absolute miss a large
 	relative one. This is exactly the effect that motivated gating in IV space rather than price space
-	(\S\ref{sec:gate}). A separate validator clears $1{,}737$ of $1{,}742$ accepted days
+	(\S\ref{sec:gate}). A separate validator clears $1{,}708$ of $1{,}713$ accepted days
 	($99.7\%$); the $5$ hard failures are repricing-fit outliers, not parameter pathologies.
-	\\ \\
+	\\ 
 	\textbf{Parameter levels.} The accepted parameters are economically sensible and stable
 	across the twelve-year sample. The leverage correlation is consistently and strongly
-	negative, $\med\rho=-0.78$ (10th--90th percentile $[-0.89,-0.61]$), as equity-index
+	negative, $\med\rho=-0.78$ (10th--90th percentile $[-0.89,-0.62]$), as equity-index
 	smiles require. Long-run variance $\med\theta=0.053$ ($\approx 23\%$ annualised vol) and
-	initial variance $\med v_0=0.016$ ($\approx 13\%$) bracket realistic SPX levels, with $v_0$
+	initial variance $\med v_0=0.016$ ($\approx 12.5\%$) bracket realistic SPX levels, with $v_0$
 	the lower of the two on the typical low-realised-vol day. Mean reversion $\med\kappa=2.19$
-	and vol-of-vol $\med\eta=0.88$ are likewise in the usual SPX range. Because the gate rejects
-	any boundary-pegged fit, the accepted set is pegging-free by construction: only $15$ days
+	and vol-of-vol $\med\eta=0.89$ are likewise in the usual SPX range. Because the gate rejects
+	any boundary-pegged fit, the accepted set is pegging-free by construction: only $14$ days
 	carry $\rho$ below $-0.99$ and none reach the $\kappa$ ceiling. A clean interior set is
 	what survives the gate, not evidence that pegging is solved on the underlying population.
-	\\ \\
+	\\ 
 	\textbf{Feller condition remains a standout caveat.} The gate does not test Feller, and
 	short-tenor SPX fits violate it routinely: $\mathcal{F}(\Phi^\star)=2\kappa\theta-\eta^2<0$
-	on $1{,}729$ of $1{,}742$ accepted days ($99.3\%$), with median $\mathcal{F}=-0.53$. The
+	on $1{,}701$ of $1{,}713$ accepted days ($99.3\%$), with median $\mathcal{F}=-0.54$. The
 	driver of the violation is a large vol-of-vol relative to $\kappa\theta$; $\eta$ exceeds
-	$1.5$ on $161$ days ($9.2\%$) and approaches its $2.0$ cap (max $1.996$). A pinned $v_0$ that
+	$1.5$ on $146$ days ($8.5\%$) and approaches its $2.0$ cap (max $1.99$). A pinned $v_0$ that
 	disagrees with the at-the-money level appears on only $4$ days and a degenerate $\kappa$ on
-	$7$, so among the validator's soft flags Feller violation and an elevated $\eta$ are by far
+	$8$, so among the validator's soft flags Feller violation and an elevated $\eta$ are by far
 	the most common. Together they mark these fits as ones whose variance path can reach zero,
 	even where the surface fit itself is tight.
-	\vfill
+	\\ 
+	\textbf{Price-space versus IV-space objective.} The in-engine objective is configurable
+	(\S\ref{sec:objective}), and every figure above uses the price-space default. Re-running the
+	full sample with the IV-space objective \eqref{eq:obj-iv} tests whether minimising in the
+	gate's own units helps. It does not. The IV-space objective accepts $1{,}645$ days
+	($51.2\%$), which is $68$ fewer than the price objective, and its rejections are even more
+	dominated by pegging ($1{,}479$ of $1{,}570$, or $94\%$). On the accepted days the fit in its
+	own metric is marginally tighter, with a median $J_{\mathrm{iv}}$ of $0.45$ vol points against
+	$0.48$ and a $90$th percentile of $0.83$ against $0.89$. The parameter levels move within
+	sampling noise ($\med\rho=-0.78$, $\med\theta=0.054$, $\med\kappa=2.12$, $\med\eta=0.90$,
+	$\med v_0=0.016$), so the economic reading above is robust to the objective. The two accepted
+	sets agree on $1{,}579$ days and differ on $200$, split $134$ price-only and $66$ IV-only, all
+	near the pegging boundary.
+	\\ \\
+	The lesson is that the objective is not the binding choice. Aligning the optimiser with the
+	acceptance metric does not relieve the pegging and slightly aggravates it. Pegging is a
+	structural degeneracy in the $(\kappa,\rho,\eta)$ skew subspace, and it survives a change of
+	residual. The IV-space objective weights the deep-OTM wings more heavily than the price
+	objective, since it no longer discounts them by their small prices. It therefore asks for more
+	skew and reaches the box wall more often. Feller violation rises from $99.3\%$ to $99.7\%$ of
+	accepted days and the median $\eta$ edges up, both consistent with that pressure. One cost is
+	specific to abandoning the price-space objective. The returned relative-price error is no
+	longer controlled, and on a few accepted days it is large (maximum $J_{\mathrm{px}}=36.3$
+	against $0.32$ under the price objective, with $18$ days above $0.2$ against $2$). Those days
+	are tight in vol points yet far off in relative price on a near-worthless wing cell. The
+	practical reading is that the objective knob does not move acceptance. The levers that would
+	are the identification fixes: a higher maturity floor, liquidity weighting, and anchoring
+	$\kappa$.
+	\newpage
 	\section{Example option prices}
 	\begin{figure}[h]
 		\begin{center}
@@ -524,56 +561,54 @@
 	\end{figure}
 	\vfill
 	
-	\newpage
-	
-	
 	{\small \begin{thebibliography}{9}
-
-		\bibitem[Black(1976)]{black1976}
-		Black, F. (1976).
-		The Pricing of Commodity Contracts.
-		\emph{Journal of Financial Economics}, 3(1--2), 167--179.
-		\url{https://doi.org/10.1016/0304-405X(76)90024-6}.
-
-		\bibitem[Black and Scholes(1973)]{blackscholes1973}
-		Black, F., and Scholes, M. (1973).
-		The Pricing of Options and Corporate Liabilities.
-		\emph{Journal of Political Economy}, 81(3), 637--654.
-		\url{https://doi.org/10.1086/260062}.
-
-		\bibitem[Feller(1951)]{feller1951}
-		Feller, W. (1951).
-		Two Singular Diffusion Problems.
-		\emph{Annals of Mathematics}, 54(1), 173--182.
-		\url{https://doi.org/10.2307/1969318}.
-
-		\bibitem[Heston(1993)]{heston1993}
-		Heston, S. L. (1993).
-		A Closed-Form Solution for Options with Stochastic Volatility with
-		Applications to Bond and Currency Options.
-		\emph{The Review of Financial Studies}, 6(2), 327--343.
-		\url{https://doi.org/10.1093/rfs/6.2.327}.
-
-		\bibitem[Marquardt(1963)]{marquardt1963}
-		Marquardt, D. W. (1963).
-		An Algorithm for Least-Squares Estimation of Nonlinear Parameters.
-		\emph{Journal of the Society for Industrial and Applied Mathematics},
-		11(2), 431--441.
-		\url{https://doi.org/10.1137/0111030}.
-
-		\bibitem[Mikhailov and N\"ogel(2003)]{mikhailov2003}
-		Mikhailov, S., and N\"ogel, U. (2003).
-		Heston's Stochastic Volatility Model: Implementation, Calibration and
-		Some Extensions.
-		\emph{Wilmott Magazine}, July 2003, 74--79.
-
-		\bibitem[QuantLib()]{quantlib}
-		Ballabio, L., and the QuantLib contributors.
-		\emph{QuantLib: a free/open-source library for quantitative finance},
-		version 1.35.
-		\url{https://www.quantlib.org}.
-
+			
+			\bibitem[Black(1976)]{black1976}
+			Black, F. (1976).
+			The Pricing of Commodity Contracts.
+			\emph{Journal of Financial Economics}, 3(1--2), 167--179.
+			\url{https://doi.org/10.1016/0304-405X(76)90024-6}.
+			
+			\bibitem[Black and Scholes(1973)]{blackscholes1973}
+			Black, F., and Scholes, M. (1973).
+			The Pricing of Options and Corporate Liabilities.
+			\emph{Journal of Political Economy}, 81(3), 637--654.
+			\url{https://doi.org/10.1086/260062}.
+			
+			\bibitem[Feller(1951)]{feller1951}
+			Feller, W. (1951).
+			Two Singular Diffusion Problems.
+			\emph{Annals of Mathematics}, 54(1), 173--182.
+			\url{https://doi.org/10.2307/1969318}.
+			
+			\bibitem[Heston(1993)]{heston1993}
+			Heston, S. L. (1993).
+			A Closed-Form Solution for Options with Stochastic Volatility with
+			Applications to Bond and Currency Options.
+			\emph{The Review of Financial Studies}, 6(2), 327--343.
+			\url{https://doi.org/10.1093/rfs/6.2.327}.
+			
+			\bibitem[Marquardt(1963)]{marquardt1963}
+			Marquardt, D. W. (1963).
+			An Algorithm for Least-Squares Estimation of Nonlinear Parameters.
+			\emph{Journal of the Society for Industrial and Applied Mathematics},
+			11(2), 431--441.
+			\url{https://doi.org/10.1137/0111030}.
+			
+			\bibitem[Mikhailov and N\"ogel(2003)]{mikhailov2003}
+			Mikhailov, S., and N\"ogel, U. (2003).
+			Heston's Stochastic Volatility Model: Implementation, Calibration and
+			Some Extensions.
+			\emph{Wilmott Magazine}, July 2003, 74--79.
+			
+			\bibitem[QuantLib()]{quantlib}
+			Ballabio, L., and the QuantLib contributors.
+			\emph{QuantLib: a free/open-source library for quantitative finance},
+			version 1.35.
+			\url{https://www.quantlib.org}.
+			
 	\end{thebibliography}}
+	\vfill
 	
 	\appendix
 	\section{Algorithm}\label{sec:algorithm}

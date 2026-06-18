@@ -71,8 +71,9 @@ are **git-ignored**; only a `.gitkeep` keeps each folder present.
 day) is **git-ignored** for the same reason — it grows with years of data. A fresh clone has none of
 them — to bootstrap, drop `UnderlyingOptionsTradesCalcs_*.csv` into `data/options/raw/`, run Stage 2
 to materialise `data/options/otm/`, then Stages 3+4 (which regenerate `calibration_tests/`). Only the
-small derived artefacts are tracked (`results/calibrations/{price,vol}/calibrations.csv`,
-`rejections.csv`, `validation.csv`, and `data/market/`).
+small derived artefacts are tracked: the `{calibrations,rejections,validation}.csv` triples for **both**
+objectives (`results/calibrations/price/` and `results/calibrations/vol/`) plus `data/market/`. Each
+objective's bulky per-day `calibration_tests/` stays git-ignored (only a `.gitkeep` is tracked).
 
 There is no single-test command because there are no tests. To exercise just the engine, import
 `calibrate_heston(vol_matrix, s, r, g, objective="price")` from `src/calibrate_heston.py` with a
@@ -188,11 +189,11 @@ date — immaterial under the flat-forward curves used here). It then:
    multi-year run accepted days have IV-RMSE ~0.5 vol points (median `iv_rmse` 0.0048), so IV-RMSE
    never gates. Accepted days are also **pegging-free by construction** (the gate rejects any
    boundary-pegged param), so a clean `kappa`/`rho` in `calibrations.csv` is *not* evidence pegging is
-   solved — it is just what survives the gate. Over **3215** attempted days **1742 (~54%)** accept; the
-   1473 rejected never reach `calibrations.csv`, but their cause is logged to
+   solved — it is just what survives the gate. Over **3215** attempted days **1713 (~53%)** accept; the
+   1502 rejected never reach `calibrations.csv`, but their cause is logged to
    `results/calibrations/<objective>/rejections.csv`, which confirms boundary-pegged `kappa` (→20) /
    `rho` (→−0.999) as the dominant cause
-   (**pegged 1369, iv_miss 103, no_trades 1**) — still the open Phase 3 lever.
+   (**pegged 1398, iv_miss 103, no_trades 1**) — still the open Phase 3 lever.
 
 Returns `{theta, kappa, eta, rho, v0, feller, iv_rmse, rmse, n_helpers, accepted}` with
 `feller = 2*kappa*theta - eta**2` for an accepted fit; a rejected fit returns params/`feller` as
@@ -234,21 +235,33 @@ breaks a downstream stage:
 - Snapping `Kstar` to the 5-point SPX grid is exact near the money but coarser in the far wings
   (native grid widens to 25/50/100); harmless for QuantLib (any float strike prices) but it slightly
   quantises deep-OTM moneyness.
-- **Boundary pegging is still the open Phase 3 lever — and `calibrations.csv` cannot show it.** A
-  multi-year run attempted **3215** trading days and accepted **1742 (~54%)**, just under PLAN.md's 60%
-  target. The accepted set has 0 pegged `kappa`/`rho`, but that is **tautological**: the gate
-  (`_on_boundary`) rejects any boundary-pegged fit, so pegged days never reach the file. The 1473
+- **Boundary pegging is still the open Phase 3 lever — and `calibrations.csv` cannot show it.** Under the
+  default **`price`** objective a multi-year run attempted **3215** trading days and accepted **1713 (~53%)**,
+  just under PLAN.md's 60% target. The accepted set has 0 pegged `kappa`/`rho`, but that is **tautological**:
+  the gate (`_on_boundary`) rejects any boundary-pegged fit, so pegged days never reach the file. The 1502
   rejected days are dropped before write; their cause is logged to
-  `results/calibrations/<objective>/rejections.csv`
+  `results/calibrations/price/rejections.csv`
   (`reason` ∈ `no_trades/no_rate/thin/pegged/iv_miss/no_fit`), and the split is now **measured**:
-  **pegged 1369, iv_miss 103, no_trades 1** — so `pegged` is confirmed the dominant cause (93% of
+  **pegged 1398, iv_miss 103, no_trades 1** — so `pegged` is confirmed the dominant cause (93% of
   rejections). None of the Phase 3 levers (A–E) are implemented yet (`MIN_DTM`=7, no `weights`, no
-  `fixParameters`, no Feller penalty), so this ~54% is the Phase 2 engine's rate over the long sample,
+  `fixParameters`, no Feller penalty), so this ~53% is the Phase 2 engine's rate over the long sample,
   not a post-lever result.
+- **The `vol` (IV-space) objective does not help — it slightly worsens pegging.** Running the same sample
+  with `--OBJECTIVE vol` (committed to `results/calibrations/vol/`) accepts **1645/3215 (51.2%)**, ~68 fewer
+  than `price`, with pegging an even larger share of rejections (**pegged 1479, iv_miss 90, no_trades 1**;
+  94%). The objective only changes what LM minimises, not the `(kappa, rho, eta)` degeneracy that drives the
+  pegging; weighting the deep-OTM wings evenly (vol points) demands *more* skew, so the box wall is hit more
+  often. The fit in its own metric is marginally tighter (median `iv_rmse` 0.0045 vs 0.0048) and the
+  accepted-set parameter medians are unchanged within noise (`rho`≈−0.78, `theta`≈0.054, `kappa`≈2.1,
+  `eta`≈0.90, `v0`≈0.016), so the economic reading is objective-invariant; the two accepted sets overlap on
+  1579 days (134 `price`-only, 66 `vol`-only). One artefact: because `vol` no longer controls relative price,
+  the returned `rmse` blows up on a handful of accepted days (max 36.3 vs 0.32 under `price`; 18 days > 0.2 vs
+  2). Takeaway: the objective knob is **not** a Phase 3 lever; the identification fixes (A–E) are needed under
+  either objective.
 - **Feller is the standout issue in the accepted set.** The gate does **not** reject on Feller (it is a
   *suspicious*, not hard-reject, validator flag — short-tenor Heston violates it routinely), so accepted
-  days routinely violate it: `feller = 2·kappa·theta − eta² < 0` on **1729/1742 (99%)** accepted days,
-  and `eta > 1.5` on ~9% (161 days, max ≈2.0, near its cap). This is PLAN.md Lever D (soft Feller penalty +
+  days routinely violate it: `feller = 2·kappa·theta − eta² < 0` on **1701/1713 (99%)** accepted days,
+  and `eta > 1.5` on ~8.5% (146 days, max ≈1.99, near its cap). This is PLAN.md Lever D (soft Feller penalty +
   revisit the `eta` cap).
 - The `data/__pycache__/` holds bytecode for deleted modules (`get_data`, `get_options`, ...) — ignore it.
 

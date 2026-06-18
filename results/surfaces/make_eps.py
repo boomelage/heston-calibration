@@ -51,9 +51,9 @@ def plot_surface(grid, out_path, title=None):
     ax.plot_surface(X, Y, Z, cmap='jet', rstride=1, cstride=1,
                     linewidth=0.2, edgecolors='k', antialiased=False)
     ax.view_init(elev=ELEV, azim=AZIM)
-    ax.set_xlabel('strike ($K$)')
-    ax.set_ylabel('maturity in years ($T$)')
-    ax.set_zlabel('price')
+    ax.set_xlabel(r'strike ($K$)')
+    ax.set_ylabel(r'maturity in years ($T$)')
+    ax.set_zlabel(r'price')
     ax.set_zlim(bottom=0)
     if title:
         ax.set_title(title)
@@ -74,9 +74,7 @@ def main():
 
     plot_surface(grid_for('call'), RESULTS / "plots" / "price_surface_calls.eps")
     plot_surface(grid_for('put'), RESULTS / "plots" / "price_surface_puts.eps")
-    
-    tex_path = RESULTS / "price_surface.tex"
 
-    
+
 if __name__ == "__main__":
     main()

@@ -11,4 +11,15 @@
         \caption{All put (left) and call (right) options from Figure~\ref{Fig:wings}}
     \end{center}
 \end{figure}
+
+\noindent The surface above is the Heston model's own implied volatility on March 16, 2020.
+The fit uses 182 calibration cells across 12 maturities and 30 strikes,
+backed by 578,198 contracts of traded volume.
+The reference spot was $S_{\mathrm{ref}} = 3254.0554$,
+priced under a risk-free rate of 0.92\% and a dividend rate of 1.85\%.
+The intraday spot range was 0.96\%.
+Fit quality is 0.52 vol points of implied-volatility RMSE,
+with a relative-price RMSE of 0.0402.
+The Feller condition violates at this calibration,
+with $2\kappa\theta - \eta^2 = -1.5935$.
     

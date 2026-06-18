@@ -76,7 +76,7 @@ def _load_data():
         day_results = pickle.load(file)
     return (df, day_results)
 
-def write_otm_TeX(spot, date, params):
+def write_otm_TeX(spot, date, params, market, fit):
 
     TeX = \
 r"""\begin{figure}[H]
@@ -92,15 +92,40 @@ r"""\begin{figure}[H]
         \caption{All put (left) and call (right) options from Figure~\ref{Fig:wings}}
     \end{center}
 \end{figure}
+
+\noindent The surface above is the Heston model's own implied volatility on <date>.
+The fit uses <nhelpers> calibration cells across <nmats> maturities and <nstrikes> strikes,
+backed by <volume> contracts of traded volume.
+The reference spot was $S_{\mathrm{ref}} = <spot>$,
+priced under a risk-free rate of <r>\% and a dividend rate of <q>\%.
+The intraday spot range was <rangepct>\%.<movenote>
+Fit quality is <ivrmse> vol points of implied-volatility RMSE,
+with a relative-price RMSE of <rmse>.
+The Feller condition <fellersign> at this calibration,
+with $2\kappa\theta - \eta^2 = <feller>$.
     """
-    TeX = TeX.replace('<spot>',str(spot))
-    TeX = TeX.replace('<date>',str(date.strftime(r"%B %d, %Y")))
-    TeX = TeX.replace('<theta>',str(round(params['theta'],4)))
-    TeX = TeX.replace('<kappa>',str(round(params['kappa'],4)))
-    TeX = TeX.replace('<eta>',str(round(params['eta'],4)))
-    TeX = TeX.replace('<rho>',str(round(params['rho'],4)))
-    TeX = TeX.replace('<v0>',str(round(params['v0'],4)))
-    
+    TeX = TeX.replace('<spot>', str(spot))
+    TeX = TeX.replace('<date>', str(date.strftime(r"%B %d, %Y")))
+    TeX = TeX.replace('<theta>', str(round(params['theta'], 4)))
+    TeX = TeX.replace('<kappa>', str(round(params['kappa'], 4)))
+    TeX = TeX.replace('<eta>', str(round(params['eta'], 4)))
+    TeX = TeX.replace('<rho>', str(round(params['rho'], 4)))
+    TeX = TeX.replace('<v0>', str(round(params['v0'], 4)))
+    TeX = TeX.replace('<r>', f"{market['risk_free_rate']*100:.2f}")
+    TeX = TeX.replace('<q>', f"{market['dividend_rate']*100:.2f}")
+    TeX = TeX.replace('<ivrmse>', f"{fit['iv_rmse']*100:.2f}")
+    TeX = TeX.replace('<rmse>', str(round(fit['rmse'], 4)))
+    TeX = TeX.replace('<feller>', str(round(fit['feller'], 4)))
+    TeX = TeX.replace('<nhelpers>', str(fit['n_helpers']))
+    TeX = TeX.replace('<nmats>', str(fit['n_maturities']))
+    TeX = TeX.replace('<nstrikes>', str(fit['n_strikes']))
+    TeX = TeX.replace('<volume>', f"{fit['total_volume']:,}")
+    TeX = TeX.replace('<rangepct>', f"{fit['spot_range_pct']*100:.2f}")
+    TeX = TeX.replace('<fellersign>', 'violates' if fit['feller'] < 0 else 'satisfies')
+    TeX = TeX.replace('<movenote>',
+        r' The intraday range exceeded the 3\% threshold, so treat $S_{\mathrm{ref}}$ with caution.'
+        if fit['high_move'] else '')
+
     tex_path = TEXDIR / r"otm.tex"
     tex_path.write_text(TeX)
 
@@ -125,12 +150,14 @@ def main():
     date = day_results['date']
     spot = day_results['spot']
     params = day_results['params']
+    market = day_results['market']
+    fit = day_results['fit']
 
     plot_surface(grid_for(df, 'call'), TEXDIR / "price_surface_calls.eps")
     plot_surface(grid_for(df, 'put'), TEXDIR / "price_surface_puts.eps", invert_K=True)
     plot_surface(smile_for(df, 'call'), TEXDIR / "call_smile.eps")
     plot_surface(smile_for(df, 'put'), TEXDIR / "put_smile.eps", invert_K=True)
-    write_otm_TeX(spot, date, params)
+    write_otm_TeX(spot, date, params, market, fit)
     
 if __name__ == "__main__":
     main()

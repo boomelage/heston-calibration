@@ -87,12 +87,30 @@ def main(target_date=None):
     surface = pd.DataFrame(records)
     long_path = DATA / r"example_surface.csv"    
     surface.to_csv(long_path, index=False)
+    high_move = row['high_move']
+    if not isinstance(high_move, (bool, np.bool_)):
+        high_move = str(high_move).strip().lower() == 'true'
     day_results = {
-        "params":{
-            "kappa":kappa, "theta": theta, "rho" : rho, "eta":  eta, "v0": v0
+        "params": {
+            "kappa": kappa, "theta": theta, "rho": rho, "eta": eta, "v0": v0,
         },
         "spot": spot,
-        "date": date
+        "date": date,
+        "market": {
+            "risk_free_rate": float(row['risk_free_rate']),
+            "dividend_rate": float(row['dividend_rate']),
+        },
+        "fit": {
+            "iv_rmse": float(row['iv_rmse']),
+            "rmse": float(row['rmse']),
+            "feller": float(row['feller']),
+            "n_helpers": int(row['n_helpers']),
+            "n_maturities": int(row['n_maturities']),
+            "n_strikes": int(row['n_strikes']),
+            "total_volume": int(row['total_volume']),
+            "spot_range_pct": float(row['spot_range_pct']),
+            "high_move": bool(high_move),
+        },
     }
     with open(DATA/'day_results.pkl', 'wb') as file:
         pickle.dump(day_results, file)

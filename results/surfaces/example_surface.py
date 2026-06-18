@@ -19,17 +19,16 @@ Run:  python results/example_surface.py
 Out:  results/example_surface.csv        (long: strike, maturity_days, moneyness, implied_vol)
       results/example_surface_grid.csv   (pivot: index=strike, columns=maturity_days)
 """
-import os
+import pickle
 import numpy as np
 import pandas as pd
 import QuantLib as ql
 from pathlib import Path
 
 SURFACES = Path(__file__).parent.resolve()
-OBJECTIVE = input("Validate `vol` or `price` calibrations? ").strip().lower()
+OBJECTIVE = "price" #input("Validate `vol` or `price` calibrations? ").strip().lower()
 DATA = SURFACES / "data"
-if not DATA.exists():
-    os.mkdir(DATA)
+DATA.mkdir(parents=True, exist_ok=True)
 CALIBRATIONS_FILE = SURFACES.parent / "calibrations" / OBJECTIVE / "calibrations.csv"
 
 # Grid the surface is sampled on. Moneyness K/S around the money; maturities in calendar days
@@ -61,11 +60,11 @@ def main(target_date=None):
         s_handle, g_ts, r_ts,
         ql.BlackVolTermStructureHandle(ql.BlackConstantVol(
             calculation_date, ql.UnitedStates(ql.UnitedStates.NYSE), 0.20, day_count)))
-
+    kappa, theta, rho, eta, v0 = row['kappa'], row['theta'], row['rho'], row['eta'], row['v0']
     print(f"Heston example surface for {row['date']}  (spot={spot:.2f}, "
           f"r={row['risk_free_rate']:.4f}, q={row['dividend_rate']:.4f})")
-    print(f"  v0={row['v0']:.4f}  kappa={row['kappa']:.4f}  theta={row['theta']:.4f}  "
-          f"eta={row['eta']:.4f}  rho={row['rho']:.4f}\n")
+    print(f"  v0={v0:.4f}  kappa={kappa:.4f}  theta={theta:.4f}  "
+          f"eta={eta:.4f}  rho={rho:.4f}\n")
 
     records = []
     for days in MATURITIES_DAYS:
@@ -83,13 +82,21 @@ def main(target_date=None):
                     'w': w,
                     'implied_vol': iv,
                     'price': price,
-                    'date': date
                 })
 
     surface = pd.DataFrame(records)
     long_path = DATA / r"example_surface.csv"    
     surface.to_csv(long_path, index=False)
-
-
+    day_results = {
+        "params":{
+            "kappa":kappa, "theta": theta, "rho" : rho, "eta":  eta, "v0": v0
+        },
+        "spot": spot,
+        "date": date
+    }
+    with open(DATA/'day_results.pkl', 'wb') as file:
+        pickle.dump(day_results, file)
+    
+    
 if __name__ == "__main__":
     main(target_date=(2020,3,16))

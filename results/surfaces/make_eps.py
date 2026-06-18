@@ -14,8 +14,8 @@ Run:  python results/make_price_surface_eps.py
 Out:  results/price_surface_calls.eps, price_surface_puts.eps, price_surface_both.eps
       results/price_surface.tex
 """
-import os
 import sys
+import pickle
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -27,6 +27,7 @@ import QuantLib as ql
 
 RESULTS = Path(__file__).parent
 SURFACE_CSV = RESULTS / "data" / "example_surface.csv"
+DAY_RESULTS = RESULTS / "data" / "day_results.pkl"
 TEXDIR = RESULTS / "plots" / "tex"
 TEXDIR.mkdir(parents=True, exist_ok=True)
 
@@ -67,32 +68,39 @@ def plot_surface(grid, out_path, title=None):
     plt.close(fig)
     print(f"wrote {out_path.name}")
 
-def _load_surface(SURFACE_CSV):
-
+def _load_data():
     df = pd.read_csv(SURFACE_CSV)
-    date = pd.Timestamp(df['date'][0]).strftime("%B %d, %Y")
-    spot = float(df['s_ref'].unique()[0]) 
-    return (spot, date, df)
+    with open(DAY_RESULTS, 'rb') as file:
+        day_results = pickle.load(file)
+    return (df, day_results)
 
-def write_otm_TeX(spot, date):
+def write_otm_TeX(spot, date, params):
 
     TeX = \
 r"""\begin{figure}[H]
     \begin{center}
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/surfaces/plots/tex/price_surface_puts.eps}
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/surfaces/plots/tex/price_surface_calls.eps}
-        \caption{Heston OTM option prices for $S_{\mathrm{ref}}$ <spot> on <date>: puts wing (left) and calls wing (right).}
+        \caption{Heston OTM option prices for $S_{\mathrm{ref}}$ <spot> on <date> with $\Phi = (<theta>,\ <kappa>,\ <eta>,\ <rho>,\ <v0>)$: puts wing (left) and calls wing (right).}
         \label{Fig:wings}
+    \end{center}
+    \begin{center}
+        \includegraphics[width=6.25cm,keepaspectratio=true]{results/surfaces/plots/tex/smile.eps}
     \end{center}
 \end{figure}
     """
     TeX = TeX.replace('<spot>',str(spot))
-    TeX = TeX.replace('<date>',str(date))
+    TeX = TeX.replace('<date>',str(date.strftime(r"%B %d, %Y")))
+    TeX = TeX.replace('<theta>',str(round(params['theta'],4)))
+    TeX = TeX.replace('<kappa>',str(round(params['kappa'],4)))
+    TeX = TeX.replace('<eta>',str(round(params['eta'],4)))
+    TeX = TeX.replace('<rho>',str(round(params['rho'],4)))
+    TeX = TeX.replace('<v0>',str(round(params['v0'],4)))
+    
     tex_path = TEXDIR / r"otm.tex"
     tex_path.write_text(TeX)
 
 def grid_for(df, side):
-    
     surface = df[df['w'] == side].copy()
     surface['moneyness'] = np.where(
         surface['w'] == 'call',
@@ -100,18 +108,24 @@ def grid_for(df, side):
         surface['strike'] / surface['s_ref']
     )
     surface = surface[surface['moneyness']<=1]
-    print(surface)
     return surface.pivot(index='strike', columns='maturity_days', values='price')
 
+def smile_for(df, side):
+    surface = df[df['w'] == side].copy()
+    return surface.pivot(index='strike', columns='maturity_days', values='price')
+    
 def main():
     if not SURFACE_CSV.exists():
         sys.exit(f"{SURFACE_CSV} not found -- run `python results/example_surface.py` first.")
-    spot, date, df = _load_surface(SURFACE_CSV)
-    print(date)
+    df, day_results = _load_data()
+    date = day_results['date']
+    spot = day_results['spot']
+    params = day_results['params']
 
     plot_surface(grid_for(df, 'call'), TEXDIR / "price_surface_calls.eps")
     plot_surface(grid_for(df, 'put'), TEXDIR / "price_surface_puts.eps")
-    write_otm_TeX(spot, date)
+    plot_surface(smile_for(df, 'put'), TEXDIR / "smile.eps")
+    write_otm_TeX(spot, date, params)
     
 if __name__ == "__main__":
     main()

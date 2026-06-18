@@ -49,27 +49,30 @@ python -c "import sys; sys.path.insert(0,'data'); from get_rg import rg; print(r
 #          so it runs from any working directory.
 python data/extract_otms.py
 
-# Stage 3+4: calibrate ONCE per trading day. Writes accepted params to the single data/calibrations.csv,
-#            one row per REJECTED day (with the cause) to data/rejections.csv, and per-day repricing
-#            diagnostics to data/options/calibration_tests/. Prints the accept rate and a
+# Stage 3+4: calibrate ONCE per trading day. Writes accepted params to the single
+#            results/calibrations/<objective>/calibrations.csv, one row per REJECTED day (with the
+#            cause) to results/calibrations/<objective>/rejections.csv, and per-day repricing
+#            diagnostics to results/calibrations/<objective>/calibration_tests/. <objective> is
+#            `price` (default) or `vol`, selected by --OBJECTIVE. Prints the accept rate and a
 #            rejections-by-reason tally. Resolves paths from __file__, so it runs from any working dir.
 python src/calibrator_prototype.py
 
-# Validation (read-only): grade data/calibrations.csv + calibration_tests/ for fit quality, economic
-#          reasonability, and cross-day stability. Writes data/options/validation/validation.csv and
-#          prints a per-day summary plus a cross-day stability block. Does not modify the pipeline.
+# Validation (read-only): grade results/calibrations/<objective>/calibrations.csv + calibration_tests/
+#          for fit quality, economic reasonability, and cross-day stability. Prompts for the objective
+#          (price/vol), writes results/calibrations/<objective>/validation.csv, and prints a per-day
+#          summary plus a cross-day stability block. Does not modify the pipeline.
 python src/validate_calibrations.py
 ```
 
 **Data not in version control.** `data/options/raw/` (raw CBOE trade files, ~80–90 MB/day — near
 GitHub's 100 MB/file limit) and `data/options/otm/` (the OTM snapshots derived from them, ~6 MB/day)
-are **git-ignored**; only a `.gitkeep` keeps each folder present. `data/options/calibration_tests/`
-(per-day repricing diagnostics, one file per day) is **git-ignored** for the same reason — it grows
-with years of data. A fresh clone has none of them — to bootstrap, drop
-`UnderlyingOptionsTradesCalcs_*.csv` into `data/options/raw/`, run Stage 2 to materialise
-`data/options/otm/`, then Stages 3+4 (which regenerate `calibration_tests/`). Only the small derived
-artefacts are tracked (`data/calibrations.csv`, `data/rejections.csv`, `data/options/validation/`,
-`data/market/`).
+are **git-ignored**; only a `.gitkeep` keeps each folder present.
+`results/calibrations/{price,vol}/calibration_tests/` (per-day repricing diagnostics, one file per
+day) is **git-ignored** for the same reason — it grows with years of data. A fresh clone has none of
+them — to bootstrap, drop `UnderlyingOptionsTradesCalcs_*.csv` into `data/options/raw/`, run Stage 2
+to materialise `data/options/otm/`, then Stages 3+4 (which regenerate `calibration_tests/`). Only the
+small derived artefacts are tracked (`results/calibrations/{price,vol}/calibrations.csv`,
+`rejections.csv`, `validation.csv`, and `data/market/`).
 
 There is no single-test command because there are no tests. To exercise just the engine, import
 `calibrate_heston(vol_matrix, s, r, g, objective="price")` from `src/calibrate_heston.py` with a
@@ -80,11 +83,12 @@ default, or "vol" IV-space); the orchestrator passes its `OBJECTIVE` constant th
 
 Data flows left-to-right. `raw/` and `otm/` hold one CSV per trading day (both **git-ignored** — not
 in the repo; see the "Data not in version control" note under How to run); the per-day calibration
-parameters accumulate into a **single** `data/calibrations.csv` (one row per day), while the bulky
-per-day repricing diagnostics stay one-file-per-day under `data/options/calibration_tests/`:
+parameters accumulate into a **single** `results/calibrations/<objective>/calibrations.csv` (one row
+per day), while the bulky per-day repricing diagnostics stay one-file-per-day under
+`results/calibrations/<objective>/calibration_tests/`:
 
 ```
-raw/  --extract_otms.py-->  otm/  --calibrator_prototype.py-->  ../calibrations.csv  + calibration_tests/
+raw/  --extract_otms.py-->  otm/  --calibrator_prototype.py-->  results/calibrations/<objective>/calibrations.csv  + calibration_tests/
 ```
 
 **Stage 1 — market rates (`data/get_rg.py`).** Imported for its side effect: building a
@@ -135,8 +139,9 @@ pooled, moneyness-normalised surface — not the old per-0.5-spot-bucket fits:
    **original** `spot_price`/`strike_price` (Heston params are spot-independent), not `S_ref`/`Kstar`.
    A rejected or too-thin day returns `None` and **removes** any stale per-day tests file.
 8. The module-level driver collects the returned rows across **all** OTM files and **splits** them:
-   accepted rows (no `reason` key) go to the single `data/calibrations.csv`, rejected rows (each
-   carries a `reason`) go to the complementary `data/rejections.csv` — both sorted by date and fully
+   accepted rows (no `reason` key) go to the single `results/calibrations/<objective>/calibrations.csv`,
+   rejected rows (each carries a `reason`) go to the complementary
+   `results/calibrations/<objective>/rejections.csv` — both sorted by date and fully
    **regenerated** each run (no stale rows survive), and an empty set **removes** its file. Accepted +
    rejected together cover every attempted day, so the accept rate and the pegged-vs-thin-vs-IV
    rejection split are auditable directly (the driver also prints them). Because an accepted row is
@@ -144,14 +149,15 @@ pooled, moneyness-normalised surface — not the old per-0.5-spot-bucket fits:
    describe the same accepted set (no desync).
 
 The per-day **tests** path is built from `_objective_paths(OBJECTIVE)`: the tests directory
-(`calibration_tests` for `price`, `vol_calibration_tests` for `vol`) plus a basename of
-`cboe_spx_calibration_tests_<date>.csv` (`price`) or `cboe_spx_vol_calibration_tests_<date>.csv`
-(`vol`), where `<date>` is sliced out of the OTM filename. Both the directory and the `vol_` basename
-prefix depend on `OBJECTIVE`, and `validate_calibrations.py` rebuilds the identical name from its own
-`OBJECTIVE` so the two stay in lock-step. (The calibrations/rejections files are likewise objective-dependent: `data/calibrations.csv`
-+ `data/rejections.csv` for `price`, `data/vol_calibrations.csv` + `data/vol_rejections.csv` for `vol`,
-both from `_objective_paths` and not derived from the input path.) The objective is selected by the
-`--OBJECTIVE {price,vol}` CLI flag (default `price`) and threaded through to `calibrate_heston`.
+`results/calibrations/<objective>/calibration_tests/` plus a basename of
+`cboe_spx_calibration_tests_<date>.csv` (same basename for both objectives — they are already
+separated by directory), where `<date>` is sliced out of the OTM filename. The directory depends on
+`OBJECTIVE`, and `validate_calibrations.py` rebuilds the identical path from its own `OBJECTIVE` so
+the two stay in lock-step. (The calibrations/rejections/validation files are likewise objective-dependent,
+all under `results/calibrations/<objective>/`: `calibrations.csv` + `rejections.csv` + `validation.csv`,
+built from `_objective_paths` (`OUT` in the validator) and not derived from the input path.) The
+objective is selected by the `--OBJECTIVE {price,vol}` CLI flag (default `price`) and threaded through
+to `calibrate_heston`.
 
 **Stage 4 — calibration engine (`src/calibrate_heston.py`).** Pure function
 `calibrate_heston(vol_matrix, s, r, g) -> dict`, **hardened** (PLAN Work items 2 & 3). Builds a QuantLib
@@ -183,8 +189,9 @@ date — immaterial under the flat-forward curves used here). It then:
    never gates. Accepted days are also **pegging-free by construction** (the gate rejects any
    boundary-pegged param), so a clean `kappa`/`rho` in `calibrations.csv` is *not* evidence pegging is
    solved — it is just what survives the gate. Over **3215** attempted days **1742 (~54%)** accept; the
-   1473 rejected never reach `calibrations.csv`, but their cause is logged to `data/rejections.csv`,
-   which confirms boundary-pegged `kappa` (→20) / `rho` (→−0.999) as the dominant cause
+   1473 rejected never reach `calibrations.csv`, but their cause is logged to
+   `results/calibrations/<objective>/rejections.csv`, which confirms boundary-pegged `kappa` (→20) /
+   `rho` (→−0.999) as the dominant cause
    (**pegged 1369, iv_miss 103, no_trades 1**) — still the open Phase 3 lever.
 
 Returns `{theta, kappa, eta, rho, v0, feller, iv_rmse, rmse, n_helpers, accepted}` with
@@ -199,11 +206,11 @@ Stages communicate through column names, not typed interfaces. Renaming any of t
 breaks a downstream stage:
 
 - `otm/*.csv` schema: `quote_datetime, strike_price, w, trade_size, trade_price, trade_iv, spot_price, days_to_maturity`.
-- `data/calibrations.csv` schema (**single file, one row per trading day**, keyed by `date`):
+- `results/calibrations/<objective>/calibrations.csv` schema (**single file, one row per trading day**, keyed by `date`):
   `spot_price` (= `S_ref`), `risk_free_rate, dividend_rate, theta, kappa, rho, eta, v0, feller,
   iv_rmse, rmse, n_helpers, accepted, n_maturities, n_strikes, contracts_count, total_volume,
   spot_min, spot_max, spot_range_pct, high_move, calculation_date`.
-- `data/rejections.csv` schema (**single file, one row per rejected trading day**, keyed by `date` —
+- `results/calibrations/<objective>/rejections.csv` schema (**single file, one row per rejected trading day**, keyed by `date` —
   the complement of `calibrations.csv`): `reason` (category: `no_trades, no_rate, thin, pegged,
   iv_miss, no_fit`), `detail` (human string), `iv_rmse` (NaN unless calibration ran), `n_maturities,
   n_strikes, n_cells` (NaN unless a surface was built). `date` here is the filename date string.
@@ -216,10 +223,11 @@ breaks a downstream stage:
 
 ## Known issues & fragility (verify before trusting outputs)
 
-- Output routing comes from `_objective_paths(OBJECTIVE)` (tests dir) plus a basename whose `vol_`
-  prefix also depends on `OBJECTIVE` (`<date>` sliced from the OTM filename). The calibrator and
-  `validate_calibrations.py` build this directory+prefix from the same `OBJECTIVE` rule; if the two
-  rules drift apart the validator stops finding the tests files.
+- Output routing comes from `_objective_paths(OBJECTIVE)`: everything lives under
+  `results/calibrations/<objective>/` (calibrations.csv, rejections.csv, validation.csv, and the
+  per-day `calibration_tests/` files, basename `cboe_spx_calibration_tests_<date>.csv` with `<date>`
+  sliced from the OTM filename). The calibrator and `validate_calibrations.py` build this path from the
+  same `OBJECTIVE` rule; if the two rules drift apart the validator stops finding the tests files.
 - Moneyness normalisation assumes **sticky-moneyness** (IV ~stationary in `K/S` over a session). It
   is mild on normal days (~1% intraday range) but strained on large-move days; those are flagged
   `high_move` (range > `MAX_MOVE_PCT`=3%) and still written — treat their `S_ref` with suspicion.
@@ -230,7 +238,8 @@ breaks a downstream stage:
   multi-year run attempted **3215** trading days and accepted **1742 (~54%)**, just under PLAN.md's 60%
   target. The accepted set has 0 pegged `kappa`/`rho`, but that is **tautological**: the gate
   (`_on_boundary`) rejects any boundary-pegged fit, so pegged days never reach the file. The 1473
-  rejected days are dropped before write; their cause is logged to `data/rejections.csv`
+  rejected days are dropped before write; their cause is logged to
+  `results/calibrations/<objective>/rejections.csv`
   (`reason` ∈ `no_trades/no_rate/thin/pegged/iv_miss/no_fit`), and the split is now **measured**:
   **pegged 1369, iv_miss 103, no_trades 1** — so `pegged` is confirmed the dominant cause (93% of
   rejections). None of the Phase 3 levers (A–E) are implemented yet (`MIN_DTM`=7, no `weights`, no

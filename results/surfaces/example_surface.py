@@ -25,8 +25,9 @@ import QuantLib as ql
 from pathlib import Path
 
 SURFACES = Path(__file__).parent.resolve()
+OBJECTIVE = input("Validate `vol` or `price` calibrations? ").strip().lower()
 
-CALIBRATIONS_FILE = SURFACES.parent / "data" / "calibrations.csv"
+CALIBRATIONS_FILE = SURFACES.parent / "calibrations" / OBJECTIVE / "calibrations.csv"
 
 # Grid the surface is sampled on. Moneyness K/S around the money; maturities in calendar days
 # spanning the range the calibration actually sees (>= MIN_DTM=7 up to ~1y).

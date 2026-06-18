@@ -552,8 +552,8 @@
 	\newpage
 	\section{Example option prices}
 	\input{results/surfaces/plots/tex/otm.tex}
-	\vfill
 	
+	\newpage
 	{\small \begin{thebibliography}{9}
 			
 			\bibitem[Black(1976)]{black1976}
@@ -601,7 +601,6 @@
 			\url{https://www.quantlib.org}.
 			
 	\end{thebibliography}}
-	\vfill
 	
 	\appendix
 	\section{Algorithm}\label{sec:algorithm}
@@ -609,6 +608,7 @@
 	day and accumulates accepted rows into a single file (\S\ref{sec:output}).
 	
 	\begin{algorithm}[H]
+		\small
 		\caption{Per-day Heston calibration}\label{alg:perday}
 		\begin{algorithmic}[1]
 			\REQUIRE day $d$ of OTM trades; rates $r(d),g(d)$; constants of Table~\ref{tab:const}

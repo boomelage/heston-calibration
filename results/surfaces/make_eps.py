@@ -44,7 +44,7 @@ plt.rcParams.update({
 ELEV, AZIM = 25, -60
 
 
-def plot_surface(grid, out_path, title=None):
+def plot_surface(grid, out_path, title=None, invert_K=False):
     """Draw one strike x maturity x price surface (grid: index=strike, columns=maturity_days)."""
 
     strikes = grid.index.to_numpy(dtype=float)
@@ -58,6 +58,8 @@ def plot_surface(grid, out_path, title=None):
                     linewidth=0.2, edgecolors='k', antialiased=False)
     ax.view_init(elev=ELEV, azim=AZIM)
     ax.set_xlabel(r'strike ($K$)')
+    if invert_K:
+        ax.invert_xaxis()
     ax.set_ylabel(r'maturity in years ($T$)')
     ax.set_zlabel(r'price')
     ax.set_zlim(bottom=0)
@@ -85,7 +87,9 @@ r"""\begin{figure}[H]
         \label{Fig:wings}
     \end{center}
     \begin{center}
-        \includegraphics[width=6.25cm,keepaspectratio=true]{results/surfaces/plots/tex/smile.eps}
+        \includegraphics[width=6.25cm,keepaspectratio=true]{results/surfaces/plots/tex/put_smile.eps}
+        \includegraphics[width=6.25cm,keepaspectratio=true]{results/surfaces/plots/tex/call_smile.eps}
+        \caption{All put (left) and call (right) options from Figure~\ref{Fig:wings}}
     \end{center}
 \end{figure}
     """
@@ -123,8 +127,9 @@ def main():
     params = day_results['params']
 
     plot_surface(grid_for(df, 'call'), TEXDIR / "price_surface_calls.eps")
-    plot_surface(grid_for(df, 'put'), TEXDIR / "price_surface_puts.eps")
-    plot_surface(smile_for(df, 'put'), TEXDIR / "smile.eps")
+    plot_surface(grid_for(df, 'put'), TEXDIR / "price_surface_puts.eps", invert_K=True)
+    plot_surface(smile_for(df, 'call'), TEXDIR / "call_smile.eps")
+    plot_surface(smile_for(df, 'put'), TEXDIR / "put_smile.eps", invert_K=True)
     write_otm_TeX(spot, date, params)
     
 if __name__ == "__main__":

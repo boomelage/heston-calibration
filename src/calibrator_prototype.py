@@ -34,6 +34,7 @@ regenerated each run, and an empty set removes its file.
 """
 import os
 import sys
+import argparse
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -70,21 +71,25 @@ MIN_MATS = 3         # require a genuinely multi-maturity surface (identificatio
 MIN_STRIKES = 5      # require a real strike range
 MIN_CELLS = 12       # non-NaN surface cells required (target >= MIN_MATS x MIN_STRIKES)
 MAX_MOVE_PCT = 0.03  # intraday spot range above this flags the day (sticky-moneyness strained)
-OBJECTIVE = "vol"  # in-engine LM objective: "price" (relative-price, default) or "vol" (IV-space).
-                     # Only changes what each restart minimises; selection/gate always use IV-RMSE.
-if OBJECTIVE == "price":
-    CALIBRATIONS_FILE = DATA / "calibrations.csv"
-    REJECTIONS_FILE = DATA / "rejections.csv"
-    TESTS = SRC.parent / "data" / "options" / "calibration_tests"
-    if not TESTS.exists():
-        os.mkdir(TESTS)
-elif OBJECTIVE == "vol":
-    CALIBRATIONS_FILE = DATA / "vol_calibrations.csv"
-    REJECTIONS_FILE = DATA / "vol_rejections.csv"
-    TESTS = SRC.parent / "data" / "options" / "vol_calibration_tests"
-    if not TESTS.exists():
-        os.mkdir(TESTS)
-    
+
+
+def _objective_paths(objective):
+    """Resolve the (calibrations.csv, rejections.csv, tests-dir) outputs for an objective.
+
+    The `vol` objective gets its own directory and `vol_`-prefixed summary CSVs. The per-day tests
+    file basename mirrors this: `cboe_spx_vol_calibration_tests_<date>.csv` for `vol`,
+    `cboe_spx_calibration_tests_<date>.csv` for `price` (see calibrate_by_day). validate_calibrations.py
+    rebuilds the same directory + prefix from its own OBJECTIVE, so the two stay in lock-step.
+    """
+    if objective == "vol":
+        return (DATA / "vol_calibrations.csv",
+                DATA / "vol_rejections.csv",
+                DATA / "options" / "vol_calibration_tests")
+    return (DATA / "calibrations.csv",
+            DATA / "rejections.csv",
+            DATA / "options" / "calibration_tests")
+
+
 def _skip_day(test_path, reason, detail, iv_rmse=np.nan,
               n_maturities=np.nan, n_strikes=np.nan, n_cells=np.nan):
     """Drop a day: clear any stale tests file and return a rejection row (one per rejected day).
@@ -130,8 +135,14 @@ def _select_surface(df):
     return pd.concat(selected, ignore_index=True)
 
 
-def calibrate_by_day(filepath):
-    test_path = filepath.replace('otm', 'calibration_tests')
+def calibrate_by_day(filepath, OBJECTIVE):
+    # Per-day tests file: directory + basename prefix both depend on OBJECTIVE (vol gets a `vol_`
+    # prefix); validate_calibrations.py rebuilds the identical name from its own OBJECTIVE. Derive the
+    # date from the OTM basename rather than string-replacing 'otm', which would also rewrite the
+    # filename token and desync the validator.
+    tests_dir = _objective_paths(OBJECTIVE)[2]
+    date_str = os.path.basename(filepath)[len('cboe_spx_otm_'):-len('.csv')]
+    test_path = str(tests_dir / f"cboe_spx_{"vol_" if OBJECTIVE == "vol" else ""}calibration_tests_{date_str}.csv")
     df = pd.read_csv(filepath)
     df = df[(df['trade_iv'] > 0) & (df['days_to_maturity'] >= MIN_DTM)].copy()
     if df.empty:
@@ -234,12 +245,20 @@ def calibrate_by_day(filepath):
     except Exception:
         repriced['heston'] = np.nan
 
-    TESTS.mkdir(parents=True, exist_ok=True)
+    tests_dir.mkdir(parents=True, exist_ok=True)
     repriced.dropna(subset=['heston']).to_csv(test_path, index=False)
     return row
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Attempt per-day calibration of Heston paramaters off option trades data")
+    parser.add_argument("--OBJECTIVE", type=str, default="price", choices=["price", "vol"],
+                        help="Decide whether to minimize residuals of `price` or `vol`")
+    args = parser.parse_args()
+
+    CALIBRATIONS_FILE, REJECTIONS_FILE, TESTS = _objective_paths(args.OBJECTIVE)
+    TESTS.mkdir(parents=True, exist_ok=True)
+
     # joblib's default loky backend spawns processes; on Windows the children re-import this module,
     # so the driver MUST live behind `if __name__ == "__main__"` (via main()) -- otherwise each worker
     # re-runs the Parallel call below and recursively spawns process pools.
@@ -254,7 +273,7 @@ def main():
     # rejection (carries 'reason'). Split them into the two complementary files. The loop covers all
     # OTM files, so both files are fully regenerated each run (no stale rows survive); an empty set
     # removes its file rather than leaving it stale.
-    results = [r for r in Parallel(n_jobs=max_jobs)(delayed(calibrate_by_day)(f) for f in files)
+    results = [r for r in Parallel(n_jobs=max_jobs)(delayed(calibrate_by_day)(f, args.OBJECTIVE) for f in files)
                if r is not None]
     accepted = [r for r in results if 'reason' not in r]
     rejected = [r for r in results if 'reason' in r]

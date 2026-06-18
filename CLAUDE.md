@@ -143,10 +143,15 @@ pooled, moneyness-normalised surface — not the old per-0.5-spot-bucket fits:
    returned exactly when a tests file is written, `calibrations.csv` and the per-day tests files always
    describe the same accepted set (no desync).
 
-The per-day **tests** path is derived by `filepath.replace('otm', 'calibration_tests')`, which
-rewrites **both** the `otm` directory segment and the `otm` token in the filename in one call —
-fragile but intentional. (The calibrations file is the fixed `data/calibrations.csv`, not derived
-from the input path.)
+The per-day **tests** path is built from `_objective_paths(OBJECTIVE)`: the tests directory
+(`calibration_tests` for `price`, `vol_calibration_tests` for `vol`) plus a basename of
+`cboe_spx_calibration_tests_<date>.csv` (`price`) or `cboe_spx_vol_calibration_tests_<date>.csv`
+(`vol`), where `<date>` is sliced out of the OTM filename. Both the directory and the `vol_` basename
+prefix depend on `OBJECTIVE`, and `validate_calibrations.py` rebuilds the identical name from its own
+`OBJECTIVE` so the two stay in lock-step. (The calibrations/rejections files are likewise objective-dependent: `data/calibrations.csv`
++ `data/rejections.csv` for `price`, `data/vol_calibrations.csv` + `data/vol_rejections.csv` for `vol`,
+both from `_objective_paths` and not derived from the input path.) The objective is selected by the
+`--OBJECTIVE {price,vol}` CLI flag (default `price`) and threaded through to `calibrate_heston`.
 
 **Stage 4 — calibration engine (`src/calibrate_heston.py`).** Pure function
 `calibrate_heston(vol_matrix, s, r, g) -> dict`, **hardened** (PLAN Work items 2 & 3). Builds a QuantLib
@@ -211,8 +216,10 @@ breaks a downstream stage:
 
 ## Known issues & fragility (verify before trusting outputs)
 
-- Output routing uses `filepath.replace('otm', ...)`, which rewrites **both** the `otm` directory
-  segment and the `otm` token in the filename in one call — fragile but intentional.
+- Output routing comes from `_objective_paths(OBJECTIVE)` (tests dir) plus a basename whose `vol_`
+  prefix also depends on `OBJECTIVE` (`<date>` sliced from the OTM filename). The calibrator and
+  `validate_calibrations.py` build this directory+prefix from the same `OBJECTIVE` rule; if the two
+  rules drift apart the validator stops finding the tests files.
 - Moneyness normalisation assumes **sticky-moneyness** (IV ~stationary in `K/S` over a session). It
   is mild on normal days (~1% intraday range) but strained on large-move days; those are flagged
   `high_move` (range > `MAX_MOVE_PCT`=3%) and still written — treat their `S_ref` with suspicion.

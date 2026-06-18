@@ -28,9 +28,20 @@ import QuantLib as ql
 SRC = Path(__file__).parent.resolve()
 DATA = SRC.parent / "data"
 OPTIONS = DATA / "options"
-CALIBRATIONS_FILE = DATA / "calibrations.csv"   # single one-row-per-day parameters file
-TESTS = OPTIONS / "calibration_tests"
 OUT = OPTIONS / "validation"
+
+OBJECTIVE = input("Validate `vol` or `price` calibrations? ").strip()
+
+if OBJECTIVE == "price":
+    CALIBRATIONS_FILE = DATA / "calibrations.csv"
+    TESTS = OPTIONS / "calibration_tests"
+    WRITEPATH = OUT / "validation.csv"
+elif OBJECTIVE == "vol":
+    CALIBRATIONS_FILE = DATA / "vol_calibrations.csv"
+    TESTS = OPTIONS / "vol_calibration_tests"
+    WRITEPATH = OUT / "vol_validation.csv"
+else:
+    raise SystemExit(f"unknown objective {OBJECTIVE!r}; expected 'price' or 'vol'")
 
 # Tunable acceptance/flag thresholds. "hard" = financially impossible -> reject;
 # "susp" (suspicious) = possible but atypical for SPX at these tenors -> flag, don't reject.
@@ -194,7 +205,7 @@ def main():
     all_reports = []
     for _, row in cal.iterrows():
         date = str(row["date"])
-        test_path = TESTS / f"cboe_spx_calibration_tests_{date}.csv"
+        test_path = TESTS / f"cboe_spx_{"vol_" if OBJECTIVE == "vol" else ""}calibration_tests_{date}.csv"
         if not test_path.exists():
             print(f"skipping {date}: no matching test file")
             continue
@@ -206,10 +217,10 @@ def main():
         combined = pd.concat(all_reports, ignore_index=True)
         n, acc = len(combined), int(combined["val_accepted"].sum())
         OUT.mkdir(exist_ok=True)
-        combined.to_csv(OUT / "validation.csv", index=False)
+        combined.to_csv(WRITEPATH, index=False)
         print_cross_day(combined, cross_day_stability(combined))
         print(f"\n=== ALL DAYS: {acc}/{n} days pass all hard checks ({acc / n:.0%}); "
-              f"table written to {OUT / 'validation.csv'} ===")
+              f"table written to {WRITEPATH} ===")
 
 
 if __name__ == "__main__":

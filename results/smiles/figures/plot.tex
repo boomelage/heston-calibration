@@ -3,6 +3,13 @@
 \pgfplotsset{compat=1.18}
 
 \begin{document}
+% Data path differs by compile context: relative to this file when built
+% standalone, relative to the repo root when \input into heston-calibration.tex.
+\ifstandalone
+    \def\smiledatadir{../data/surface_2020-3-16}
+\else
+    \def\smiledatadir{results/smiles/data/surface_2020-3-16}
+\fi
 \begin{tikzpicture}
     \begin{axis}[
         xlabel={Strike},
@@ -22,7 +29,7 @@
                     mark=none,
                     color of colormap={(\t-30)/0.69},
                 ] table[col sep=comma, x=strike, y=price] {%
-                    ../data/surface_2020-3-16/plot_calls_\t-day_2020-3-16.csv};%
+                    \smiledatadir/plot_calls_\t-day_2020-3-16.csv};%
             }
             \plotcmd
         }

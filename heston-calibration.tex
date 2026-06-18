@@ -9,6 +9,9 @@
 \usepackage{algorithmic}
 \usepackage{seqsplit}
 \usepackage{graphicx}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage{standalone}
 %\usepackage{parskip}
 
 \usepackage[font=scriptsize]{caption}
@@ -98,7 +101,7 @@
 		\maketitle
 		\vfill
 		\begin{abstract}
-			\noindent We specify the routine that calibrates the five Heston (1993)
+			\noindent We specify a routine that calibrates the five canonical \citet{heston1993}
 			parameters $\Phi=(\theta,\kappa,\eta,\rho,v_0)$ to a day of CBOE S\&P~500
 			(SPX) intraday option trades. The routine performs \emph{one} calibration per
 			trading day over a pooled, moneyness-normalised implied-volatility surface,
@@ -640,5 +643,6 @@
 	
 	\newpage
 	\section{Example volatility smiles}
+	\input{results/smiles/figures/plot.tex}
 	
 \end{document}

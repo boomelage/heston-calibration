@@ -39,7 +39,8 @@ MATURITIES_DAYS = np.arange(30, 750, 30).tolist()
 from utils import implied_vol, build_heston_engine, heston_price
 
 def make_surface(target_date=None, OUT=DATA, SAVE=True):
-    OUT.mkdir(parents=True, exist_ok=True)
+    if SAVE:
+        OUT.mkdir(parents=True, exist_ok=True)
     calibrations = pd.read_csv(CALIBRATIONS_FILE, parse_dates=['date'])
     calibrations = calibrations.set_index('date').sort_index()
     if target_date is not None:
@@ -86,8 +87,8 @@ def make_surface(target_date=None, OUT=DATA, SAVE=True):
                 })
 
     surface = pd.DataFrame(records)
-    long_path = OUT / r"example_surface.csv"  
-    if SAVE:  
+    if SAVE:
+        long_path = OUT / r"example_surface.csv"
         surface.to_csv(long_path, index=False)
     high_move = row['high_move']
     if not isinstance(high_move, (bool, np.bool_)):

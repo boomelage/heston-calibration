@@ -17,17 +17,18 @@ clean surface columns. This re-centres the day under the standard sticky-moneyne
 (`high_move`) but still written. Heston params are spot-independent, so the repricing diagnostics
 below use each trade's *original* spot/strike, not the normalised K*.
 
-Output: the parameters accumulate into a SINGLE `data/calibrations.csv` (one row per trading day,
-keyed by date, recording S_ref, r, g, the five params, feller, rmse, coverage counts and the
-intraday spot range) -- fully regenerated each run from the accepted days. The bulky per-day
-repricing diagnostics stay one-file-per-day under `data/options/calibration_tests/`. A day is
+Output: the parameters accumulate into a SINGLE `results/calibrations/<objective>/calibrations.csv`
+(one row per trading day, keyed by date, recording S_ref, r, g, the five params, feller, rmse,
+coverage counts and the intraday spot range) -- fully regenerated each run from the accepted days.
+The bulky per-day repricing diagnostics stay one-file-per-day under
+`results/calibrations/<objective>/calibration_tests/`. A day is
 written to calibration_tests exactly when it contributes a row, so the two outputs always describe
 the same accepted set; a rejected or too-thin day contributes no row and clears its tests file.
 
 Rejection audit: every attempted-but-rejected day contributes one row to a SEPARATE
-`data/rejections.csv` (keyed by date) recording why it was dropped -- a small `reason` category
-(no_trades/no_rate/thin/pegged/iv_miss/no_fit), the human `detail`, the `iv_rmse` where one exists,
-and the surface coverage where known. `calibrations.csv` stays accepted-only (it mirrors
+`results/calibrations/<objective>/rejections.csv` (keyed by date) recording why it was dropped -- a small 
+`reason` category (no_trades/no_rate/thin/pegged/iv_miss/no_fit), the human `detail`, the `iv_rmse` 
+where one exists, and the surface coverage where known. `calibrations.csv` stays accepted-only (it mirrors
 calibration_tests/ one-to-one); `rejections.csv` is the complement, so accepted + rejected together
 cover every attempted day and the pegged-vs-thin split is auditable. Both files are fully
 regenerated each run, and an empty set removes its file.
@@ -44,6 +45,7 @@ pd.options.display.float_format = '{:.5f}'.format
 
 SRC = Path(__file__).parent.resolve()
 DATA = SRC.parent / "data"
+RESULTS = SRC.parent / "results"
 
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
@@ -76,18 +78,17 @@ MAX_MOVE_PCT = 0.03  # intraday spot range above this flags the day (sticky-mone
 def _objective_paths(objective):
     """Resolve the (calibrations.csv, rejections.csv, tests-dir) outputs for an objective.
 
-    The `vol` objective gets its own directory and `vol_`-prefixed summary CSVs. The per-day tests
-    file basename mirrors this: `cboe_spx_vol_calibration_tests_<date>.csv` for `vol`,
-    `cboe_spx_calibration_tests_<date>.csv` for `price` (see calibrate_by_day). validate_calibrations.py
-    rebuilds the same directory + prefix from its own OBJECTIVE, so the two stay in lock-step.
+    Each objective gets its own directory under results/calibrations/<objective>/, holding
+    calibrations.csv, rejections.csv and the per-day calibration_tests/ files (basename
+    `cboe_spx_calibration_tests_<date>.csv` for either objective). validate_calibrations.py rebuilds
+    the same directory from its own OBJECTIVE, so the two stay in lock-step.
     """
-    if objective == "vol":
-        return (DATA / "vol_calibrations.csv",
-                DATA / "vol_rejections.csv",
-                DATA / "options" / "vol_calibration_tests")
-    return (DATA / "calibrations.csv",
-            DATA / "rejections.csv",
-            DATA / "options" / "calibration_tests")
+    base = RESULTS / "calibrations" / objective
+    if not base.exists():
+        os.mkdir(base)
+    return (base / "calibrations.csv",
+            base / "rejections.csv",
+            base / "calibration_tests")
 
 
 def _skip_day(test_path, reason, detail, iv_rmse=np.nan,
@@ -136,13 +137,13 @@ def _select_surface(df):
 
 
 def calibrate_by_day(filepath, OBJECTIVE):
-    # Per-day tests file: directory + basename prefix both depend on OBJECTIVE (vol gets a `vol_`
-    # prefix); validate_calibrations.py rebuilds the identical name from its own OBJECTIVE. Derive the
-    # date from the OTM basename rather than string-replacing 'otm', which would also rewrite the
-    # filename token and desync the validator.
+    # Per-day tests file: the directory depends on OBJECTIVE (results/calibrations/<objective>/
+    # calibration_tests/); validate_calibrations.py rebuilds the identical name from its own OBJECTIVE.
+    # Derive the date from the OTM basename rather than string-replacing 'otm', which would also
+    # rewrite the filename token and desync the validator.
     tests_dir = _objective_paths(OBJECTIVE)[2]
     date_str = os.path.basename(filepath)[len('cboe_spx_otm_'):-len('.csv')]
-    test_path = str(tests_dir / f"cboe_spx_{"vol_" if OBJECTIVE == "vol" else ""}calibration_tests_{date_str}.csv")
+    test_path = str(tests_dir / f"cboe_spx_calibration_tests_{date_str}.csv")
     df = pd.read_csv(filepath)
     df = df[(df['trade_iv'] > 0) & (df['days_to_maturity'] >= MIN_DTM)].copy()
     if df.empty:

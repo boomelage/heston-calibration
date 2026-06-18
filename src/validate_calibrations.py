@@ -1,8 +1,9 @@
 """Read-only validation of Heston calibration outputs (PLAN.md Work items 1 & 3).
 
-Reads the single ``data/calibrations.csv`` (ONE row per trading day, Work item 3) and the matching
-per-day ``data/options/calibration_tests/*.csv`` (repriced surface contracts) and emits, per trading
-day, a pass/fail report on:
+Reads the single ``results/calibrations/<objective>/calibrations.csv`` (ONE row per trading day,
+Work item 3) and the matching per-day
+``results/calibrations/<objective>/calibration_tests/*.csv`` (repriced surface contracts) and emits,
+per trading day, a pass/fail report on:
 
   1. Fit quality   - relative repricing error (heston vs trade_price) and, more rigorously,
                      the IV-space residual (model-implied vol vs market vol, in vol points).
@@ -16,8 +17,8 @@ improvement.
 
     python src/validate_calibrations.py
 
-All graded rows are written to a single ``data/options/validation/validation.csv``; a per-day
-summary and a cross-day stability block are printed.
+All graded rows are written to a single ``results/calibrations/<objective>/validation.csv``; a
+per-day summary and a cross-day stability block are printed.
 """
 from pathlib import Path
 
@@ -26,22 +27,18 @@ import pandas as pd
 import QuantLib as ql
 
 SRC = Path(__file__).parent.resolve()
-DATA = SRC.parent / "data"
-OPTIONS = DATA / "options"
-OUT = OPTIONS / "validation"
+RESULTS = SRC.parent / "results"
 
-OBJECTIVE = input("Validate `vol` or `price` calibrations? ").strip()
-
-if OBJECTIVE == "price":
-    CALIBRATIONS_FILE = DATA / "calibrations.csv"
-    TESTS = OPTIONS / "calibration_tests"
-    WRITEPATH = OUT / "validation.csv"
-elif OBJECTIVE == "vol":
-    CALIBRATIONS_FILE = DATA / "vol_calibrations.csv"
-    TESTS = OPTIONS / "vol_calibration_tests"
-    WRITEPATH = OUT / "vol_validation.csv"
-else:
+OBJECTIVE = input("Validate `vol` or `price` calibrations? ").strip().lower()
+if OBJECTIVE not in ("price", "vol"):
     raise SystemExit(f"unknown objective {OBJECTIVE!r}; expected 'price' or 'vol'")
+
+# Mirror calibrator_prototype._objective_paths: results/calibrations/<objective>/ holds
+# calibrations.csv, the per-day calibration_tests/ files, and the validation.csv written here.
+OUT = RESULTS / "calibrations" / OBJECTIVE
+CALIBRATIONS_FILE = OUT / "calibrations.csv"
+TESTS = OUT / "calibration_tests"
+WRITEPATH = OUT / "validation.csv"
 
 # Tunable acceptance/flag thresholds. "hard" = financially impossible -> reject;
 # "susp" (suspicious) = possible but atypical for SPX at these tenors -> flag, don't reject.
@@ -205,7 +202,7 @@ def main():
     all_reports = []
     for _, row in cal.iterrows():
         date = str(row["date"])
-        test_path = TESTS / f"cboe_spx_{"vol_" if OBJECTIVE == "vol" else ""}calibration_tests_{date}.csv"
+        test_path = TESTS / f"cboe_spx_calibration_tests_{date}.csv"
         if not test_path.exists():
             print(f"skipping {date}: no matching test file")
             continue

@@ -1,0 +1,28 @@
+\textbf{Example option prices} produced by $C_{\mathrm{H}}(\Phi; S,K,\tau,+1)$~\eqref{eq:heston-price}.
+\begin{figure}[H]
+    \begin{center}
+        \includegraphics[width=6.25cm,keepaspectratio=true]{results/surfaces/plots/tex/price_surface_puts.eps}
+        \includegraphics[width=6.25cm,keepaspectratio=true]{results/surfaces/plots/tex/price_surface_calls.eps}
+        \caption{Heston OTM option prices for $S_{\mathrm{ref}}$ 3254.0554 on March 16, 2020 with $\Phi = (0.0313,\ 9.9238,\ 1.488,\ -0.9238,\ 0.0343)$: puts wing (left) and calls wing (right).}
+        \label{Fig:wings}
+    \end{center}
+    \begin{center}
+        \includegraphics[width=6.25cm,keepaspectratio=true]{results/surfaces/plots/tex/put_smile.eps}
+        \includegraphics[width=6.25cm,keepaspectratio=true]{results/surfaces/plots/tex/call_smile.eps}
+        \caption{All put (left) and call (right) options from Figure~\eqref{eq:heston-price}}
+    \end{center}
+\end{figure}
+
+\vspace{1em}
+
+\noindent The surface above is the Heston model's own implied volatility on March 16, 2020.
+The fit uses 182 calibration cells across 12 maturities and 30 strikes,
+backed by 578,198 contracts of traded volume.
+The reference spot was $S_{\mathrm{ref}} = 3254.0554$,
+priced under a risk-free rate of 0.92\% and a dividend rate of 1.85\%.
+The intraday spot range was 0.96\%.
+Fit quality is 0.52 vol points of implied-volatility RMSE,
+with a relative-price RMSE of 0.0402.
+The Feller condition violates at this calibration,
+with $2\kappa\theta - \eta^2 = -1.5935$.
+    

@@ -19,6 +19,7 @@ Run:  python results/example_surface.py
 Out:  results/example_surface.csv        (long: strike, maturity_days, moneyness, implied_vol)
       results/example_surface_grid.csv   (pivot: index=strike, columns=maturity_days)
 """
+import os
 import numpy as np
 import pandas as pd
 import QuantLib as ql
@@ -26,13 +27,15 @@ from pathlib import Path
 
 SURFACES = Path(__file__).parent.resolve()
 OBJECTIVE = input("Validate `vol` or `price` calibrations? ").strip().lower()
-
+DATA = SURFACES / "data"
+if not DATA.exists():
+    os.mkdir(DATA)
 CALIBRATIONS_FILE = SURFACES.parent / "calibrations" / OBJECTIVE / "calibrations.csv"
 
 # Grid the surface is sampled on. Moneyness K/S around the money; maturities in calendar days
 # spanning the range the calibration actually sees (>= MIN_DTM=7 up to ~1y).
-MONEYNESS = np.round(np.arange(0.75, 1.205, 0.02), 4)   # 0.80 .. 1.20
-MATURITIES_DAYS = np.arange(30, 360, 30).tolist()
+MONEYNESS = np.round(np.arange(0.75, 1.205, 0.01), 4)   # 0.80 .. 1.20
+MATURITIES_DAYS = np.arange(30, 750, 30).tolist()
 
 from utils import implied_vol, build_heston_engine, heston_price
 
@@ -63,35 +66,23 @@ def main():
         maturity_date = calculation_date + ql.Period(days, ql.Days)
         for m in MONEYNESS:
             strike = m * spot
-            iv = implied_vol(strike, maturity_date, spot, heston_engine, bsm_process)
-            w, price = heston_price(strike, maturity_date, spot, heston_engine)
-            records.append({
-                'strike': round(strike, 4),
-                'maturity_days': days,
-                'moneyness': m,
-                'w': w,
-                'implied_vol': iv,
-                'price': price
-            })
+            for w in ('call', 'put'):
+                iv = implied_vol(strike, maturity_date, spot, heston_engine, bsm_process, w=w)
+                price = heston_price(strike, maturity_date, spot, w, heston_engine)
+                records.append({
+                    's_ref':spot,
+                    'strike': round(strike, 4),
+                    'maturity_days': days,
+                    'moneyness': m,
+                    'w': w,
+                    'implied_vol': iv,
+                    'price': price,
+                    'date': date
+                })
 
     surface = pd.DataFrame(records)
-    long_path = SURFACES / "data" /"example_surface.csv"    
+    long_path = DATA / r"example_surface.csv"    
     surface.to_csv(long_path, index=False)
-    
-    price_grid_path = SURFACES / "data" / "example_price_surface_grid.csv"
-    price_grid = surface.pivot(index='strike', columns='maturity_days', values='price')
-    price_grid.to_csv(price_grid_path)
-
-    vol_grid_path = SURFACES / "data" / "example_surface_grid.csv"
-    vol_grid = surface.pivot(index='strike', columns='maturity_days', values='implied_vol')
-    vol_grid.to_csv(vol_grid_path)
-
-    with pd.option_context('display.float_format', '{:.4f}'.format,
-                           'display.max_columns', None, 'display.width', 200):
-        print(vol_grid, '\n', price_grid)
-    print(f"\nwrote {len(surface)} grid points                -> {long_path}")
-    print(f"wrote strike x maturity price pivot   -> {price_grid_path}")
-    print(f"wrote strike x maturity vol pivot     -> {vol_grid_path}")
 
 
 if __name__ == "__main__":

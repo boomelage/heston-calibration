@@ -14,6 +14,7 @@ Run:  python results/make_price_surface_eps.py
 Out:  results/price_surface_calls.eps, price_surface_puts.eps, price_surface_both.eps
       results/price_surface.tex
 """
+import os
 import sys
 import numpy as np
 import pandas as pd
@@ -22,9 +23,12 @@ matplotlib.use('Agg')               # headless: write files, never open a window
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # registers the '3d' projection; also the ax type below
 from pathlib import Path
+import QuantLib as ql
 
-RESULTS = Path(__file__).parent.resolve()
+RESULTS = Path(__file__).parent
 SURFACE_CSV = RESULTS / "data" / "example_surface.csv"
+TEXDIR = RESULTS / "plots" / "tex"
+TEXDIR.mkdir(parents=True, exist_ok=True)
 
 # Match the default LaTeX font (Computer Modern serif) so the axis text blends with the surrounding
 # document. Uses matplotlib's bundled Computer Modern (cmr10) -- no LaTeX/usetex toolchain required.
@@ -41,6 +45,7 @@ ELEV, AZIM = 25, -60
 
 def plot_surface(grid, out_path, title=None):
     """Draw one strike x maturity x price surface (grid: index=strike, columns=maturity_days)."""
+
     strikes = grid.index.to_numpy(dtype=float)
     maturities = grid.columns.to_numpy(dtype=float) / 365.0      # days -> years, like the example
     X, Y = np.meshgrid(strikes, maturities)                      # (n_mat, n_strike)
@@ -62,19 +67,51 @@ def plot_surface(grid, out_path, title=None):
     plt.close(fig)
     print(f"wrote {out_path.name}")
 
+def _load_surface(SURFACE_CSV):
+
+    df = pd.read_csv(SURFACE_CSV)
+    date = pd.Timestamp(df['date'][0]).strftime("%B %d, %Y")
+    spot = float(df['s_ref'].unique()[0]) 
+    return (spot, date, df)
+
+def write_otm_TeX(spot, date):
+
+    TeX = \
+r"""\begin{figure}[H]
+    \begin{center}
+        \includegraphics[width=6.25cm,keepaspectratio=true]{results/surfaces/plots/tex/price_surface_puts.eps}
+        \includegraphics[width=6.25cm,keepaspectratio=true]{results/surfaces/plots/tex/price_surface_calls.eps}
+        \caption{Heston OTM option prices for snapped $S_{\mathrm{ref}}$ <spot> on <date>: puts wing (left) and calls wing (right).}
+        \label{Fig:wings}
+    \end{center}
+\end{figure}
+    """
+    TeX = TeX.replace('<spot>',str(spot))
+    TeX = TeX.replace('<date>',str(date))
+    tex_path = TEXDIR / r"otm.tex"
+    tex_path.write_text(TeX)
+
+def grid_for(df, side):
+    
+    surface = df[df['w'] == side].copy()
+    surface['moneyness'] = np.where(
+        surface['w'] == 'call',
+        surface['s_ref'] / surface['strike'],
+        surface['strike'] / surface['s_ref']
+    )
+    surface = surface[surface['moneyness']<=1]
+    print(surface)
+    return surface.pivot(index='strike', columns='maturity_days', values='price')
 
 def main():
     if not SURFACE_CSV.exists():
         sys.exit(f"{SURFACE_CSV} not found -- run `python results/example_surface.py` first.")
-    surface = pd.read_csv(SURFACE_CSV)
+    spot, date, df = _load_surface(SURFACE_CSV)
+    print(date)
 
-    def grid_for(side):
-        df = surface if side is None else surface[surface['w'] == side]
-        return df.pivot(index='strike', columns='maturity_days', values='price')
-
-    plot_surface(grid_for('call'), RESULTS / "plots" / "price_surface_calls.eps")
-    plot_surface(grid_for('put'), RESULTS / "plots" / "price_surface_puts.eps")
-
-
+    plot_surface(grid_for(df, 'call'), TEXDIR / "price_surface_calls.eps")
+    plot_surface(grid_for(df, 'put'), TEXDIR / "price_surface_puts.eps")
+    write_otm_TeX(spot, date)
+    
 if __name__ == "__main__":
     main()

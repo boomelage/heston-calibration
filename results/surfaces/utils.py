@@ -1,9 +1,13 @@
 import QuantLib as ql
 import numpy as np
 
-def implied_vol(strike, maturity_date, spot, heston_engine, bsm_process):
-    """Price the OTM European option under Heston, invert to a Black vol. NaN if it can't converge."""
-    payoff_type = ql.Option.Call if strike >= spot else ql.Option.Put
+def implied_vol(strike, maturity_date, spot, heston_engine, bsm_process, w=None):
+    """Price a European option under Heston, invert to a Black vol. NaN if it can't converge.
+    If w is None, picks the OTM side (call above spot, put below)."""
+    if w is not None:
+        payoff_type = ql.Option.Call if w == 'call' else ql.Option.Put
+    else:
+        payoff_type = ql.Option.Call if strike >= spot else ql.Option.Put
     option = ql.EuropeanOption(ql.PlainVanillaPayoff(payoff_type, strike),
                                ql.EuropeanExercise(maturity_date))
     option.setPricingEngine(heston_engine)
@@ -32,11 +36,10 @@ def build_heston_engine(row, calculation_date):
     engine = ql.AnalyticHestonEngine(ql.HestonModel(process))
     return engine, s_handle, r_ts, g_ts, day_count
 
-def heston_price(strike, maturity_date, spot, heston_engine):
-    """Price the OTM European option (call above spot, put below) under Heston. Returns (w, NPV)."""
-    w = 'call' if strike >= spot else 'put'
+def heston_price(strike, maturity_date, spot, w, heston_engine):
+    """Price the European option under Heston. Returns (NPV)."""
     payoff_type = ql.Option.Call if w == 'call' else ql.Option.Put
     option = ql.EuropeanOption(ql.PlainVanillaPayoff(payoff_type, strike),
                                ql.EuropeanExercise(maturity_date))
     option.setPricingEngine(heston_engine)
-    return w, option.NPV()
+    return option.NPV()

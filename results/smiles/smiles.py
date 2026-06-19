@@ -41,6 +41,9 @@ USE_LEGEND = True
 # fresh clone that has not been bootstrapped.
 ENRICH_MARKET = True
 
+CALLXLO, CALLXHI = 0.9, 1.6
+PUTXLO, PUTXHI = 0.6, 1.1 
+
 # Market-scatter window. OTM market moneyness (S/K for calls, K/S for puts) is always in (0, 1];
 # we drop the deep wing below MARKET_M_MIN and clip the IV outliers the deep-OTM corner throws.
 MARKET_M_MIN = 0.5
@@ -219,8 +222,8 @@ def _save_day_figure(day, cmap, use_legend, enrich):
         ax_put.set_ylim(finite.min() - pad, finite.max() + pad)
 
     xpad = 0.01
-    ax_put.set_xlim(XLO - xpad, XHI + xpad)
-    ax_call.set_xlim(XLO - xpad, XHI + xpad)
+    ax_put.set_xlim(PUTXLO - xpad, PUTXHI + xpad)
+    ax_call.set_xlim(CALLXLO - xpad, CALLXHI + xpad)
 
     ax_put.set_ylabel(r'Black implied vol $\widehat{\sigma}(\Phi^{\star})$')
     ax_put.set_xlabel(r'Moneyness $K/S$ (put wing)')

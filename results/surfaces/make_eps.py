@@ -14,7 +14,6 @@ Run:  python results/make_price_surface_eps.py
 Out:  results/price_surface_calls.eps, price_surface_puts.eps, price_surface_both.eps
       results/price_surface.tex
 """
-import sys
 import pickle
 import numpy as np
 import pandas as pd
@@ -23,7 +22,6 @@ matplotlib.use('Agg')               # headless: write files, never open a window
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # registers the '3d' projection; also the ax type below
 from pathlib import Path
-import QuantLib as ql
 
 SURFACES = Path(__file__).parent
 SURFACE_CSV = SURFACES / "data" / "example_surface.csv"
@@ -53,9 +51,19 @@ def plot_surface(grid, out_path, title=None, invert_K=False):
     Z = grid.to_numpy(dtype=float).T                             # (n_mat, n_strike)
 
     fig = plt.figure(figsize=(5.0, 4.0))
+    plt.style.use('fast')
     ax: Axes3D = fig.add_subplot(111, projection='3d')  # type: ignore[assignment]
-    ax.plot_surface(X, Y, Z, cmap='jet', rstride=1, cstride=1,
-                    linewidth=0.2, edgecolors='k', antialiased=False)
+    surf = ax.plot_surface(X, Y, Z, rstride=3, cstride=3,
+                    color="white", edgecolor="black",
+                    linewidth=0.4, shade=False, antialiased=True)
+    
+    for pane in (ax.xaxis, ax.yaxis, ax.zaxis):
+        pane.pane.fill = False
+        pane.pane.set_edgecolor("0.7")
+        pane.pane.set_linewidth(0.5)
+ 
+    ax.grid(False)
+    ax.tick_params(labelsize=9, colors="black")
     ax.view_init(elev=ELEV, azim=AZIM)
     ax.set_xlabel(r'strike ($K$)')
     if invert_K:
@@ -65,7 +73,8 @@ def plot_surface(grid, out_path, title=None, invert_K=False):
     ax.set_zlim(bottom=0)
     if title:
         ax.set_title(title)
-    fig.tight_layout()
+    # fig.colorbar(surf, shrink=0.5, aspect=5)
+    # fig.tight_layout()
     fig.savefig(out_path, format='eps', bbox_inches='tight')
     plt.close(fig)
     print(f"wrote {out_path.name}")
@@ -152,7 +161,7 @@ def main():
     CALIBRATIONS_FILE = SURFACES.parent / "calibrations" / 'price' / "calibrations.csv"
     cal = pd.read_csv(CALIBRATIONS_FILE)
     cal = cal[cal['feller']>=0].copy().sort_values(by='rmse',ascending=True).reset_index(drop=True)
-    target_date = cal['date'][1]
+    target_date = cal['date'][0]
     make_surface(target_date=target_date)
     df, day_results = _load_data()
     date = day_results['date']

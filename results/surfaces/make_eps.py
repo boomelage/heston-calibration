@@ -158,8 +158,8 @@ def main():
     from example_surface import make_surface, OBJECTIVE
     CALIBRATIONS_FILE = SURFACES.parent / "calibrations" / OBJECTIVE / "calibrations.csv"
     cal = pd.read_csv(CALIBRATIONS_FILE)
-    cal = cal[cal['feller']>=0].copy(
-        ).sort_values(by='iv_rmse',ascending=True).reset_index(drop=True)
+    cal = cal.sort_values(by='iv_rmse',ascending=True).reset_index(drop=True)
+
     target_date = cal['date'][0]
     df, day_results = make_surface(target_date=target_date)
     date = day_results['date']

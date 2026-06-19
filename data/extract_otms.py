@@ -2,7 +2,13 @@ import os
 import sys
 from pathlib import Path
 import pandas as pd
-from model_settings import ms
+DATA = Path(__file__).parent.resolve()
+SRC = DATA.parent / "src"
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
+from utils import df_moneyness
+
+OTM = DATA/"options"/"otm"
 
 def extract_otms(file_dir):
     print(file_dir)
@@ -30,7 +36,7 @@ def extract_otms(file_dir):
     df = df[df['trade_iv']>0].copy()
     df['w'] = df['w'].replace({'C': 'call', 'P': 'put'})
     df = df[['quote_datetime', 'strike_price', 'w', 'trade_size', 'trade_price','trade_iv', 'spot_price','days_to_maturity']]
-    df['moneyness'] = ms.df_moneyness(df)
+    df['moneyness'] = df_moneyness(df)
     df = df[df['moneyness']<0]
     df = df.drop(columns='moneyness').dropna()
     times = df['quote_datetime'].drop_duplicates().sort_values()
@@ -47,10 +53,7 @@ def extract_otms(file_dir):
 
 def main():
     from joblib import Parallel, delayed
-    
-    DATA = Path(__file__).parent.resolve()
     RAW = DATA/"options"/"raw"
-    OTM = DATA/"options"/"otm"
     max_jobs = max(1, os.cpu_count() // 4)
 
     if str(RAW) not in sys.path:

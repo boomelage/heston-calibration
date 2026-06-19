@@ -50,6 +50,8 @@ RESULTS = SRC.parent / "results"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+from utils import _prepare_options
+
 from calibrate_heston import calibrate_heston, IV_RMSE_ACCEPT
 
 if str(DATA) not in sys.path:
@@ -84,8 +86,7 @@ def _objective_paths(objective):
     the same directory from its own OBJECTIVE, so the two stay in lock-step.
     """
     base = RESULTS / "calibrations" / objective
-    if not base.exists():
-        os.mkdir(base)
+    base.mkdir(parents=True, exist_ok=True)
     return (base / "calibrations.csv",
             base / "rejections.csv",
             base / "calibration_tests")
@@ -106,7 +107,7 @@ def _skip_day(test_path, reason, detail, iv_rmse=np.nan,
         os.remove(test_path)
         note = "cleared stale tests file"
     else:
-        note = "nothing written"
+        note = "nothing written\n"
     print(f"{date}: {detail}; {note}")
     return {'date': date, 'reason': reason, 'detail': detail, 'iv_rmse': iv_rmse,
             'n_maturities': n_maturities, 'n_strikes': n_strikes, 'n_cells': n_cells}
@@ -115,9 +116,11 @@ def _skip_day(test_path, reason, detail, iv_rmse=np.nan,
 def _select_surface(df):
     """Pick the day's calibration surface in moneyness-normalised (K*) strike space.
 
-    Top MAX_NT maturities by traded volume; within each, the MAX_NK nearest-the-money strikes per
-    wing (highest OTM puts, lowest OTM calls) on K* (already centred on S_ref). Returns the selected
-    snapshot rows with original strike/spot retained for repricing, or None if no maturity qualifies.
+    The trades are OTM calls and puts spanning both wings (see `utils._prepare_options`). Top MAX_NT
+    maturities by traded volume; within each, the MAX_NK nearest-the-money strikes per wing on K*
+    (already centred on S_ref): the highest OTM puts (below spot) and the lowest OTM calls (above
+    spot). Returns the selected snapshot rows with original strike/spot retained for repricing, or
+    None if no maturity qualifies.
     """
     byt = df.groupby('days_to_maturity')
     vol_by_t = byt['trade_size'].sum().sort_values(ascending=False)
@@ -139,12 +142,16 @@ def _select_surface(df):
 def calibrate_by_day(filepath, OBJECTIVE):
     # Per-day tests file: the directory depends on OBJECTIVE (results/calibrations/<objective>/
     # calibration_tests/); validate_calibrations.py rebuilds the identical name from its own OBJECTIVE.
-    # Derive the date from the OTM basename rather than string-replacing 'otm', which would also
-    # rewrite the filename token and desync the validator.
+    # Derive the date from the trailing _<date> token of the raw trades filename (the date is always
+    # the last underscore-separated field before .csv), independent of the file's prefix.
     tests_dir = _objective_paths(OBJECTIVE)[2]
-    date_str = os.path.basename(filepath)[len('cboe_spx_otm_'):-len('.csv')]
+    filename = os.path.basename(filepath)
+    date_str = filename[filename.rfind('_')+1:filename.rfind('.csv')]
     test_path = str(tests_dir / f"cboe_spx_calibration_tests_{date_str}.csv")
+    # Read the raw CBOE trades file and clean it in-memory to the OTM snapshot the surface needs
+    # (column subset/rename, C/P -> call/put, calendar DTM, OTM-only) via utils._prepare_options.
     df = pd.read_csv(filepath)
+    df = _prepare_options(df)
     df = df[(df['trade_iv'] > 0) & (df['days_to_maturity'] >= MIN_DTM)].copy()
     if df.empty:
         return _skip_day(test_path, "no_trades", "no trades after IV/DTM filter")
@@ -253,7 +260,7 @@ def calibrate_by_day(filepath, OBJECTIVE):
 
 def main():
     parser = argparse.ArgumentParser(description="Attempt per-day calibration of Heston paramaters off option trades data")
-    parser.add_argument("--OBJECTIVE", type=str, default="price", choices=["price", "vol"],
+    parser.add_argument("--OBJECTIVE", type=str, default="vol", choices=["price", "vol"],
                         help="Decide whether to minimize residuals of `price` or `vol`")
     args = parser.parse_args()
 
@@ -266,14 +273,14 @@ def main():
     from joblib import Parallel, delayed
     max_jobs = max(1, os.cpu_count() // 4)
     
-    OTM = Path(__file__).parent.parent / "data" / "options" / "otm"
-    files = [f for f in os.listdir(OTM) if f.endswith('.csv')]
-    files = pd.Series([os.path.join(OTM, f) for f in files]).sort_values(ascending=False).reset_index(drop=True)
+    TRADES = Path(__file__).parent.parent / "data" / "options" / "raw"
+    files = [f for f in os.listdir(TRADES) if f.endswith('.csv')]
+    files = pd.Series([os.path.join(TRADES, f) for f in files]).sort_values(ascending=True).reset_index(drop=True)[:100]
 
     # Every attempted day returns exactly one row: an accepted calibration (no 'reason' key) or a
     # rejection (carries 'reason'). Split them into the two complementary files. The loop covers all
-    # OTM files, so both files are fully regenerated each run (no stale rows survive); an empty set
-    # removes its file rather than leaving it stale.
+    # raw trades files, so both files are fully regenerated each run (no stale rows survive); an empty
+    # set removes its file rather than leaving it stale.
     results = [r for r in Parallel(n_jobs=max_jobs)(delayed(calibrate_by_day)(f, args.OBJECTIVE) for f in files)
                if r is not None]
     accepted = [r for r in results if 'reason' not in r]

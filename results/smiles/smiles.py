@@ -41,7 +41,6 @@ def _normalize_dates(dates):
 def main(dates, OUT=None, use_legend=USE_LEGEND):
     dates = _normalize_dates(dates)
 
-    # One pass per day: pull its surface + calibration, keep what the plot and the TeX need.
     days = []
     for date in dates:
         surface, day_results = make_surface(target_date=date, OUT=OUT, SAVE=False)
@@ -54,53 +53,47 @@ def main(dates, OUT=None, use_legend=USE_LEGEND):
                      'market': day_results['market'], 'fit': day_results['fit']})
 
     cmap = cm.jet
-    n = len(days)
-    # Each day is its own subfigure row: a (puts | calls) pair that shares its price (y) axis,
-    # plus its own caption and its own colorbar (each day spans a different maturity range).
-    fig = plt.figure(figsize=(8, 2.7 * n), layout='constrained')
-    subfigs = fig.subfigures(n, 1)
-    if n == 1:
-        subfigs = [subfigs]
-    rows = []
-    for sf, day in zip(subfigs, days):
-        T = sorted(day['T'])
-        norm = mcolors.Normalize(vmin=min(T), vmax=max(T))
-        ax_put, ax_call  = sf.subplots(1, 2, sharey=True)
-        for t in T:
-            df = day['surface'][day['surface']['maturity_days'] == t]
-            dfp = df[df['w'] == 'put'].sort_values(by='strike')
-            ax_put.plot(dfp['strike'], dfp['price'], color=cmap(norm(t)))
-            dfc = df[df['w'] == 'call'].sort_values(by='strike')
-            ax_call.plot(dfc['strike'], dfc['price'], color=cmap(norm(t)), label=str(t))
-        ax_put.set_ylabel(r'Price ($C_{\mathrm{H}}(\Phi^\star)$)')
-        sf.suptitle(_row_caption(day), fontsize=8)
-        lbl = sf.supxlabel('Strike ($K$)')
-        # Maturity key on the right of the row: legend or colorbar. Both reserve right-side space,
-        # so the 'Strike' re-centring below works either way.
-        if use_legend:
-            handles, labels = ax_call.get_legend_handles_labels()
-            sf.legend(handles, labels, loc='outside center right',
-                      title='Days to maturity', fontsize=7, title_fontsize=8)
-        else:
-            sm = cm.ScalarMappable(cmap=cmap, norm=norm)
-            sf.colorbar(sm, ax=(ax_put, ax_call), label='Days to maturity')
-        rows.append((ax_put, ax_call, lbl))
+    for day in days:
+        _save_day_figure(day, cmap, use_legend)
 
-    # `supxlabel` centers on the whole subfigure, but the colorbar steals right-side space, so the
-    # two panels' midpoint is left of that. Resolve the layout, freeze it, then re-centre each
-    # 'Strike' on the actual span of its two panels. (Stacked subfigures are full width, so axes
-    # x-fractions and the subfigure-relative `supxlabel` x coincide.)
+    write_smiles_TeX(days)
+
+
+def _save_day_figure(day, cmap, use_legend):
+    T = [
+        30, 60, 90, 180, 270, 350, 540 
+    ]#sorted(day['T'])
+    norm = mcolors.Normalize(vmin=min(T), vmax=max(T))
+
+    fig, (ax_put, ax_call) = plt.subplots(1, 2, sharey=True,
+                                           figsize=(8, 2.7),
+                                           layout='constrained')
+    for t in T:
+        df = day['surface'][day['surface']['maturity_days'] == t]
+        dfp = df[df['w'] == 'put'].sort_values(by='strike')
+        ax_put.plot(dfp['strike'], dfp['price'], color=cmap(norm(t)))
+        dfc = df[df['w'] == 'call'].sort_values(by='strike')
+        ax_call.plot(dfc['strike'], dfc['price'], color=cmap(norm(t)), label=str(t))
+    ax_put.set_ylabel(r'Price: $C_{\mathrm{H}}(\Phi^{\star})$')
+    fig.suptitle(_row_caption(day), fontsize=8)
+    lbl = fig.supxlabel('Strike ($K$)')
+
+    if use_legend:
+        handles, labels = ax_call.get_legend_handles_labels()
+        fig.legend(handles, labels, loc='outside center right',
+                   title='Days to maturity', fontsize=7, title_fontsize=8)
+    else:
+        sm = cm.ScalarMappable(cmap=cmap, norm=norm)
+        fig.colorbar(sm, ax=(ax_put, ax_call), label='Days to maturity')
+
     fig.draw_without_rendering()
     fig.set_layout_engine('none')
-    for ax_put, ax_call, lbl in rows:
-        bc, bp = ax_call.get_position(), ax_put.get_position()
-        lbl.set_x((min(bc.x0, bp.x0) + max(bc.x1, bp.x1)) / 2)
+    bc, bp = ax_call.get_position(), ax_put.get_position()
+    lbl.set_x((min(bc.x0, bp.x0) + max(bc.x1, bp.x1)) / 2)
 
-    tag_all = "_".join(day['tag'] for day in days)
-    fig.savefig(FIGURES / f'smiles_{tag_all}.eps', format='eps', bbox_inches='tight')
+    fig.savefig(FIGURES / f'smiles_{day["tag"]}.eps',
+                format='eps', bbox_inches='tight')
     plt.close(fig)
-
-    write_smiles_TeX(tag_all, days)
 
 
 def _row_caption(day):
@@ -116,26 +109,29 @@ def _row_caption(day):
             f"RMSE$={f['rmse']:.4f}$")
 
 
-def write_smiles_TeX(tag_all, days):
-    """Generate `figures/smiles.tex`: just the tiled figure float. The per-row calibration values
-    (S_ref, Phi, Feller, IV-RMSE, RMSE) are drawn in the figure itself by `_row_caption`, so no
-    prose is emitted here."""
+def write_smiles_TeX(days):
+    """Generate `figures/smiles.tex`: one figure float per day so LaTeX can break across pages.
+    Calibration values are drawn in each figure by `_row_caption`."""
 
-    date_list = ", ".join(day['date'].strftime(r"%B %d, %Y") for day in days)
-    caption = (f"Heston option prices for {date_list}: put wing (left) and call wing (right) "
-               r"per day.")
+    blocks = []
+    for day in days:
+        date_pretty = day['date'].strftime(r"%B %d, %Y")
+        caption = (f"Heston option prices for {date_pretty}: "
+                   r"put wing (left) and call wing (right).")
+        label = f"Fig:smiles_{day['tag']}"
+        block = (
+            r"\begin{figure}[H]" "\n"
+            r"    \begin{center}" "\n"
+            f"        \\includegraphics[width=\\linewidth,keepaspectratio=true]"
+            f"{{results/smiles/figures/smiles_{day['tag']}.eps}}\n"
+            # f"        \\caption{{{caption}}}\n"
+            f"        \\label{{{label}}}\n"
+            r"    \end{center}" "\n"
+            r"\end{figure}"
+        )
+        blocks.append(block)
 
-    TeX = \
-r"""\begin{figure}[H]
-    \begin{center}
-        \includegraphics[width=\linewidth,keepaspectratio=true]{results/smiles/figures/smiles_<tag>.eps}
-        \caption{<caption>}
-        \label{Fig:smiles}
-    \end{center}
-\end{figure}
-"""
-    TeX = TeX.replace('<tag>', tag_all).replace('<caption>', caption)
-    (FIGURES / "smiles.tex").write_text(TeX)
+    (FIGURES / "smiles.tex").write_text("\n".join(blocks) + "\n")
 
 
 def make_surfaces_for(dates):
@@ -146,6 +142,6 @@ if __name__ == "__main__":
     CALIBRATIONS_FILE = SURFACES.parent / "calibrations" / 'price' / "calibrations.csv"
     import pandas as pd
     cal = pd.read_csv(CALIBRATIONS_FILE)
-    cal = cal[cal['feller']>=0]
-    dates = cal['date'][:4]
+    cal = cal[cal['feller']>=0].copy().reset_index(drop=True)
+    dates = cal['date']
     make_surfaces_for(dates=dates)

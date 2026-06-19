@@ -93,6 +93,7 @@
 \DeclareMathOperator{\clip}{clip}
 
 
+
 \author[R. Briciu]{Radu Briciu}
 \title[A stochastic volatility model parameter calibration routine]{An automated intraday stochastic volatility model parameter calibration routine}
 
@@ -540,12 +541,7 @@
 	sets agree on $1{,}579$ days and differ on $200$, split $134$ price-only and $66$ IV-only, all
 	near the pegging boundary.
 	\\ \\
-	The lesson is that the objective is not the binding choice. Aligning the optimiser with the
-	acceptance metric does not relieve the pegging and slightly aggravates it. Pegging is a
-	structural degeneracy in the $(\kappa,\rho,\eta)$ skew subspace, and it survives a change of
-	residual. The IV-space objective weighs the deep-OTM wings more heavily than the price
-	objective, since it no longer discounts them by their small prices. It therefore asks for more
-	skew and reaches the box wall more often. Feller violation rises from $99.3\%$ to $99.7\%$ of
+	\subsubsection{Partial conclusions} The lesson is that the objective is not the binding choice. Aligning the optimiser with the acceptance metric does not relieve the pegging and slightly aggravates it. Pegging is a structural degeneracy in the $(\kappa,\rho,\eta)$ skew subspace, and it survives a change of residual. The IV-space objective weighs the deep-OTM wings more heavily than the price objective, since it no longer discounts them by their small prices. It therefore asks for more skew and reaches the box wall more often. Feller violation rises from $99.3\%$ to $99.7\%$ of
 	accepted days and the median $\eta$ edges up, both consistent with that pressure. One cost is
 	specific to abandoning the price-space objective. The returned relative-price error is no
 	longer controlled, and on a few accepted days it is large (maximum $J_{\mathrm{px}}=36.3$
@@ -557,6 +553,8 @@
 	
 	\newpage
 	\input{results/surfaces/plots/tex/otm.tex}
+	
+	\subsubsection{Avenues for improvement} The Levenberg--Marquardt and optimizer end criteria have been tuned and constitute a natural starting point for bulk parameter acceptance. No attempt has been made to reduce pegging by fixing $\theta$, $\eta$, or $v_0$ from preceding trading days. Other candidate levers include raising the maturity floor $\tau_{\min}$ to remove the steep short-dated skew that single-factor Heston cannot match, weighting helpers by vega or traded volume, and adding a soft Feller penalty to the restart-selection criterion.
 	
 	\newpage
 	{\small \begin{thebibliography}{9}
@@ -644,8 +642,15 @@
 	\end{algorithm}
 	
 	\newpage
+	\begingroup
+	\raggedbottom
 	\section{The positive exceptions}
+	
+	\setlength{\floatsep}{1pt plus 1pt minus 1pt}
+	\setlength{\textfloatsep}{1pt plus 1pt minus 1pt}
+	\setlength{\intextsep}{1pt plus 1pt minus 1pt}
 	\input{results/smiles/figures/smiles.tex}
+	\endgroup
 	
 	
 \end{document}

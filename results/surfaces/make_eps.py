@@ -25,10 +25,10 @@ from mpl_toolkits.mplot3d import Axes3D  # registers the '3d' projection; also t
 from pathlib import Path
 import QuantLib as ql
 
-RESULTS = Path(__file__).parent
-SURFACE_CSV = RESULTS / "data" / "example_surface.csv"
-DAY_RESULTS = RESULTS / "data" / "day_results.pkl"
-TEXDIR = RESULTS / "plots" / "tex"
+SURFACES = Path(__file__).parent
+SURFACE_CSV = SURFACES / "data" / "example_surface.csv"
+DAY_RESULTS = SURFACES / "data" / "day_results.pkl"
+TEXDIR = SURFACES / "plots" / "tex"
 TEXDIR.mkdir(parents=True, exist_ok=True)
 
 # Match the default LaTeX font (Computer Modern serif) so the axis text blends with the surrounding
@@ -79,7 +79,20 @@ def _load_data():
 def write_otm_TeX(spot, date, params, market, fit):
 
     TeX = \
-r"""\textbf{Example option prices} produced by the calibrated model pricing operator $C_{\mathrm{H}}(\Phi^\star)$ having started from \eqref{eq:heston-price} and ending at \eqref{eq:accept}.
+r"""
+\subsubsection{Example option prices} Produced by the market\!\,\footnote{
+The surface above is the Heston model's own implied volatility on <date>.
+The fit uses <nhelpers> calibration cells across <nmats> maturities and <nstrikes> strikes,
+backed by <volume> contracts of traded volume.
+The reference spot was $S_{\mathrm{ref}} = <spot>$,
+priced under a risk-free rate of <r>\% and a dividend rate of <q>\%.
+The intraday spot range was <rangepct>\%.<movenote>
+Fit quality is <ivrmse> vol points of implied-volatility RMSE,
+with a relative-price RMSE of <rmse>.
+The Feller condition <fellersign> at this calibration,
+with $2\kappa\theta - \eta^2 = <feller>$.
+} 
+calibrated pricing operator $C_{\mathrm{H}}(\Phi^\star)$~\eqref{eq:heston-price}~\eqref{eq:accept}.
 \begin{figure}[H]
     \begin{center}
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/surfaces/plots/tex/price_surface_puts.eps}
@@ -94,17 +107,7 @@ r"""\textbf{Example option prices} produced by the calibrated model pricing oper
     \end{center}
 \end{figure}
 
-\noindent The surface above is the Heston model's own implied volatility on <date>.
-The fit uses <nhelpers> calibration cells across <nmats> maturities and <nstrikes> strikes,
-backed by <volume> contracts of traded volume.
-The reference spot was $S_{\mathrm{ref}} = <spot>$,
-priced under a risk-free rate of <r>\% and a dividend rate of <q>\%.
-The intraday spot range was <rangepct>\%.<movenote>
-Fit quality is <ivrmse> vol points of implied-volatility RMSE,
-with a relative-price RMSE of <rmse>.
-The Feller condition <fellersign> at this calibration,
-with $2\kappa\theta - \eta^2 = <feller>$.
-    """
+"""
     TeX = TeX.replace('<spot>', str(spot))
     TeX = TeX.replace('<date>', str(date.strftime(r"%B %d, %Y")))
     TeX = TeX.replace('<theta>', str(round(params['theta'], 4)))
@@ -146,9 +149,11 @@ def smile_for(df, side):
     
 def main():
     from example_surface import make_surface
-    make_surface(target_date=r'2020-03-16')
-    if not SURFACE_CSV.exists():
-        sys.exit(f"{SURFACE_CSV} not found -- run `python results/example_surface.py` first.")
+    CALIBRATIONS_FILE = SURFACES.parent / "calibrations" / 'price' / "calibrations.csv"
+    cal = pd.read_csv(CALIBRATIONS_FILE)
+    cal = cal[cal['feller']>=0].copy().sort_values(by='rmse',ascending=True).reset_index(drop=True)
+    target_date = cal['date'][1]
+    make_surface(target_date=target_date)
     df, day_results = _load_data()
     date = day_results['date']
     spot = day_results['spot']

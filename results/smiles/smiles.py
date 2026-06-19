@@ -27,7 +27,7 @@ RAW = REPO / "data" / "options" / "raw"
 if str(SURFACES) not in sys.path:
     sys.path.insert(0, str(SURFACES))
 
-from example_surface import make_surface # type: ignore --> Intentional Pylance ingore
+from example_surface import make_surface, OBJECTIVE # type: ignore --> Intentional Pylance ingore
 from utils import build_heston_engine, implied_vol # type: ignore
 
 FIGURES = SMILES / "figures"
@@ -43,12 +43,12 @@ ENRICH_MARKET = True
 
 # Market-scatter window. OTM market moneyness (S/K for calls, K/S for puts) is always in (0, 1];
 # we drop the deep wing below MARKET_M_MIN and clip the IV outliers the deep-OTM corner throws.
-MARKET_M_MIN = 0.75
+MARKET_M_MIN = 0.5
 MARKET_IV_MAX = 2.0
 # Both wings share one moneyness window (S/K calls, K/S puts). The model curve is evaluated
 # straight off the Heston engine on this grid, so each wing spans the full window instead of
 # stopping where the saved surface's K/S grid ran out (the call wing only reached S/K ~= 0.91).
-XLO, XHI = MARKET_M_MIN, 1.1
+XLO, XHI = MARKET_M_MIN, 1.75
 
 def _normalize_dates(dates):
     """Accept a single %Y-%m-%d date string or a list of them; return a list of strings.
@@ -112,13 +112,15 @@ def _load_market_vols(tag, T):
     """Fetch real market implied vols for one trading day from data/options/raw/.
 
     Mirrors `data/extract_otms.py`: parses the CBOE trade file, computes calendar
-    `days_to_maturity`, keeps positive-IV OTM trades, then collapses each (w, maturity, strike)
-    to a single **volume-weighted** point (weights = `trade_size`) so the day shows one market
-    mark per strike and maturity. `moneyness` follows the plot convention (S/K calls, K/S puts)
-    and is itself volume-weighted (intraday spot moves across a strike's trades). Each point also
-    carries `cmat`, its maturity snapped to the nearest model maturity in `T`, so the scatter can
-    be colored to match the corresponding line. Returns None if no raw file exists for `tag`
-    (the raw files are git-ignored)."""
+    `days_to_maturity`, keeps positive-IV OTM trades, then collapses each (maturity, strike) to a
+    single **volume-weighted** point (weights = `trade_size`). The implied vol at a strike is a
+    property of the strike, not of which side was traded, so (exactly like the model lines, which
+    invert the OTM option at every strike) each point is reparameterised onto *both* wings: the
+    call panel at `S/K`, the put panel at `K/S`. That fills the whole window on each wing, the OTM
+    half from same-side trades and the in-the-money half (moneyness > 1) from the liquid
+    opposite-side OTM trades. `cmat` is the maturity snapped to the nearest model maturity in `T`,
+    so each mark takes the color of its line. Returns None if no raw file exists for `tag` (the
+    raw files are git-ignored)."""
     candidates = [RAW / f"UnderlyingOptionsTradesCalcs_{tag}.csv", *sorted(RAW.glob(f"*{tag}.csv"))]
     raw_path = next((p for p in candidates if p.exists()), None)
     if raw_path is None:
@@ -138,31 +140,38 @@ def _load_market_vols(tag, T):
     spot, strike = df['underlying_bid'], df['strike']
     otm = (((df['w'] == 'call') & (strike > spot)) | ((df['w'] == 'put') & (strike < spot)))
     df = df[otm].copy()
-    df['moneyness'] = np.where(df['w'] == 'call',
-                               df['underlying_bid'] / df['strike'],
-                               df['strike'] / df['underlying_bid'])
 
     lo, hi = min(T), max(T)
     df = df[(df['days_to_maturity'] >= lo) & (df['days_to_maturity'] <= hi)]
-    df = df[(df['moneyness'] >= MARKET_M_MIN) & (df['moneyness'] <= 1.0)]
     df = df[df['trade_iv'] <= MARKET_IV_MAX]
-    df = df[['w', 'days_to_maturity', 'strike', 'moneyness', 'trade_iv', 'trade_size']].dropna()
+    df = df[['days_to_maturity', 'strike', 'trade_iv', 'underlying_bid', 'trade_size']].dropna()
     if df.empty:
-        return df.assign(volume=[], cmat=[])
+        cols_out = ['w', 'days_to_maturity', 'strike', 'moneyness', 'trade_iv', 'volume', 'cmat']
+        return pd.DataFrame(columns=cols_out)
 
-    # Volume-weighted average per (wing, maturity, strike): one displayed point each.
+    # Volume-weighted average per (maturity, strike): one IV and one reference spot (the intraday
+    # spot moves across a strike's trades) per displayed point.
     df['_iv_w'] = df['trade_iv'] * df['trade_size']
-    df['_m_w'] = df['moneyness'] * df['trade_size']
-    agg = df.groupby(['w', 'days_to_maturity', 'strike'], as_index=False).agg(
-        _iv_w=('_iv_w', 'sum'), _m_w=('_m_w', 'sum'), volume=('trade_size', 'sum'))
+    df['_s_w'] = df['underlying_bid'] * df['trade_size']
+    agg = df.groupby(['days_to_maturity', 'strike'], as_index=False).agg(
+        _iv_w=('_iv_w', 'sum'), _s_w=('_s_w', 'sum'), volume=('trade_size', 'sum'))
     agg['trade_iv'] = agg['_iv_w'] / agg['volume']
-    agg['moneyness'] = agg['_m_w'] / agg['volume']
+    agg['spot'] = agg['_s_w'] / agg['volume']
+
+    # Reparameterise each point onto both wings (S/K calls, K/S puts), then keep what falls in the
+    # plotted window so each wing is populated across the full bound.
+    call = agg.assign(w='call', moneyness=agg['spot'] / agg['strike'])
+    put = agg.assign(w='put', moneyness=agg['strike'] / agg['spot'])
+    out = pd.concat([call, put], ignore_index=True)
+    out = out[(out['moneyness'] >= XLO) & (out['moneyness'] <= XHI)].copy()
+    if out.empty:
+        return out[['w', 'days_to_maturity', 'strike', 'moneyness', 'trade_iv', 'volume']].assign(cmat=[])
 
     # Snap each point's maturity to the nearest model maturity so its color matches that line.
     T_arr = np.array(sorted(T))
-    nearest = np.abs(agg['days_to_maturity'].to_numpy()[:, None] - T_arr[None, :]).argmin(axis=1)
-    agg['cmat'] = T_arr[nearest]
-    return agg[['w', 'days_to_maturity', 'strike', 'moneyness', 'trade_iv', 'volume', 'cmat']]
+    nearest = np.abs(out['days_to_maturity'].to_numpy()[:, None] - T_arr[None, :]).argmin(axis=1)
+    out['cmat'] = T_arr[nearest]
+    return out[['w', 'days_to_maturity', 'strike', 'moneyness', 'trade_iv', 'volume', 'cmat']]
 
 
 def _save_day_figure(day, cmap, use_legend, enrich):
@@ -285,8 +294,8 @@ def make_surfaces_for(dates):
 
 
 if __name__ == "__main__":
-    CALIBRATIONS_FILE = SURFACES.parent / "calibrations" / 'price' / "calibrations.csv"
+    CALIBRATIONS_FILE = SURFACES.parent / "calibrations" / OBJECTIVE / "calibrations.csv"
     cal = pd.read_csv(CALIBRATIONS_FILE)
-    cal = cal[cal['feller']>=0].copy().reset_index(drop=True)
-    dates = cal['date']
+    cal = cal.sort_values(by='iv_rmse',ascending=True).reset_index(drop=True)
+    dates = cal['date'][:24].copy()
     make_surfaces_for(dates=dates)

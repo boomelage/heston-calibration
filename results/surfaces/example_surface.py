@@ -19,7 +19,7 @@ Run:  python results/example_surface.py
 Out:  results/example_surface.csv        (long: strike, maturity_days, moneyness, implied_vol)
       results/example_surface_grid.csv   (pivot: index=strike, columns=maturity_days)
 """
-import pickle
+# import pickle
 import numpy as np
 import pandas as pd
 import QuantLib as ql
@@ -33,7 +33,7 @@ CALIBRATIONS_FILE = SURFACES.parent / "calibrations" / OBJECTIVE / "calibrations
 
 # Grid the surface is sampled on. Moneyness K/S around the money; maturities in calendar days
 # spanning the range the calibration actually sees (>= MIN_DTM=7 up to ~1y).
-MONEYNESS = np.round(np.arange(0.75, 1.1, 0.005), 4).tolist()   # 0.80 .. 1.20
+MONEYNESS = np.round(np.arange(0.75, 1.5, 0.005), 4).tolist()   # 0.80 .. 1.20
 
 MATURITIES_DAYS = np.arange(start=30,stop=730,step=30).tolist()
 
@@ -116,8 +116,8 @@ def make_surface(target_date=None, OUT=DATA, SAVE=True):
             "high_move": bool(high_move),
         },
     }
-    if SAVE:
-        with open(OUT/'day_results.pkl', 'wb') as file:
-            pickle.dump(day_results, file)
+    # if SAVE:
+    #     with open(OUT/'day_results.pkl', 'wb') as file:
+    #         pickle.dump(day_results, file)
     
     return (surface, day_results)

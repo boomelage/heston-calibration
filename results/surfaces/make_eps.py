@@ -14,7 +14,6 @@ Run:  python results/make_price_surface_eps.py
 Out:  results/price_surface_calls.eps, price_surface_puts.eps, price_surface_both.eps
       results/price_surface.tex
 """
-import pickle
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -74,16 +73,16 @@ def plot_surface(grid, out_path, title=None, invert_K=False):
     if title:
         ax.set_title(title)
     # fig.colorbar(surf, shrink=0.5, aspect=5)
-    # fig.tight_layout()
+    fig.tight_layout()
     fig.savefig(out_path, format='eps', bbox_inches='tight')
     plt.close(fig)
     print(f"wrote {out_path.name}")
 
-def _load_data():
-    df = pd.read_csv(SURFACE_CSV)
-    with open(DAY_RESULTS, 'rb') as file:
-        day_results = pickle.load(file)
-    return (df, day_results)
+# def _load_data():
+#     df = pd.read_csv(SURFACE_CSV)
+#     with open(DAY_RESULTS, 'rb') as file:
+#         day_results = pickle.load(file)
+#     return (df, day_results)
 
 def write_otm_TeX(spot, date, params, market, fit):
 
@@ -156,13 +155,13 @@ def smile_for(df, side):
     return surface.pivot(index='strike', columns='maturity_days', values='price')
     
 def main():
-    from example_surface import make_surface
-    CALIBRATIONS_FILE = SURFACES.parent / "calibrations" / 'price' / "calibrations.csv"
+    from example_surface import make_surface, OBJECTIVE
+    CALIBRATIONS_FILE = SURFACES.parent / "calibrations" / OBJECTIVE / "calibrations.csv"
     cal = pd.read_csv(CALIBRATIONS_FILE)
-    cal = cal[cal['feller']>=0].copy().sort_values(by='rmse',ascending=True).reset_index(drop=True)
+    cal = cal[cal['feller']>=0].copy(
+        ).sort_values(by='iv_rmse',ascending=True).reset_index(drop=True)
     target_date = cal['date'][0]
-    make_surface(target_date=target_date)
-    df, day_results = _load_data()
+    df, day_results = make_surface(target_date=target_date)
     date = day_results['date']
     spot = day_results['spot']
     params = day_results['params']

@@ -69,7 +69,7 @@ rg_asc = rg.sort_index()
 MAX_NT = 12          # maturities kept, ranked by traded volume
 MAX_NK = 8           # strikes kept per wing (highest OTM puts, lowest OTM calls), nearest the money
 STRIKE_GRID = 5.0    # SPX near-money strike increment; normalised K* is snapped to this grid
-MIN_DTM = 7          # drop ultra-short maturities (< 7 days): Heston fits them poorly and they drive
+MIN_DTM = 80          # drop ultra-short maturities (< 7 days): Heston fits them poorly and they drive
                      # eta/kappa to extremes (Feller-violating), polluting the pooled fit
 MIN_MATS = 3         # require a genuinely multi-maturity surface (identification)
 MIN_STRIKES = 5      # require a real strike range

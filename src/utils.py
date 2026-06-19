@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import QuantLib as ql
 
 def df_moneyness(df):
     """Signed moneyness: spot-strike for calls, strike-spot for puts.
@@ -43,3 +44,17 @@ def _prepare_options(raw):
     df['moneyness'] = df_moneyness(df)
     df = df[df['moneyness'] < -0.050]
     return df.drop(columns='moneyness').dropna().copy()
+
+
+def implied_vol(price, w, S, K, r, g, T):
+    """Invert a Black price to an implied vol (vol points), dividend-consistent via the forward."""
+    if not np.isfinite(price) or price <= 0 or T <= 0:
+        return np.nan
+    F = S * np.exp((r - g) * T)
+    disc = np.exp(-r * T)
+    opt = ql.Option.Call if w == "call" else ql.Option.Put
+    try:
+        sd = ql.blackFormulaImpliedStdDev(opt, K, F, price, disc)
+        return sd / np.sqrt(T)
+    except RuntimeError:
+        return np.nan

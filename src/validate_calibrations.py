@@ -29,6 +29,8 @@ import QuantLib as ql
 SRC = Path(__file__).parent.resolve()
 RESULTS = SRC.parent / "results"
 
+from utils import implied_vol
+
 OBJECTIVE = input("Validate `vol` or `price` calibrations? ").strip().lower()
 if OBJECTIVE not in ("price", "vol"):
     raise SystemExit(f"unknown objective {OBJECTIVE!r}; expected 'price' or 'vol'")
@@ -53,19 +55,6 @@ THRESHOLDS = dict(
 
 STRUCTURAL = ["theta", "kappa", "eta", "rho", "v0"]
 
-
-def implied_vol(price, w, S, K, r, g, T):
-    """Invert a Black price to an implied vol (vol points), dividend-consistent via the forward."""
-    if not np.isfinite(price) or price <= 0 or T <= 0:
-        return np.nan
-    F = S * np.exp((r - g) * T)
-    disc = np.exp(-r * T)
-    opt = ql.Option.Call if w == "call" else ql.Option.Put
-    try:
-        sd = ql.blackFormulaImpliedStdDev(opt, K, F, price, disc)
-        return sd / np.sqrt(T)
-    except RuntimeError:
-        return np.nan
 
 
 def day_metrics(test_df):

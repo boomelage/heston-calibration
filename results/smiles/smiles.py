@@ -65,14 +65,14 @@ def main(dates, OUT=None, use_legend=USE_LEGEND):
     for sf, day in zip(subfigs, days):
         T = sorted(day['T'])
         norm = mcolors.Normalize(vmin=min(T), vmax=max(T))
-        ax_call, ax_put  = sf.subplots(1, 2, sharey=True)
+        ax_put, ax_call  = sf.subplots(1, 2, sharey=True)
         for t in T:
             df = day['surface'][day['surface']['maturity_days'] == t]
-            dfc = df[df['w'] == 'call'].sort_values(by='strike')
-            ax_call.plot(dfc['strike'], dfc['price'], color=cmap(norm(t)), label=str(t))
             dfp = df[df['w'] == 'put'].sort_values(by='strike')
             ax_put.plot(dfp['strike'], dfp['price'], color=cmap(norm(t)))
-        ax_call.set_ylabel(r'Price ($C_{\mathrm{H}}(\Phi^\star)$)')
+            dfc = df[df['w'] == 'call'].sort_values(by='strike')
+            ax_call.plot(dfc['strike'], dfc['price'], color=cmap(norm(t)), label=str(t))
+        ax_put.set_ylabel(r'Price ($C_{\mathrm{H}}(\Phi^\star)$)')
         sf.suptitle(_row_caption(day), fontsize=8)
         lbl = sf.supxlabel('Strike ($K$)')
         # Maturity key on the right of the row: legend or colorbar. Both reserve right-side space,
@@ -83,8 +83,8 @@ def main(dates, OUT=None, use_legend=USE_LEGEND):
                       title='Days to maturity', fontsize=7, title_fontsize=8)
         else:
             sm = cm.ScalarMappable(cmap=cmap, norm=norm)
-            sf.colorbar(sm, ax=(ax_call, ax_put), label='Days to maturity')
-        rows.append((ax_call, ax_put, lbl))
+            sf.colorbar(sm, ax=(ax_put, ax_call), label='Days to maturity')
+        rows.append((ax_put, ax_call, lbl))
 
     # `supxlabel` centers on the whole subfigure, but the colorbar steals right-side space, so the
     # two panels' midpoint is left of that. Resolve the layout, freeze it, then re-centre each
@@ -92,7 +92,7 @@ def main(dates, OUT=None, use_legend=USE_LEGEND):
     # x-fractions and the subfigure-relative `supxlabel` x coincide.)
     fig.draw_without_rendering()
     fig.set_layout_engine('none')
-    for ax_call, ax_put, lbl in rows:
+    for ax_put, ax_call, lbl in rows:
         bc, bp = ax_call.get_position(), ax_put.get_position()
         lbl.set_x((min(bc.x0, bp.x0) + max(bc.x1, bp.x1)) / 2)
 

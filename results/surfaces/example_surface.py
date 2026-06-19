@@ -26,14 +26,14 @@ import QuantLib as ql
 from pathlib import Path
 
 SURFACES = Path(__file__).parent.resolve()
-OBJECTIVE = "price" #input("Validate `vol` or `price` calibrations? ").strip().lower()
+OBJECTIVE = "vol" #input("Validate `vol` or `price` calibrations? ").strip().lower()
 DATA = SURFACES / "data"
 DATA.mkdir(parents=True, exist_ok=True)
 CALIBRATIONS_FILE = SURFACES.parent / "calibrations" / OBJECTIVE / "calibrations.csv"
 
 # Grid the surface is sampled on. Moneyness K/S around the money; maturities in calendar days
 # spanning the range the calibration actually sees (>= MIN_DTM=7 up to ~1y).
-MONEYNESS = np.round(np.arange(0.75, 1.205, 0.005), 4).tolist()   # 0.80 .. 1.20
+MONEYNESS = np.round(np.arange(0.75, 1.1, 0.005), 4).tolist()   # 0.80 .. 1.20
 
 MATURITIES_DAYS = np.arange(start=30,stop=730,step=30).tolist()
 

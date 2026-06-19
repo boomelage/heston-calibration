@@ -4,7 +4,6 @@
 \usepackage{amsmath}
 \usepackage{amssymb}
 \usepackage{booktabs}
-
 \usepackage{algorithm}
 \usepackage{algorithmic}
 \usepackage{seqsplit}
@@ -15,11 +14,7 @@
 \usetikzlibrary{calc}
 \usepackage{standalone}
 \usepackage{natbib}
-%\usepackage{parskip}
 
-% Render BibTeX `doi` fields as a hyperlink whose visible text is just the DOI
-% number, linking to https://doi.org/<doi>. plainnat.bst emits \doi{...} but only
-% \providecommand's it, so this preamble definition wins.
 \newcommand{\doi}[1]{{\tiny DOI:} \href{https://doi.org/#1}{\texttt{#1}}}
 
 \usepackage[font=scriptsize]{caption}
@@ -563,18 +558,23 @@
 	\subsubsection{Avenues for improvement} Parameter acceptance continues to be sparse. The Levenberg--Marquardt and optimizer end criteria have not been tuned and constitute a natural starting point for bulk parameter acceptance. No attempt has been made to reduce pegging by fixing $\theta$, $\eta$, or $v_0$ from preceding trading days. Other candidate levers include raising the maturity floor $\tau_{\min}$ to remove the steep short-dated skew that single-factor Heston cannot match, weighting helpers by vega or traded volume, and adding a soft Feller penalty to the restart-selection criterion.
 	
 	\newpage
+	\nocite{ballotta2025,eberlein2010}
 	{\small
 		\bibliographystyle{plainnat}
 		\bibliography{refs-heston-calibration}
 	}
 	
 	\appendix
+	
+	\small
 	\section{Algorithm}\label{sec:algorithm}
+	
+	\algsetup{linenosize=\scriptsize}
 	Algorithm~\ref{alg:perday} states the per-day routine; the driver applies it to every trading
 	day and accumulates accepted rows into a single file (\S\ref{sec:output}).
-	
 	\begin{algorithm}[H]
-		\small
+		\captionsetup{font=scriptsize}
+		\footnotesize
 		\caption{Per-day Heston calibration}\label{alg:perday}
 		\begin{algorithmic}[1]
 			\REQUIRE day $d$ of OTM trades; rates $r(d),g(d)$; constants of Table~\ref{tab:const}

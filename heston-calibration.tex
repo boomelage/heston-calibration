@@ -4,7 +4,7 @@
 \usepackage{amsmath}
 \usepackage{amssymb}
 \usepackage{booktabs}
-\usepackage{natbib}
+
 \usepackage{algorithm}
 \usepackage{algorithmic}
 \usepackage{seqsplit}
@@ -14,7 +14,13 @@
 \usepgfplotslibrary{groupplots}
 \usetikzlibrary{calc}
 \usepackage{standalone}
+\usepackage{natbib}
 %\usepackage{parskip}
+
+% Render BibTeX `doi` fields as a hyperlink whose visible text is just the DOI
+% number, linking to https://doi.org/<doi>. plainnat.bst emits \doi{...} but only
+% \providecommand's it, so this preamble definition wins.
+\newcommand{\doi}[1]{{\tiny DOI:} \href{https://doi.org/#1}{\texttt{#1}}}
 
 \usepackage[font=scriptsize]{caption}
 
@@ -540,7 +546,7 @@
 	$\med v_0=0.016$), so the economic reading above is robust to the objective. The two accepted
 	sets agree on $1{,}579$ days and differ on $200$, split $134$ price-only and $66$ IV-only, all
 	near the pegging boundary.
-	\\ \\
+	
 	\subsubsection{Partial conclusions} The lesson is that the objective is not the binding choice. Aligning the optimiser with the acceptance metric does not relieve the pegging and slightly aggravates it. Pegging is a structural degeneracy in the $(\kappa,\rho,\eta)$ skew subspace, and it survives a change of residual. The IV-space objective weighs the deep-OTM wings more heavily than the price objective, since it no longer discounts them by their small prices. It therefore asks for more skew and reaches the box wall more often. Feller violation rises from $99.3\%$ to $99.7\%$ of
 	accepted days and the median $\eta$ edges up, both consistent with that pressure. One cost is
 	specific to abandoning the price-space objective. The returned relative-price error is no
@@ -557,53 +563,10 @@
 	\subsubsection{Avenues for improvement} Parameter acceptance continues to be sparse. The Levenberg--Marquardt and optimizer end criteria have not been tuned and constitute a natural starting point for bulk parameter acceptance. No attempt has been made to reduce pegging by fixing $\theta$, $\eta$, or $v_0$ from preceding trading days. Other candidate levers include raising the maturity floor $\tau_{\min}$ to remove the steep short-dated skew that single-factor Heston cannot match, weighting helpers by vega or traded volume, and adding a soft Feller penalty to the restart-selection criterion.
 	
 	\newpage
-	{\small \begin{thebibliography}{9}
-			
-			\bibitem[Black(1976)]{black1976}
-			Black, F. (1976).
-			The Pricing of Commodity Contracts.
-			\emph{Journal of Financial Economics}, 3(1--2), 167--179.
-			\url{https://doi.org/10.1016/0304-405X(76)90024-6}.
-			
-			\bibitem[Black and Scholes(1973)]{blackscholes1973}
-			Black, F., and Scholes, M. (1973).
-			The Pricing of Options and Corporate Liabilities.
-			\emph{Journal of Political Economy}, 81(3), 637--654.
-			\url{https://doi.org/10.1086/260062}.
-			
-			\bibitem[Feller(1951)]{feller1951}
-			Feller, W. (1951).
-			Two Singular Diffusion Problems.
-			\emph{Annals of Mathematics}, 54(1), 173--182.
-			\url{https://doi.org/10.2307/1969318}.
-			
-			\bibitem[Heston(1993)]{heston1993}
-			Heston, S. L. (1993).
-			A Closed-Form Solution for Options with Stochastic Volatility with
-			Applications to Bond and Currency Options.
-			\emph{The Review of Financial Studies}, 6(2), 327--343.
-			\url{https://doi.org/10.1093/rfs/6.2.327}.
-			
-			\bibitem[Marquardt(1963)]{marquardt1963}
-			Marquardt, D. W. (1963).
-			An Algorithm for Least-Squares Estimation of Nonlinear Parameters.
-			\emph{Journal of the Society for Industrial and Applied Mathematics},
-			11(2), 431--441.
-			\url{https://doi.org/10.1137/0111030}.
-			
-			\bibitem[Mikhailov and N\"ogel(2003)]{mikhailov2003}
-			Mikhailov, S., and N\"ogel, U. (2003).
-			Heston's Stochastic Volatility Model: Implementation, Calibration and
-			Some Extensions.
-			\emph{Wilmott Magazine}, July 2003, 74--79.
-			
-			\bibitem[QuantLib()]{quantlib}
-			Ballabio, L., and the QuantLib contributors.
-			\emph{QuantLib: a free/open-source library for quantitative finance},
-			version 1.35.
-			\url{https://www.quantlib.org}.
-			
-	\end{thebibliography}}
+	{\small
+		\bibliographystyle{plainnat}
+		\bibliography{refs-heston-calibration}
+	}
 	
 	\appendix
 	\section{Algorithm}\label{sec:algorithm}

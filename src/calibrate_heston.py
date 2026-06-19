@@ -29,26 +29,15 @@ import numpy as np
 import pandas as pd
 import QuantLib as ql
 
-# Bounds in model.params() order: [theta, kappa, eta, rho, v0]. rho upper kept slightly positive
-# (equity leverage => negative) but not forced; eta capped at 2.0 (SPX vol-of-vol ~0.3-1.2).
-LOW = [1e-4, 1e-2, 1e-2, -0.999, 1e-4]
-HIGH = [1.0, 20.0, 2.0, 0.5, 1.0]
+from config import (
+    LOW, HIGH, IV_RMSE_ACCEPT, BOUND_TOL,
+    IV_ACC, IV_MAXEVAL, IV_LO, IV_HI,
+    DEFAULT_OBJECTIVE, SEED_GRID_TEMPLATE, SEED_VAR_FALLBACK, SEED_VAR_LO, SEED_VAR_HI,
+)
 
-# Acceptance gate on the IV-space RMSE (vol points): model-implied vol vs market vol per helper.
-# ~2 vol points is a tight fit to an options surface and is the metric the surface is quoted in.
-# On the pooled per-day surfaces (Work item 3) the genuine fit is ~0.8-1.4 vol points, comfortably
-# inside this bar; the old relative-price gate (RMSE_ACCEPT=0.05) rejected those same good fits
-# purely on deep-OTM wing inflation. Boundary-pegged params are still rejected separately
-# (a pegged kappa/rho/eta is a non-fit regardless of IV-RMSE).
-IV_RMSE_ACCEPT = 0.02   # max IV-space RMSE (vol points) for an accepted fit
-BOUND_TOL = 1e-3        # fraction of a bound's span within which a param counts as "pegged"
-
-# IV inversion controls for BlackCalibrationHelper.impliedVolatility(price, accuracy, maxEval, lo, hi).
-_IV_ACC, _IV_MAXEVAL, _IV_LO, _IV_HI = 1e-6, 500, 1e-4, 5.0
-
-# In-engine objective the local optimizer (LM) minimises. This is independent of the selection and
-# acceptance gate, which always run off the IV-space RMSE (`_iv_rmse`): switching the objective only
-# changes what each restart converges to, not how restarts are ranked or accepted.
+# String->QuantLib-enum objective map. Kept next to the engine (live ql objects, not serialisable);
+# the string names/default live in config. Selection and the gate always run off IV-space RMSE, so
+# switching the objective only changes what each restart minimises, not how restarts are ranked.
 #   "price" -> RelativePriceError: cheap (one Heston price per residual), the long-standing default.
 #   "vol"   -> ImpliedVolError: inverts each model price to a Black vol every LM iteration, so it is
 #              more expensive and can throw mid-search (caught per-restart), but weights cells evenly
@@ -57,7 +46,6 @@ _ERR = {
     "price": ql.HestonModelHelper.RelativePriceError,
     "vol": ql.HestonModelHelper.ImpliedVolError,
 }
-DEFAULT_OBJECTIVE = "price"
 
 _FAIL = {k: None for k in ("theta", "kappa", "eta", "rho", "v0", "feller", "rmse", "iv_rmse")}
 
@@ -75,17 +63,11 @@ def _seed_grid(vol_matrix):
     """A small, deterministic set of starting points, seeded from the surface's own level."""
     vols = vol_matrix.to_numpy(dtype=float)
     vols = vols[np.isfinite(vols)]
-    var = float(np.median(vols)) ** 2 if vols.size else 0.04
-    var = min(max(var, 1e-3), 0.25)
-    # each tuple is (v0, kappa, theta, eta, rho) -- HestonProcess constructor order
-    return [
-        (var, 1.0, var, 0.50, -0.70),
-        (var, 3.0, var, 1.00, -0.50),
-        (var, 0.5, var, 0.30, -0.90),
-        (var, 5.0, var, 0.80, -0.60),
-        (var * 0.8, 2.0, var * 1.2, 0.60, -0.75),
-        (var, 8.0, var, 1.20, -0.40),
-    ]
+    var = float(np.median(vols)) ** 2 if vols.size else SEED_VAR_FALLBACK
+    var = min(max(var, SEED_VAR_LO), SEED_VAR_HI)
+    # expand each template row into (v0, kappa, theta, eta, rho) -- HestonProcess constructor order
+    return [(var * v0_mult, kappa, var * theta_mult, eta, rho)
+            for v0_mult, kappa, theta_mult, eta, rho in SEED_GRID_TEMPLATE]
 
 
 def _iv_rmse(helpers, mkt_vols):
@@ -93,7 +75,7 @@ def _iv_rmse(helpers, mkt_vols):
     resid = []
     for h, mkt in zip(helpers, mkt_vols):
         try:
-            model_iv = h.impliedVolatility(h.modelValue(), _IV_ACC, _IV_MAXEVAL, _IV_LO, _IV_HI)
+            model_iv = h.impliedVolatility(h.modelValue(), IV_ACC, IV_MAXEVAL, IV_LO, IV_HI)
         except RuntimeError:
             continue
         if np.isfinite(model_iv):

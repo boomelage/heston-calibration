@@ -51,7 +51,12 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from utils import _prepare_options
-from calibrate_heston import calibrate_heston, IV_RMSE_ACCEPT
+from calibrate_heston import calibrate_heston
+from config import (
+    MAX_NT, MAX_NK, STRIKE_GRID, MIN_DTM, MAX_DTM,
+    MIN_MATS, MIN_STRIKES, MIN_CELLS, MAX_MOVE_PCT,
+    IV_RMSE_ACCEPT, OBJECTIVE_NAMES,
+)
 
 if str(DATA) not in sys.path:
     sys.path.insert(0, str(DATA))
@@ -63,18 +68,9 @@ from get_rg import rg # pyright: ignore[reportMissingImports]
 # ordering, or NaN if `date` precedes all rates.
 rg_asc = rg.sort_index()
 
-# Surface coverage / selection knobs. Pooling the whole day (one fit) lets us take more maturities
-# than the old per-spot path (was max_nt=7); the surface is built once over the full day.
-MAX_NT = 12          # maturities kept, ranked by traded volume
-MAX_NK = 8           # strikes kept per wing (highest OTM puts, lowest OTM calls), nearest the money
-STRIKE_GRID = 5.0    # SPX near-money strike increment; normalised K* is snapped to this grid
-MIN_DTM = 80         # drop ultra-short maturities (< 7 days): Heston fits them poorly and they drive
-                     # eta/kappa to extremes (Feller-violating), polluting the pooled fit
-MAX_DTM = 1500
-MIN_MATS = 3         # require a genuinely multi-maturity surface (identification)
-MIN_STRIKES = 5      # require a real strike range
-MIN_CELLS = 12       # non-NaN surface cells required (target >= MIN_MATS x MIN_STRIKES)
-MAX_MOVE_PCT = 0.03  # intraday spot range above this flags the day (sticky-moneyness strained)
+# Surface coverage / selection knobs and engine bounds/gate live in config.py (single source of
+# truth, tuned by PLAN.md Phase 3): MAX_NT/MAX_NK/STRIKE_GRID/MIN_DTM/MAX_DTM/MIN_MATS/MIN_STRIKES/
+# MIN_CELLS/MAX_MOVE_PCT and IV_RMSE_ACCEPT are imported above.
 
 
 def _objective_paths(objective):
@@ -260,7 +256,7 @@ def calibrate_by_day(filepath, OBJECTIVE):
 
 def main():
     parser = argparse.ArgumentParser(description="Attempt per-day calibration of Heston paramaters off option trades data")
-    parser.add_argument("--OBJECTIVE", type=str, default="vol", choices=["price", "vol"],
+    parser.add_argument("--OBJECTIVE", type=str, default="vol", choices=list(OBJECTIVE_NAMES),
                         help="Decide whether to minimize residuals of `price` or `vol`")
     args = parser.parse_args()
 
@@ -275,7 +271,7 @@ def main():
     
     TRADES = Path(__file__).parent.parent / "data" / "options" / "raw"
     files = [f for f in os.listdir(TRADES) if f.endswith('.csv')]
-    files = pd.Series([os.path.join(TRADES, f) for f in files]).sort_values(ascending=True).reset_index(drop=True)
+    files = pd.Series([os.path.join(TRADES, f) for f in files]).sort_values(ascending=True).reset_index(drop=True)[-100:]
 
     # Every attempted day returns exactly one row: an accepted calibration (no 'reason' key) or a
     # rejection (carries 'reason'). Split them into the two complementary files. The loop covers all

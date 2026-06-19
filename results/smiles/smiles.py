@@ -117,7 +117,7 @@ def _model_wing_iv(engine, bsm, spot, maturity_date, m_grid, wing):
 def _load_market_vols(tag):
     """Fetch real market implied vols for one trading day from data/options/raw/.
 
-    Mirrors `data/extract_otms.py`: parses the CBOE trade file, computes calendar
+    Mirrors `utils._prepare_options`: parses the CBOE trade file, computes calendar
     `days_to_maturity`, keeps positive-IV OTM trades within the TMIN..TMAX maturity window, then
     collapses each (maturity, strike) to a single **volume-weighted** point (weights = `trade_size`).
     The plotted maturities, the scatter and the x-axis framing are all derived from this same

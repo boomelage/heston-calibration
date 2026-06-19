@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 import QuantLib as ql
 
+from config import OTM_MONEYNESS_CUTOFF
+
 def df_moneyness(df):
     """Ratio moneyness: spot/strike for calls, strike/spot for puts.
 
@@ -19,11 +21,10 @@ def _prepare_options(raw):
 
     Selects/renames the column subset, maps option_type C/P -> w call/put, computes calendar
     `days_to_maturity` (>0 only), and keeps positive IV/spot/strike. Then keeps only the
-    out-of-the-money rows (`moneyness < 1`): OTM calls (strike above spot), OTM puts (strike below
-    spot), which together span both wings of the smile. Returns the cleaned snapshot with the helper
-    `moneyness` column dropped. This is the in-memory equivalent of the old Stage 2
-    (`data/extract_otms.py`), so the calibrator can build a day's surface straight from a raw trades
-    file.
+    out-of-the-money rows (`moneyness < OTM_MONEYNESS_CUTOFF`): OTM calls (strike above spot), OTM puts
+    (strike below spot), which together span both wings of the smile. Returns the cleaned snapshot with
+    the helper `moneyness` column dropped. The calibrator calls this in-memory, so it can build a day's
+    surface straight from a raw trades file (there is no separate extraction script).
     """
     raw = raw[
         [
@@ -47,7 +48,7 @@ def _prepare_options(raw):
     df['w'] = df['w'].replace({'C': 'call', 'P': 'put'})
     df = df[['quote_datetime', 'strike_price', 'w', 'trade_size', 'trade_price','trade_iv', 'spot_price','days_to_maturity']]
     df['moneyness'] = df_moneyness(df)
-    df = df[df['moneyness'] < 0.98]
+    df = df[df['moneyness'] < OTM_MONEYNESS_CUTOFF]
     return df.drop(columns='moneyness').dropna().copy()
 
 

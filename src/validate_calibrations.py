@@ -31,7 +31,7 @@ RESULTS = SRC.parent / "results"
 
 from utils import implied_vol
 
-OBJECTIVE = input("Validate `vol` or `price` calibrations? ").strip().lower()
+OBJECTIVE = 'vol' #input("Validate `vol` or `price` calibrations? ").strip().lower()
 if OBJECTIVE not in ("price", "vol"):
     raise SystemExit(f"unknown objective {OBJECTIVE!r}; expected 'price' or 'vol'")
 

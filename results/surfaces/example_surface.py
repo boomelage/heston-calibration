@@ -33,7 +33,7 @@ CALIBRATIONS_FILE = SURFACES.parent / "calibrations" / OBJECTIVE / "calibrations
 
 # Grid the surface is sampled on. Moneyness K/S around the money; maturities in calendar days
 # spanning the range the calibration actually sees (>= MIN_DTM=7 up to ~1y).
-MONEYNESS = np.round(np.arange(0.5, 1.5, 0.005), 4).tolist()   # 0.80 .. 1.20
+MONEYNESS = np.round(np.arange(0.75, 1.25, 0.005), 4).tolist()   # 0.80 .. 1.20
 
 MATURITIES_DAYS = np.arange(start=30,stop=730,step=30).tolist()
 
@@ -64,10 +64,11 @@ def make_surface(target_date=None, OUT=DATA, SAVE=True):
         ql.BlackVolTermStructureHandle(ql.BlackConstantVol(
             calculation_date, ql.UnitedStates(ql.UnitedStates.NYSE), 0.20, day_count)))
     kappa, theta, rho, eta, v0 = row['kappa'], row['theta'], row['rho'], row['eta'], row['v0']
-    print(f"Heston example surface for {row['date']}  (spot={spot:.2f}, "
+    print(f"Option surface for {row['date']}  (spot={spot:.2f}, "
           f"r={row['risk_free_rate']:.4f}, q={row['dividend_rate']:.4f})")
     print(f"  v0={v0:.4f}  kappa={kappa:.4f}  theta={theta:.4f}  "
-          f"eta={eta:.4f}  rho={rho:.4f}\n")
+          f"eta={eta:.4f}  rho={rho:.4f}  feller={row['feller']:.4f}  "
+          f"rmse={row['rmse']:.4f}  iv_rmse={row['iv_rmse']:.8f}\n")
 
     records = []
     for days in MATURITIES_DAYS:

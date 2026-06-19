@@ -1,21 +1,21 @@
 
 \subsubsection{Example option prices} Produced by the market\!\,\footnote{
-The fit uses 65 calibration cells across 5 maturities and 39 strikes,
-backed by 64,562 contracts of traded volume.
-The reference spot was $S_{\mathrm{ref}} = 1383.7348$,
-priced under a risk-free rate of 0.16\% and a dividend rate of 2.01\%.
-The intraday spot range was 0.65\%.
-Fit quality is 0.31 vol points of implied-volatility RMSE,
-with a relative-price RMSE of 0.0879.
+The fit uses 169 calibration cells across 12 maturities and 74 strikes,
+backed by 113,725 contracts of traded volume.
+The reference spot was $S_{\mathrm{ref}} = 2469.6922$,
+priced under a risk-free rate of 1.22\% and a dividend rate of 1.97\%.
+The intraday spot range was 0.38\%.
+Fit quality is 0.11 vol points of implied-volatility RMSE,
+with a relative-price RMSE of 0.0318.
 The Feller condition violates at this calibration,
-with $2\kappa\theta - \eta^2 = -0.6173$.
+with $2\kappa\theta - \eta^2 = -0.4241$.
 } 
 calibrated pricing operator $C_{\mathrm{H}}(\Phi^{\star})$~\eqref{eq:heston-price}~\eqref{eq:accept}.
 \begin{figure}[H]
     \begin{center}
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/surfaces/plots/tex/price_surface_puts.eps}
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/surfaces/plots/tex/price_surface_calls.eps}
-        \caption{Heston OTM option prices for $S_{\mathrm{ref}}$ 1383.7348 on April 20, 2012 with $\Phi^{\star} = (0.1434,\ 0.8297,\ 0.9248,\ -0.8131,\ 0.0311)$: puts wing (left) and calls wing (right).}
+        \caption{Heston OTM option prices for $S_{\mathrm{ref}}$ 2469.6922 on July 19, 2017 with $\Phi^{\star} = (0.0536,\ 1.2092,\ 0.7441,\ -0.8027,\ 0.0062)$: puts wing (left) and calls wing (right).}
         \label{Fig:wings}
     \end{center}
     \begin{center}

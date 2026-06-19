@@ -33,7 +33,7 @@ from utils import build_heston_engine, implied_vol # type: ignore
 FIGURES = SMILES / "figures"
 FIGURES.mkdir(parents=True,exist_ok=True)
 
-TMIN, TMAX = 80, 1500
+TMIN, TMAX = 80, 750
 
 # Knob for the per-row maturity key: True draws a legend, False (default) draws a colorbar.
 USE_LEGEND = True
@@ -248,7 +248,8 @@ def _save_day_figure(day, cmap, use_legend, enrich):
     ax_put.set_ylabel(r'Black implied vol $\widehat{\sigma}(\Phi^{\star})$')
     ax_put.set_xlabel(r'Moneyness $K/S$ (put wing)')
     ax_call.set_xlabel(r'Moneyness $S/K$ (call wing)')
-    fig.suptitle(_row_caption(day), fontsize=8)
+    # Caption left-aligned to the left edge of the plot area (over the put wing), not centred.
+    ax_put.set_title(_row_caption(day), loc='left', fontsize=8)
 
     if use_legend:
         handles, labels = ax_call.get_legend_handles_labels()

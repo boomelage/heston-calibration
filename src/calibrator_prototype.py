@@ -51,7 +51,6 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from utils import _prepare_options
-
 from calibrate_heston import calibrate_heston, IV_RMSE_ACCEPT
 
 if str(DATA) not in sys.path:
@@ -69,8 +68,9 @@ rg_asc = rg.sort_index()
 MAX_NT = 12          # maturities kept, ranked by traded volume
 MAX_NK = 8           # strikes kept per wing (highest OTM puts, lowest OTM calls), nearest the money
 STRIKE_GRID = 5.0    # SPX near-money strike increment; normalised K* is snapped to this grid
-MIN_DTM = 80          # drop ultra-short maturities (< 7 days): Heston fits them poorly and they drive
+MIN_DTM = 80         # drop ultra-short maturities (< 7 days): Heston fits them poorly and they drive
                      # eta/kappa to extremes (Feller-violating), polluting the pooled fit
+MAX_DTM = 1500
 MIN_MATS = 3         # require a genuinely multi-maturity surface (identification)
 MIN_STRIKES = 5      # require a real strike range
 MIN_CELLS = 12       # non-NaN surface cells required (target >= MIN_MATS x MIN_STRIKES)
@@ -152,7 +152,7 @@ def calibrate_by_day(filepath, OBJECTIVE):
     # (column subset/rename, C/P -> call/put, calendar DTM, OTM-only) via utils._prepare_options.
     df = pd.read_csv(filepath)
     df = _prepare_options(df)
-    df = df[(df['trade_iv'] > 0) & (df['days_to_maturity'] >= MIN_DTM)].copy()
+    df = df[(df['trade_iv'] > 0) & (df['days_to_maturity'] >= MIN_DTM) & (df['days_to_maturity'] <= MAX_DTM)].copy()
     if df.empty:
         return _skip_day(test_path, "no_trades", "no trades after IV/DTM filter")
     df['quote_datetime'] = pd.to_datetime(df['quote_datetime'])
@@ -275,7 +275,7 @@ def main():
     
     TRADES = Path(__file__).parent.parent / "data" / "options" / "raw"
     files = [f for f in os.listdir(TRADES) if f.endswith('.csv')]
-    files = pd.Series([os.path.join(TRADES, f) for f in files]).sort_values(ascending=True).reset_index(drop=True)[:100]
+    files = pd.Series([os.path.join(TRADES, f) for f in files]).sort_values(ascending=True).reset_index(drop=True)
 
     # Every attempted day returns exactly one row: an accepted calibration (no 'reason' key) or a
     # rejection (carries 'reason'). Split them into the two complementary files. The loop covers all

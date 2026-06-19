@@ -37,7 +37,7 @@ def extract_otms(file_dir):
     df['w'] = df['w'].replace({'C': 'call', 'P': 'put'})
     df = df[['quote_datetime', 'strike_price', 'w', 'trade_size', 'trade_price','trade_iv', 'spot_price','days_to_maturity']]
     df['moneyness'] = df_moneyness(df)
-    df = df[df['moneyness']<0]
+    df = df[df['moneyness']<1.0]   # OTM only: ratio moneyness < 1 (see utils.df_moneyness)
     df = df.drop(columns='moneyness').dropna()
     times = df['quote_datetime'].drop_duplicates().sort_values()
     try:

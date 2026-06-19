@@ -1,3 +1,704 @@
 date,reason,detail,iv_rmse,n_maturities,n_strikes,n_cells
-2012-05-10,pegged,calibration rejected (boundary-pegged),0.010400697589153721,8,44,93
-2012-05-11,pegged,calibration rejected (boundary-pegged),0.006567868293087048,6,44,76
+2012-01-17,pegged,calibration rejected (boundary-pegged),0.007491001000546349,5.0,42.0,70.0
+2012-03-09,pegged,calibration rejected (boundary-pegged),0.00560758260716554,6.0,36.0,70.0
+2012-03-12,pegged,calibration rejected (boundary-pegged),0.016663837631779005,7.0,45.0,74.0
+2012-05-10,pegged,calibration rejected (boundary-pegged),0.010579701245755049,8.0,44.0,87.0
+2012-06-15,pegged,calibration rejected (boundary-pegged),0.013481615023115479,9.0,52.0,107.0
+2012-06-26,pegged,calibration rejected (boundary-pegged),0.019904678679409895,7.0,50.0,83.0
+2012-08-10,pegged,calibration rejected (boundary-pegged),0.003624189509705942,4.0,30.0,49.0
+2012-10-17,pegged,calibration rejected (boundary-pegged),0.008733357649170718,6.0,44.0,69.0
+2012-10-22,pegged,calibration rejected (boundary-pegged),0.01862510246549109,7.0,59.0,87.0
+2012-10-23,pegged,calibration rejected (boundary-pegged),0.01134974211546221,8.0,58.0,103.0
+2012-12-06,pegged,calibration rejected (boundary-pegged),0.006653804284951916,5.0,43.0,65.0
+2013-01-18,no_trades,no trades after IV/DTM filter,,,,
+2013-01-22,pegged,calibration rejected (boundary-pegged),0.004630737304054229,8.0,53.0,103.0
+2013-01-28,pegged,calibration rejected (boundary-pegged),0.006237267573713395,9.0,53.0,116.0
+2013-02-13,no_trades,no trades after IV/DTM filter,,,,
+2013-03-01,pegged,calibration rejected (boundary-pegged),0.007238346759422556,7.0,52.0,83.0
+2013-04-16,pegged,calibration rejected (boundary-pegged),0.0073045049297167704,8.0,62.0,100.0
+2013-05-09,pegged,calibration rejected (boundary-pegged),0.007244634342393525,9.0,59.0,117.0
+2013-05-10,pegged,calibration rejected (boundary-pegged),0.00691310855036526,9.0,63.0,119.0
+2013-07-15,pegged,calibration rejected (boundary-pegged),0.008340141156274093,7.0,48.0,98.0
+2013-08-02,pegged,calibration rejected (boundary-pegged),0.0075326664939359194,8.0,61.0,106.0
+2013-08-26,pegged,calibration rejected (boundary-pegged),0.009063720340755357,8.0,64.0,112.0
+2013-09-05,pegged,calibration rejected (boundary-pegged),0.008195176590780034,7.0,41.0,96.0
+2013-10-28,pegged,calibration rejected (boundary-pegged),0.00653525957364537,8.0,50.0,98.0
+2013-12-26,pegged,calibration rejected (boundary-pegged),0.00886303030239024,9.0,60.0,113.0
+2014-01-17,pegged,calibration rejected (boundary-pegged),0.004816431865411231,5.0,41.0,70.0
+2014-03-07,pegged,calibration rejected (boundary-pegged),0.004817907988302625,7.0,53.0,93.0
+2015-01-07,pegged,calibration rejected (boundary-pegged),0.013876272806562277,11.0,80.0,138.0
+2015-01-28,pegged,calibration rejected (boundary-pegged),0.007052721932503693,10.0,94.0,139.0
+2015-07-09,pegged,calibration rejected (boundary-pegged),0.009101571083697094,12.0,102.0,169.0
+2015-07-22,pegged,calibration rejected (boundary-pegged),0.006254666016463301,12.0,78.0,145.0
+2015-08-25,pegged,calibration rejected (boundary-pegged),0.012245499677068807,11.0,76.0,174.0
+2015-09-09,pegged,calibration rejected (boundary-pegged),0.013161105106037551,10.0,85.0,146.0
+2015-09-10,iv_miss,calibration rejected (iv_rmse=0.0202 > 0.02),0.020164774104070783,9.0,81.0,138.0
+2015-09-14,iv_miss,calibration rejected (iv_rmse=0.0219 > 0.02),0.02193688060495444,10.0,84.0,136.0
+2015-09-15,iv_miss,calibration rejected (iv_rmse=0.0263 > 0.02),0.026302376997277,9.0,77.0,129.0
+2015-09-17,pegged,calibration rejected (boundary-pegged),0.01704297343311865,12.0,86.0,146.0
+2015-09-24,pegged,calibration rejected (boundary-pegged),0.00971829514499789,10.0,97.0,153.0
+2015-09-25,iv_miss,calibration rejected (iv_rmse=0.0230 > 0.02),0.022969401357061398,9.0,83.0,130.0
+2015-09-29,pegged,calibration rejected (boundary-pegged),0.013415698832332354,12.0,94.0,169.0
+2015-09-30,pegged,calibration rejected (boundary-pegged),0.016913637255245837,12.0,107.0,170.0
+2015-10-01,pegged,calibration rejected (boundary-pegged),0.014173664835945125,10.0,92.0,129.0
+2015-10-02,pegged,calibration rejected (boundary-pegged),0.019525426338653486,12.0,101.0,152.0
+2015-10-09,pegged,calibration rejected (boundary-pegged),0.005938323090448768,9.0,68.0,126.0
+2015-10-14,iv_miss,calibration rejected (iv_rmse=0.0222 > 0.02),0.022195194215582328,9.0,81.0,123.0
+2015-10-19,iv_miss,calibration rejected (iv_rmse=0.0228 > 0.02),0.022818026061547036,11.0,82.0,148.0
+2015-10-20,pegged,calibration rejected (boundary-pegged),0.016765281545750306,11.0,74.0,136.0
+2015-11-02,pegged,calibration rejected (boundary-pegged),0.006459496154531372,11.0,80.0,147.0
+2015-11-05,pegged,calibration rejected (boundary-pegged),0.01560784385660793,11.0,84.0,138.0
+2015-11-16,pegged,calibration rejected (boundary-pegged),0.018890393674264067,11.0,87.0,144.0
+2015-11-17,pegged,calibration rejected (boundary-pegged),0.00862643038819676,10.0,76.0,140.0
+2015-11-20,pegged,calibration rejected (boundary-pegged),0.009220252653458652,11.0,76.0,137.0
+2015-11-25,pegged,calibration rejected (boundary-pegged),0.011607767919951219,7.0,56.0,91.0
+2015-12-09,pegged,calibration rejected (boundary-pegged),0.009504018455538417,10.0,90.0,135.0
+2015-12-10,pegged,calibration rejected (boundary-pegged),0.00936623893984126,11.0,86.0,137.0
+2015-12-15,pegged,calibration rejected (boundary-pegged),0.016158582722144234,10.0,70.0,120.0
+2015-12-21,iv_miss,calibration rejected (iv_rmse=0.0246 > 0.02),0.024588320869852947,11.0,96.0,145.0
+2015-12-23,pegged,calibration rejected (boundary-pegged),0.010217444226448212,10.0,90.0,139.0
+2016-01-12,pegged,calibration rejected (boundary-pegged),0.008391957569861053,11.0,104.0,158.0
+2016-01-26,pegged,calibration rejected (boundary-pegged),0.010809503269692572,11.0,88.0,144.0
+2016-01-28,pegged,calibration rejected (boundary-pegged),0.01540130821997031,10.0,75.0,132.0
+2016-02-25,pegged,calibration rejected (boundary-pegged),0.00930208795183074,10.0,75.0,131.0
+2016-03-03,pegged,calibration rejected (boundary-pegged),0.012098233813769042,11.0,83.0,160.0
+2016-04-08,pegged,calibration rejected (boundary-pegged),0.011051594947550833,11.0,86.0,151.0
+2016-07-21,pegged,calibration rejected (boundary-pegged),0.008583814399096536,11.0,70.0,151.0
+2016-08-03,pegged,calibration rejected (boundary-pegged),0.006431583903369349,8.0,57.0,103.0
+2016-09-14,iv_miss,calibration rejected (iv_rmse=0.1890 > 0.02),0.1890050663855015,8.0,65.0,109.0
+2017-02-03,pegged,calibration rejected (boundary-pegged),0.004365936989056785,12.0,71.0,151.0
+2017-05-02,pegged,calibration rejected (boundary-pegged),0.0038493398476598306,12.0,55.0,156.0
+2017-11-27,pegged,calibration rejected (boundary-pegged),0.004995321400652211,12.0,70.0,163.0
+2018-02-05,pegged,calibration rejected (boundary-pegged),0.013267498704450362,12.0,83.0,188.0
+2018-02-06,pegged,calibration rejected (boundary-pegged),0.016282546513158067,12.0,78.0,184.0
+2018-02-07,pegged,calibration rejected (boundary-pegged),0.005120646812001065,12.0,90.0,188.0
+2018-02-08,pegged,calibration rejected (boundary-pegged),0.01202209546990963,12.0,79.0,183.0
+2018-03-22,pegged,calibration rejected (boundary-pegged),0.004620247159417149,12.0,96.0,181.0
+2018-07-11,pegged,calibration rejected (boundary-pegged),0.0034168951612786685,12.0,81.0,172.0
+2018-08-22,pegged,calibration rejected (boundary-pegged),0.002576691107514483,12.0,72.0,177.0
+2018-10-10,pegged,calibration rejected (boundary-pegged),0.005149512728522145,12.0,88.0,182.0
+2018-10-12,pegged,calibration rejected (boundary-pegged),0.005464566224185522,12.0,100.0,174.0
+2019-09-03,pegged,calibration rejected (boundary-pegged),0.004734249482119444,10.0,86.0,150.0
+2019-09-04,pegged,calibration rejected (boundary-pegged),0.0033432514537453254,11.0,75.0,159.0
+2019-10-17,pegged,calibration rejected (boundary-pegged),0.004094157269525196,10.0,78.0,144.0
+2019-11-06,pegged,calibration rejected (boundary-pegged),0.003724169471778014,11.0,72.0,145.0
+2019-11-11,pegged,calibration rejected (boundary-pegged),0.003705229746634782,10.0,71.0,131.0
+2019-11-18,pegged,calibration rejected (boundary-pegged),0.0033651655647201255,11.0,79.0,166.0
+2019-11-21,pegged,calibration rejected (boundary-pegged),0.004259312917532898,11.0,80.0,165.0
+2020-03-03,iv_miss,calibration rejected (iv_rmse=0.0256 > 0.02),0.025575293067250458,12.0,89.0,192.0
+2020-03-11,pegged,calibration rejected (boundary-pegged),0.010185022336654309,12.0,93.0,192.0
+2020-03-13,iv_miss,calibration rejected (iv_rmse=0.0307 > 0.02),0.030720698200488006,12.0,92.0,191.0
+2020-03-16,iv_miss,calibration rejected (iv_rmse=0.0327 > 0.02),0.03270329850084613,12.0,86.0,192.0
+2020-03-17,iv_miss,calibration rejected (iv_rmse=0.0464 > 0.02),0.046397250669191176,12.0,76.0,192.0
+2020-03-18,iv_miss,calibration rejected (iv_rmse=0.0567 > 0.02),0.05668529001152608,12.0,86.0,192.0
+2020-03-19,iv_miss,calibration rejected (iv_rmse=0.0640 > 0.02),0.06399288340361484,12.0,84.0,192.0
+2020-03-20,iv_miss,calibration rejected (iv_rmse=0.0339 > 0.02),0.03385130539553988,12.0,79.0,192.0
+2020-03-23,pegged,calibration rejected (boundary-pegged),0.013751133681065876,12.0,79.0,192.0
+2020-04-01,iv_miss,calibration rejected (iv_rmse=0.0280 > 0.02),0.02799315433889207,12.0,92.0,192.0
+2020-04-07,pegged,calibration rejected (boundary-pegged),0.016367594622236973,12.0,68.0,192.0
+2020-04-09,pegged,calibration rejected (boundary-pegged),0.010326035249242095,12.0,75.0,192.0
+2020-04-14,pegged,calibration rejected (boundary-pegged),0.006865928473356427,12.0,87.0,192.0
+2020-04-15,pegged,calibration rejected (boundary-pegged),0.01441747343269382,12.0,88.0,192.0
+2020-04-17,pegged,calibration rejected (boundary-pegged),0.007133325732934367,12.0,83.0,192.0
+2020-04-20,pegged,calibration rejected (boundary-pegged),0.008368133308581749,12.0,103.0,192.0
+2020-04-21,iv_miss,calibration rejected (iv_rmse=0.0261 > 0.02),0.026140770488051794,12.0,91.0,192.0
+2020-04-22,pegged,calibration rejected (boundary-pegged),0.017832609266638263,12.0,87.0,192.0
+2020-04-23,pegged,calibration rejected (boundary-pegged),0.016741569054514824,12.0,94.0,188.0
+2020-04-24,iv_miss,calibration rejected (iv_rmse=0.0201 > 0.02),0.02014801999083983,12.0,88.0,192.0
+2020-04-27,pegged,calibration rejected (boundary-pegged),0.014721476783206086,12.0,79.0,192.0
+2020-04-28,pegged,calibration rejected (boundary-pegged),0.015406828585274701,12.0,98.0,192.0
+2020-04-29,pegged,calibration rejected (boundary-pegged),0.010452145567034853,12.0,92.0,192.0
+2020-04-30,pegged,calibration rejected (boundary-pegged),0.015145104599017939,12.0,85.0,192.0
+2020-05-01,pegged,calibration rejected (boundary-pegged),0.011407897682812118,12.0,86.0,192.0
+2020-05-04,iv_miss,calibration rejected (iv_rmse=0.0205 > 0.02),0.020545745112126652,12.0,85.0,192.0
+2020-05-05,pegged,calibration rejected (boundary-pegged),0.017793993010507724,12.0,87.0,192.0
+2020-05-06,pegged,calibration rejected (boundary-pegged),0.012206771309481074,12.0,107.0,192.0
+2020-05-08,pegged,calibration rejected (boundary-pegged),0.017852551463900024,12.0,96.0,192.0
+2020-05-11,pegged,calibration rejected (boundary-pegged),0.01903252047145386,12.0,86.0,192.0
+2020-05-12,iv_miss,calibration rejected (iv_rmse=0.0210 > 0.02),0.020997066413309014,12.0,97.0,192.0
+2020-05-13,pegged,calibration rejected (boundary-pegged),0.01828317210706624,12.0,81.0,192.0
+2020-05-14,iv_miss,calibration rejected (iv_rmse=0.0220 > 0.02),0.021984400243516618,12.0,81.0,192.0
+2020-05-15,iv_miss,calibration rejected (iv_rmse=0.0205 > 0.02),0.020453444050329003,12.0,89.0,192.0
+2020-05-18,pegged,calibration rejected (boundary-pegged),0.016546100513969556,12.0,88.0,192.0
+2020-05-20,pegged,calibration rejected (boundary-pegged),0.016583233138293636,12.0,83.0,192.0
+2020-05-26,pegged,calibration rejected (boundary-pegged),0.017087501536553074,12.0,81.0,192.0
+2020-05-27,pegged,calibration rejected (boundary-pegged),0.018998983033488313,12.0,95.0,192.0
+2020-05-28,pegged,calibration rejected (boundary-pegged),0.015462860791901182,12.0,86.0,192.0
+2020-05-29,pegged,calibration rejected (boundary-pegged),0.01709138742793266,12.0,94.0,192.0
+2020-06-01,pegged,calibration rejected (boundary-pegged),0.01574672208725085,12.0,100.0,187.0
+2020-06-02,pegged,calibration rejected (boundary-pegged),0.016970724227762492,12.0,86.0,192.0
+2020-06-03,pegged,calibration rejected (boundary-pegged),0.014743446515347536,12.0,77.0,192.0
+2020-06-04,pegged,calibration rejected (boundary-pegged),0.014718778940439778,12.0,88.0,191.0
+2020-06-05,pegged,calibration rejected (boundary-pegged),0.013123480647894325,12.0,70.0,192.0
+2020-06-08,pegged,calibration rejected (boundary-pegged),0.012849362029194603,12.0,78.0,192.0
+2020-06-09,pegged,calibration rejected (boundary-pegged),0.010296474078208698,12.0,85.0,191.0
+2020-06-11,iv_miss,calibration rejected (iv_rmse=0.0201 > 0.02),0.020088712752943313,12.0,52.0,192.0
+2020-06-12,pegged,calibration rejected (boundary-pegged),0.01616702556002781,12.0,66.0,192.0
+2020-06-15,pegged,calibration rejected (boundary-pegged),0.01703006839332095,12.0,80.0,187.0
+2020-06-17,pegged,calibration rejected (boundary-pegged),0.009165844540349148,11.0,93.0,176.0
+2020-06-18,pegged,calibration rejected (boundary-pegged),0.019926270716331893,11.0,93.0,170.0
+2020-06-19,pegged,calibration rejected (boundary-pegged),0.017034733908774,12.0,74.0,192.0
+2020-06-22,pegged,calibration rejected (boundary-pegged),0.017466643012418147,11.0,84.0,176.0
+2020-06-23,pegged,calibration rejected (boundary-pegged),0.01105635177058129,12.0,92.0,184.0
+2020-06-25,pegged,calibration rejected (boundary-pegged),0.010774571733537434,11.0,84.0,176.0
+2020-06-26,pegged,calibration rejected (boundary-pegged),0.018949119039864744,12.0,95.0,190.0
+2020-06-29,pegged,calibration rejected (boundary-pegged),0.015899632995357026,12.0,99.0,190.0
+2020-06-30,pegged,calibration rejected (boundary-pegged),0.015210944231579758,12.0,93.0,190.0
+2020-07-01,pegged,calibration rejected (boundary-pegged),0.015849065718560224,11.0,77.0,176.0
+2020-07-02,pegged,calibration rejected (boundary-pegged),0.010296823400632869,12.0,99.0,182.0
+2020-07-06,pegged,calibration rejected (boundary-pegged),0.015110807579434105,12.0,82.0,192.0
+2020-07-08,pegged,calibration rejected (boundary-pegged),0.01612243478906265,11.0,77.0,171.0
+2020-07-09,pegged,calibration rejected (boundary-pegged),0.011941279069792775,11.0,90.0,168.0
+2020-07-10,pegged,calibration rejected (boundary-pegged),0.012469478956241824,11.0,90.0,170.0
+2020-07-13,pegged,calibration rejected (boundary-pegged),0.01500207052419646,12.0,85.0,192.0
+2020-07-14,pegged,calibration rejected (boundary-pegged),0.01759025925422711,12.0,91.0,176.0
+2020-07-16,pegged,calibration rejected (boundary-pegged),0.009685417892822755,12.0,98.0,182.0
+2020-07-21,pegged,calibration rejected (boundary-pegged),0.015284943954359354,11.0,91.0,170.0
+2020-08-06,pegged,calibration rejected (boundary-pegged),0.015960265771922638,11.0,90.0,170.0
+2020-08-18,pegged,calibration rejected (boundary-pegged),0.00612476269233913,11.0,87.0,156.0
+2020-09-02,pegged,calibration rejected (boundary-pegged),0.006163535977537205,12.0,97.0,188.0
+2020-09-09,pegged,calibration rejected (boundary-pegged),0.004916261554117149,12.0,100.0,181.0
+2020-09-29,pegged,calibration rejected (boundary-pegged),0.004398096204168243,10.0,87.0,153.0
+2020-10-07,pegged,calibration rejected (boundary-pegged),0.008322703710404252,11.0,99.0,163.0
+2020-10-12,pegged,calibration rejected (boundary-pegged),0.005973098270740841,11.0,100.0,164.0
+2020-10-23,pegged,calibration rejected (boundary-pegged),0.006171797314201559,11.0,96.0,164.0
+2020-10-27,pegged,calibration rejected (boundary-pegged),0.006852428335683655,11.0,106.0,155.0
+2020-12-03,pegged,calibration rejected (boundary-pegged),0.00587739365888244,12.0,106.0,175.0
+2020-12-14,pegged,calibration rejected (boundary-pegged),0.006896344664897619,11.0,97.0,166.0
+2020-12-17,pegged,calibration rejected (boundary-pegged),0.006105254826639655,12.0,98.0,174.0
+2020-12-18,pegged,calibration rejected (boundary-pegged),0.006336383013782024,11.0,87.0,162.0
+2020-12-28,pegged,calibration rejected (boundary-pegged),0.006885639869182762,12.0,98.0,168.0
+2020-12-29,pegged,calibration rejected (boundary-pegged),0.008896488561756828,12.0,102.0,171.0
+2020-12-30,pegged,calibration rejected (boundary-pegged),0.005627542086642928,12.0,105.0,184.0
+2021-01-06,pegged,calibration rejected (boundary-pegged),0.008119609252806944,12.0,112.0,184.0
+2021-01-11,pegged,calibration rejected (boundary-pegged),0.005866178243023415,11.0,99.0,166.0
+2021-01-14,pegged,calibration rejected (boundary-pegged),0.005653926858075532,10.0,91.0,150.0
+2021-01-19,pegged,calibration rejected (boundary-pegged),0.005252330301439382,12.0,114.0,177.0
+2021-01-21,pegged,calibration rejected (boundary-pegged),0.006359948989480616,12.0,109.0,184.0
+2021-01-25,pegged,calibration rejected (boundary-pegged),0.006058272648313672,12.0,107.0,184.0
+2021-02-10,pegged,calibration rejected (boundary-pegged),0.006527488725552148,12.0,110.0,184.0
+2021-02-16,iv_miss,calibration rejected (iv_rmse=0.2654 > 0.02),0.26535078215225344,11.0,91.0,165.0
+2021-02-17,iv_miss,calibration rejected (iv_rmse=0.4307 > 0.02),0.4306941182196998,12.0,110.0,186.0
+2021-02-18,iv_miss,calibration rejected (iv_rmse=0.2847 > 0.02),0.28473175261352823,11.0,96.0,170.0
+2021-02-19,iv_miss,calibration rejected (iv_rmse=0.2176 > 0.02),0.21764789764024084,12.0,117.0,190.0
+2021-02-22,iv_miss,calibration rejected (iv_rmse=0.2664 > 0.02),0.2663528023396381,12.0,91.0,183.0
+2021-02-23,iv_miss,calibration rejected (iv_rmse=0.2223 > 0.02),0.2223053391034668,12.0,96.0,186.0
+2021-02-24,iv_miss,calibration rejected (iv_rmse=0.1903 > 0.02),0.19033204413202395,12.0,99.0,178.0
+2021-02-25,iv_miss,calibration rejected (iv_rmse=0.2579 > 0.02),0.25787676382049324,12.0,111.0,192.0
+2021-02-26,iv_miss,calibration rejected (iv_rmse=0.3888 > 0.02),0.38884318437344073,12.0,96.0,187.0
+2021-03-01,iv_miss,calibration rejected (iv_rmse=0.2374 > 0.02),0.2373581291854696,12.0,90.0,177.0
+2021-03-02,iv_miss,calibration rejected (iv_rmse=0.2221 > 0.02),0.2221022031326622,12.0,111.0,189.0
+2021-03-03,iv_miss,calibration rejected (iv_rmse=0.3988 > 0.02),0.3987758225185419,12.0,111.0,192.0
+2021-03-04,iv_miss,calibration rejected (iv_rmse=0.1695 > 0.02),0.16949349214279713,12.0,92.0,191.0
+2021-03-05,iv_miss,calibration rejected (iv_rmse=0.4338 > 0.02),0.4338480670646358,10.0,72.0,160.0
+2021-03-08,iv_miss,calibration rejected (iv_rmse=0.1559 > 0.02),0.15586418488284287,12.0,92.0,191.0
+2021-03-09,iv_miss,calibration rejected (iv_rmse=0.2800 > 0.02),0.28000698438304955,12.0,112.0,182.0
+2021-03-10,iv_miss,calibration rejected (iv_rmse=0.4273 > 0.02),0.4273230085927262,12.0,117.0,187.0
+2021-03-11,iv_miss,calibration rejected (iv_rmse=0.3684 > 0.02),0.36838232872680193,12.0,110.0,192.0
+2021-03-12,iv_miss,calibration rejected (iv_rmse=0.3880 > 0.02),0.3880005078648183,12.0,128.0,189.0
+2021-03-15,iv_miss,calibration rejected (iv_rmse=0.3084 > 0.02),0.30841559719099515,12.0,118.0,181.0
+2021-03-16,iv_miss,calibration rejected (iv_rmse=0.2153 > 0.02),0.21525222911432074,12.0,100.0,185.0
+2021-03-17,iv_miss,calibration rejected (iv_rmse=0.3430 > 0.02),0.34297805796846814,12.0,123.0,192.0
+2021-03-18,iv_miss,calibration rejected (iv_rmse=0.2469 > 0.02),0.24691383316747495,12.0,111.0,184.0
+2021-03-19,iv_miss,calibration rejected (iv_rmse=0.1394 > 0.02),0.13935674365845138,12.0,93.0,186.0
+2021-03-22,iv_miss,calibration rejected (iv_rmse=0.1188 > 0.02),0.11881193980188715,11.0,92.0,171.0
+2021-03-23,iv_miss,calibration rejected (iv_rmse=0.0441 > 0.02),0.044097823664718455,12.0,108.0,184.0
+2021-03-24,iv_miss,calibration rejected (iv_rmse=0.1954 > 0.02),0.19543986125533144,11.0,112.0,173.0
+2021-03-25,iv_miss,calibration rejected (iv_rmse=0.3338 > 0.02),0.33379265967041594,12.0,101.0,189.0
+2021-03-26,iv_miss,calibration rejected (iv_rmse=0.2586 > 0.02),0.2585999529278637,12.0,115.0,186.0
+2021-03-29,iv_miss,calibration rejected (iv_rmse=0.1180 > 0.02),0.11804304605017538,12.0,94.0,185.0
+2021-03-30,iv_miss,calibration rejected (iv_rmse=0.0857 > 0.02),0.08574654532296713,12.0,101.0,176.0
+2021-03-31,iv_miss,calibration rejected (iv_rmse=0.2010 > 0.02),0.20103696877366045,12.0,100.0,184.0
+2021-04-01,iv_miss,calibration rejected (iv_rmse=0.2203 > 0.02),0.22029149610310003,12.0,97.0,192.0
+2021-04-05,iv_miss,calibration rejected (iv_rmse=0.1483 > 0.02),0.14825149823391137,12.0,74.0,192.0
+2021-04-06,iv_miss,calibration rejected (iv_rmse=0.1191 > 0.02),0.11909357606448881,12.0,92.0,192.0
+2021-04-07,iv_miss,calibration rejected (iv_rmse=0.2156 > 0.02),0.21563230303637898,12.0,77.0,192.0
+2021-04-08,iv_miss,calibration rejected (iv_rmse=0.1337 > 0.02),0.13370577995335842,12.0,81.0,190.0
+2021-04-09,iv_miss,calibration rejected (iv_rmse=0.3456 > 0.02),0.3455746788754981,12.0,74.0,192.0
+2021-04-12,iv_miss,calibration rejected (iv_rmse=0.2975 > 0.02),0.2974903652578176,12.0,88.0,190.0
+2021-04-13,iv_miss,calibration rejected (iv_rmse=0.2305 > 0.02),0.2304575197318709,11.0,84.0,175.0
+2021-04-14,iv_miss,calibration rejected (iv_rmse=0.1356 > 0.02),0.1355590380272101,11.0,98.0,172.0
+2021-04-15,iv_miss,calibration rejected (iv_rmse=0.2967 > 0.02),0.29668263773435644,12.0,88.0,189.0
+2021-04-16,iv_miss,calibration rejected (iv_rmse=0.2988 > 0.02),0.29876146380978186,12.0,78.0,181.0
+2021-04-19,iv_miss,calibration rejected (iv_rmse=0.1580 > 0.02),0.15802523495892462,12.0,98.0,192.0
+2021-04-20,iv_miss,calibration rejected (iv_rmse=0.1478 > 0.02),0.14778684755314261,12.0,104.0,183.0
+2021-04-21,iv_miss,calibration rejected (iv_rmse=0.2266 > 0.02),0.22662490275662472,12.0,110.0,187.0
+2021-04-22,iv_miss,calibration rejected (iv_rmse=0.2272 > 0.02),0.22716508738602262,11.0,94.0,157.0
+2021-04-23,iv_miss,calibration rejected (iv_rmse=0.2945 > 0.02),0.2945402080750385,12.0,91.0,186.0
+2021-04-26,iv_miss,calibration rejected (iv_rmse=0.2140 > 0.02),0.21402512330585535,12.0,97.0,182.0
+2021-04-27,iv_miss,calibration rejected (iv_rmse=0.2142 > 0.02),0.2142318398405157,12.0,92.0,170.0
+2021-04-28,iv_miss,calibration rejected (iv_rmse=0.1218 > 0.02),0.1218130853229998,12.0,99.0,174.0
+2021-04-29,iv_miss,calibration rejected (iv_rmse=0.3075 > 0.02),0.30751531529678094,12.0,113.0,188.0
+2021-04-30,iv_miss,calibration rejected (iv_rmse=0.3164 > 0.02),0.3163527376741722,12.0,83.0,177.0
+2021-05-03,iv_miss,calibration rejected (iv_rmse=0.1805 > 0.02),0.18048074522312602,12.0,104.0,182.0
+2021-05-07,pegged,calibration rejected (boundary-pegged),0.003159147087256364,11.0,83.0,174.0
+2021-05-12,pegged,calibration rejected (boundary-pegged),0.008942078060766846,12.0,88.0,192.0
+2021-05-18,pegged,calibration rejected (boundary-pegged),0.004240682342796693,12.0,88.0,188.0
+2021-05-20,pegged,calibration rejected (boundary-pegged),0.005413963275548879,12.0,99.0,187.0
+2021-05-21,pegged,calibration rejected (boundary-pegged),0.005317357430665779,12.0,120.0,183.0
+2021-05-24,pegged,calibration rejected (boundary-pegged),0.0051056476346777535,12.0,93.0,191.0
+2021-05-25,pegged,calibration rejected (boundary-pegged),0.0039683981659353355,12.0,94.0,187.0
+2021-05-26,pegged,calibration rejected (boundary-pegged),0.0050249770142483914,11.0,91.0,169.0
+2021-05-27,pegged,calibration rejected (boundary-pegged),0.0046139508631125765,12.0,90.0,183.0
+2021-05-28,pegged,calibration rejected (boundary-pegged),0.0032872648417945956,12.0,97.0,186.0
+2021-06-02,pegged,calibration rejected (boundary-pegged),0.0034034815281524743,12.0,95.0,185.0
+2021-06-03,pegged,calibration rejected (boundary-pegged),0.003677921282433118,11.0,96.0,170.0
+2021-06-04,pegged,calibration rejected (boundary-pegged),0.0035189478014022524,12.0,109.0,184.0
+2021-06-07,pegged,calibration rejected (boundary-pegged),0.004341686931308151,12.0,102.0,184.0
+2021-06-08,pegged,calibration rejected (boundary-pegged),0.003987747629536119,12.0,105.0,186.0
+2021-06-09,pegged,calibration rejected (boundary-pegged),0.003796958104065099,12.0,97.0,182.0
+2021-06-10,pegged,calibration rejected (boundary-pegged),0.003265532682198098,12.0,88.0,186.0
+2021-06-11,pegged,calibration rejected (boundary-pegged),0.007822021051824944,12.0,75.0,192.0
+2021-06-14,pegged,calibration rejected (boundary-pegged),0.0029812364957078783,12.0,103.0,174.0
+2021-06-16,pegged,calibration rejected (boundary-pegged),0.004235475756969477,11.0,96.0,176.0
+2021-06-17,pegged,calibration rejected (boundary-pegged),0.0031192062374744583,12.0,88.0,190.0
+2021-06-18,pegged,calibration rejected (boundary-pegged),0.0032798104275972725,12.0,73.0,192.0
+2021-06-22,pegged,calibration rejected (boundary-pegged),0.0044495029075894916,12.0,90.0,190.0
+2021-06-23,pegged,calibration rejected (boundary-pegged),0.002802268348259151,11.0,85.0,159.0
+2021-06-24,pegged,calibration rejected (boundary-pegged),0.0033590248503563,12.0,83.0,190.0
+2021-06-25,pegged,calibration rejected (boundary-pegged),0.002472672815539859,12.0,84.0,185.0
+2021-06-28,pegged,calibration rejected (boundary-pegged),0.00361448795168811,11.0,93.0,174.0
+2021-06-29,pegged,calibration rejected (boundary-pegged),0.003522907347138857,11.0,99.0,175.0
+2021-06-30,pegged,calibration rejected (boundary-pegged),0.00392634711200357,11.0,96.0,167.0
+2021-07-01,pegged,calibration rejected (boundary-pegged),0.0035462404945202828,12.0,99.0,186.0
+2021-07-02,pegged,calibration rejected (boundary-pegged),0.002478094278387451,12.0,95.0,187.0
+2021-07-07,pegged,calibration rejected (boundary-pegged),0.0034366645497606384,11.0,102.0,176.0
+2021-07-09,pegged,calibration rejected (boundary-pegged),0.003051349083660104,11.0,102.0,174.0
+2021-07-12,pegged,calibration rejected (boundary-pegged),0.005792244895080148,12.0,87.0,170.0
+2021-07-14,pegged,calibration rejected (boundary-pegged),0.004543546470467115,12.0,110.0,182.0
+2021-07-15,pegged,calibration rejected (boundary-pegged),0.004519472561815245,12.0,121.0,190.0
+2021-07-16,pegged,calibration rejected (boundary-pegged),0.0038925500551190506,12.0,100.0,180.0
+2021-07-20,pegged,calibration rejected (boundary-pegged),0.0052720172100137,12.0,95.0,187.0
+2021-07-21,pegged,calibration rejected (boundary-pegged),0.0047338741509246685,12.0,104.0,192.0
+2021-07-22,pegged,calibration rejected (boundary-pegged),0.0043453704107614035,12.0,102.0,183.0
+2021-07-26,pegged,calibration rejected (boundary-pegged),0.002911908134377116,12.0,84.0,189.0
+2021-07-27,pegged,calibration rejected (boundary-pegged),0.003224366461963182,10.0,93.0,160.0
+2021-07-28,pegged,calibration rejected (boundary-pegged),0.0027262914176835276,10.0,104.0,155.0
+2021-07-29,pegged,calibration rejected (boundary-pegged),0.004333395420981902,11.0,91.0,161.0
+2021-07-30,pegged,calibration rejected (boundary-pegged),0.0038404940368330144,12.0,112.0,181.0
+2021-08-02,pegged,calibration rejected (boundary-pegged),0.003639364872305021,11.0,92.0,163.0
+2021-08-03,pegged,calibration rejected (boundary-pegged),0.004700617161387924,11.0,102.0,167.0
+2021-08-04,pegged,calibration rejected (boundary-pegged),0.004231725432122587,11.0,93.0,157.0
+2021-08-05,pegged,calibration rejected (boundary-pegged),0.004507549281911837,12.0,97.0,177.0
+2021-08-06,pegged,calibration rejected (boundary-pegged),0.004097011319019109,12.0,101.0,181.0
+2021-08-10,pegged,calibration rejected (boundary-pegged),0.0049116701031232815,11.0,102.0,166.0
+2021-08-11,pegged,calibration rejected (boundary-pegged),0.0036408583421613243,12.0,100.0,175.0
+2021-08-12,pegged,calibration rejected (boundary-pegged),0.003666056380249382,12.0,122.0,186.0
+2021-08-13,pegged,calibration rejected (boundary-pegged),0.0037517619736035313,12.0,86.0,183.0
+2021-08-16,pegged,calibration rejected (boundary-pegged),0.0044207504625498545,12.0,112.0,189.0
+2021-08-17,pegged,calibration rejected (boundary-pegged),0.004770573895627917,12.0,109.0,191.0
+2021-08-18,pegged,calibration rejected (boundary-pegged),0.004622706939021338,12.0,114.0,187.0
+2021-08-20,pegged,calibration rejected (boundary-pegged),0.005319267990835076,12.0,102.0,190.0
+2021-08-23,pegged,calibration rejected (boundary-pegged),0.003262487863207249,12.0,96.0,180.0
+2021-08-24,pegged,calibration rejected (boundary-pegged),0.01218455371647816,12.0,90.0,191.0
+2021-08-25,pegged,calibration rejected (boundary-pegged),0.004077870001197074,11.0,88.0,164.0
+2021-08-26,pegged,calibration rejected (boundary-pegged),0.0061930505875417595,12.0,112.0,186.0
+2021-08-27,pegged,calibration rejected (boundary-pegged),0.004518383749993279,12.0,104.0,186.0
+2021-08-30,pegged,calibration rejected (boundary-pegged),0.004074755211091938,12.0,103.0,190.0
+2021-08-31,pegged,calibration rejected (boundary-pegged),0.005021501419725926,12.0,100.0,174.0
+2021-09-01,pegged,calibration rejected (boundary-pegged),0.003391572782489785,12.0,103.0,184.0
+2021-09-02,pegged,calibration rejected (boundary-pegged),0.004016658081938049,12.0,108.0,182.0
+2021-09-03,pegged,calibration rejected (boundary-pegged),0.004754850973072425,11.0,96.0,171.0
+2021-09-07,pegged,calibration rejected (boundary-pegged),0.0032561896880291645,12.0,102.0,186.0
+2021-09-08,pegged,calibration rejected (boundary-pegged),0.003659240155969856,12.0,92.0,183.0
+2021-09-09,pegged,calibration rejected (boundary-pegged),0.004215681947540126,12.0,113.0,189.0
+2021-09-10,pegged,calibration rejected (boundary-pegged),0.005807249980095914,12.0,104.0,182.0
+2021-09-13,pegged,calibration rejected (boundary-pegged),0.004318129035762341,12.0,103.0,191.0
+2021-09-14,pegged,calibration rejected (boundary-pegged),0.004839240619605464,12.0,107.0,186.0
+2021-09-15,pegged,calibration rejected (boundary-pegged),0.005546414956417413,12.0,103.0,192.0
+2021-09-16,pegged,calibration rejected (boundary-pegged),0.011239283321740848,12.0,104.0,185.0
+2021-09-17,pegged,calibration rejected (boundary-pegged),0.01405678970101189,11.0,93.0,173.0
+2021-09-20,pegged,calibration rejected (boundary-pegged),0.005035715054269106,12.0,65.0,192.0
+2021-09-21,pegged,calibration rejected (boundary-pegged),0.013181038268307434,12.0,102.0,191.0
+2021-09-22,pegged,calibration rejected (boundary-pegged),0.005511599016133502,11.0,93.0,172.0
+2021-09-23,pegged,calibration rejected (boundary-pegged),0.004874022353206697,12.0,93.0,187.0
+2021-09-24,pegged,calibration rejected (boundary-pegged),0.004949769683678401,12.0,99.0,189.0
+2021-09-27,pegged,calibration rejected (boundary-pegged),0.005261802806428363,12.0,95.0,189.0
+2021-09-28,pegged,calibration rejected (boundary-pegged),0.005586435007348155,11.0,84.0,176.0
+2021-09-29,pegged,calibration rejected (boundary-pegged),0.005875643770106106,11.0,109.0,174.0
+2021-09-30,pegged,calibration rejected (boundary-pegged),0.015236649420710936,12.0,92.0,192.0
+2021-10-01,pegged,calibration rejected (boundary-pegged),0.006123132703759674,12.0,84.0,192.0
+2021-10-04,pegged,calibration rejected (boundary-pegged),0.0058194195911779704,12.0,86.0,187.0
+2021-10-05,pegged,calibration rejected (boundary-pegged),0.005193196983943327,12.0,101.0,192.0
+2021-10-06,pegged,calibration rejected (boundary-pegged),0.006562609283034242,12.0,109.0,192.0
+2021-10-07,pegged,calibration rejected (boundary-pegged),0.00457052663737323,12.0,89.0,192.0
+2021-10-08,pegged,calibration rejected (boundary-pegged),0.00466453786234226,11.0,96.0,173.0
+2021-10-11,pegged,calibration rejected (boundary-pegged),0.005094969002397288,12.0,115.0,190.0
+2021-10-12,pegged,calibration rejected (boundary-pegged),0.004515734373107389,11.0,95.0,163.0
+2021-10-13,pegged,calibration rejected (boundary-pegged),0.004152545693644749,12.0,111.0,192.0
+2021-10-14,pegged,calibration rejected (boundary-pegged),0.010532106526334942,12.0,89.0,192.0
+2021-10-18,pegged,calibration rejected (boundary-pegged),0.003704241261130127,12.0,80.0,187.0
+2021-10-19,pegged,calibration rejected (boundary-pegged),0.009209232482708902,12.0,62.0,192.0
+2021-10-20,pegged,calibration rejected (boundary-pegged),0.014056652363569939,12.0,88.0,186.0
+2021-10-21,pegged,calibration rejected (boundary-pegged),0.0041302997734917034,12.0,108.0,189.0
+2021-10-22,pegged,calibration rejected (boundary-pegged),0.0034393099738399776,12.0,93.0,183.0
+2021-10-25,pegged,calibration rejected (boundary-pegged),0.0036550922178024913,12.0,104.0,189.0
+2021-10-26,no_trades,no trades after IV/DTM filter,,,,
+2021-10-27,pegged,calibration rejected (boundary-pegged),0.003909660945632336,11.0,108.0,172.0
+2021-10-28,pegged,calibration rejected (boundary-pegged),0.0037739993246183653,11.0,89.0,170.0
+2021-10-29,pegged,calibration rejected (boundary-pegged),0.003065117861574518,12.0,84.0,186.0
+2021-11-01,pegged,calibration rejected (boundary-pegged),0.004478032128298833,12.0,93.0,191.0
+2021-11-02,pegged,calibration rejected (boundary-pegged),0.0028249733993799503,12.0,94.0,182.0
+2021-11-03,pegged,calibration rejected (boundary-pegged),0.004130520088814995,12.0,104.0,183.0
+2021-11-04,pegged,calibration rejected (boundary-pegged),0.010289513101848963,12.0,82.0,188.0
+2021-11-05,pegged,calibration rejected (boundary-pegged),0.009933421188915671,12.0,74.0,192.0
+2021-11-08,pegged,calibration rejected (boundary-pegged),0.00414170864243086,12.0,76.0,184.0
+2021-11-09,pegged,calibration rejected (boundary-pegged),0.003577023443218493,12.0,93.0,183.0
+2021-11-10,pegged,calibration rejected (boundary-pegged),0.004480302755905504,12.0,96.0,189.0
+2021-11-11,pegged,calibration rejected (boundary-pegged),0.003943885186005137,12.0,100.0,191.0
+2021-11-12,pegged,calibration rejected (boundary-pegged),0.00503201952965454,12.0,104.0,177.0
+2021-11-15,pegged,calibration rejected (boundary-pegged),0.003833723933623443,12.0,108.0,189.0
+2021-11-16,pegged,calibration rejected (boundary-pegged),0.003732699803631627,12.0,110.0,192.0
+2021-11-17,pegged,calibration rejected (boundary-pegged),0.004762193811155713,12.0,102.0,176.0
+2021-11-18,pegged,calibration rejected (boundary-pegged),0.004776888782490396,12.0,84.0,180.0
+2021-11-22,pegged,calibration rejected (boundary-pegged),0.0048202185336212195,12.0,110.0,187.0
+2021-11-23,pegged,calibration rejected (boundary-pegged),0.004534088449501069,12.0,110.0,184.0
+2021-11-24,pegged,calibration rejected (boundary-pegged),0.005453660158547918,12.0,129.0,182.0
+2021-11-26,pegged,calibration rejected (boundary-pegged),0.007285155381434259,12.0,94.0,185.0
+2021-11-29,pegged,calibration rejected (boundary-pegged),0.006983819387667463,12.0,95.0,186.0
+2021-12-01,pegged,calibration rejected (boundary-pegged),0.01552714537366154,12.0,91.0,188.0
+2021-12-06,pegged,calibration rejected (boundary-pegged),0.006958443898082341,12.0,104.0,187.0
+2021-12-07,pegged,calibration rejected (boundary-pegged),0.00472652701432732,12.0,91.0,187.0
+2021-12-08,pegged,calibration rejected (boundary-pegged),0.0052198020123206245,11.0,96.0,175.0
+2021-12-09,pegged,calibration rejected (boundary-pegged),0.004800146779404074,11.0,96.0,168.0
+2021-12-10,pegged,calibration rejected (boundary-pegged),0.004317386590399644,12.0,119.0,187.0
+2021-12-13,pegged,calibration rejected (boundary-pegged),0.004476170029996421,12.0,106.0,172.0
+2021-12-14,pegged,calibration rejected (boundary-pegged),0.005299422868037988,11.0,109.0,166.0
+2021-12-15,pegged,calibration rejected (boundary-pegged),0.008590170856240914,11.0,109.0,168.0
+2021-12-16,pegged,calibration rejected (boundary-pegged),0.006786379861002508,12.0,114.0,187.0
+2021-12-17,pegged,calibration rejected (boundary-pegged),0.011622349271219379,12.0,100.0,183.0
+2021-12-20,pegged,calibration rejected (boundary-pegged),0.011403150218963102,12.0,85.0,192.0
+2021-12-21,pegged,calibration rejected (boundary-pegged),0.0060768321542114725,11.0,92.0,172.0
+2021-12-22,pegged,calibration rejected (boundary-pegged),0.0055241456184998506,12.0,116.0,192.0
+2021-12-23,pegged,calibration rejected (boundary-pegged),0.010651437469068029,12.0,70.0,192.0
+2021-12-27,pegged,calibration rejected (boundary-pegged),0.009871307481090214,12.0,70.0,192.0
+2021-12-28,pegged,calibration rejected (boundary-pegged),0.004609938757096076,12.0,97.0,192.0
+2021-12-29,pegged,calibration rejected (boundary-pegged),0.0034442402010368012,12.0,98.0,192.0
+2021-12-30,pegged,calibration rejected (boundary-pegged),0.013471142535141267,12.0,83.0,187.0
+2021-12-31,pegged,calibration rejected (boundary-pegged),0.00826039954670822,12.0,104.0,182.0
+2022-01-03,pegged,calibration rejected (boundary-pegged),0.004295573572576801,12.0,104.0,189.0
+2022-01-04,pegged,calibration rejected (boundary-pegged),0.003998205794422104,12.0,79.0,191.0
+2022-01-05,pegged,calibration rejected (boundary-pegged),0.005790180094773447,12.0,94.0,188.0
+2022-01-06,pegged,calibration rejected (boundary-pegged),0.01032303502040301,12.0,74.0,192.0
+2022-01-07,pegged,calibration rejected (boundary-pegged),0.0050603937842309986,12.0,88.0,192.0
+2022-01-10,pegged,calibration rejected (boundary-pegged),0.00999069273156667,12.0,68.0,192.0
+2022-01-11,pegged,calibration rejected (boundary-pegged),0.005316311709212947,12.0,96.0,192.0
+2022-01-12,pegged,calibration rejected (boundary-pegged),0.004182154150844183,12.0,103.0,190.0
+2022-01-14,pegged,calibration rejected (boundary-pegged),0.012354258431857779,12.0,99.0,192.0
+2022-01-18,pegged,calibration rejected (boundary-pegged),0.010128097370438155,12.0,85.0,191.0
+2022-01-19,pegged,calibration rejected (boundary-pegged),0.010143825132404522,12.0,86.0,192.0
+2022-01-20,pegged,calibration rejected (boundary-pegged),0.010836031595849765,12.0,76.0,192.0
+2022-01-21,pegged,calibration rejected (boundary-pegged),0.00844158749671623,12.0,50.0,192.0
+2022-01-24,pegged,calibration rejected (boundary-pegged),0.010793838038297468,12.0,56.0,192.0
+2022-01-25,pegged,calibration rejected (boundary-pegged),0.011772065766281824,12.0,90.0,192.0
+2022-01-28,pegged,calibration rejected (boundary-pegged),0.0073389417865466315,12.0,94.0,192.0
+2022-01-31,pegged,calibration rejected (boundary-pegged),0.009499529540262092,12.0,77.0,192.0
+2022-02-01,pegged,calibration rejected (boundary-pegged),0.00870455983759534,12.0,81.0,192.0
+2022-02-02,pegged,calibration rejected (boundary-pegged),0.009733352361306872,12.0,100.0,192.0
+2022-02-03,pegged,calibration rejected (boundary-pegged),0.00907872282445501,12.0,81.0,192.0
+2022-02-07,pegged,calibration rejected (boundary-pegged),0.009973578121822332,11.0,100.0,176.0
+2022-02-10,pegged,calibration rejected (boundary-pegged),0.010156330453058235,12.0,86.0,191.0
+2022-02-11,pegged,calibration rejected (boundary-pegged),0.008969207220633615,12.0,94.0,187.0
+2022-02-17,pegged,calibration rejected (boundary-pegged),0.004963467785956491,12.0,90.0,192.0
+2022-02-18,pegged,calibration rejected (boundary-pegged),0.00945321701252596,12.0,76.0,192.0
+2022-02-22,pegged,calibration rejected (boundary-pegged),0.009208428334781953,12.0,70.0,192.0
+2022-02-23,pegged,calibration rejected (boundary-pegged),0.008801846035782714,12.0,81.0,192.0
+2022-02-24,pegged,calibration rejected (boundary-pegged),0.009380788576395325,12.0,58.0,192.0
+2022-02-25,pegged,calibration rejected (boundary-pegged),0.008650363635134835,12.0,85.0,192.0
+2022-02-28,pegged,calibration rejected (boundary-pegged),0.010040432283885648,12.0,85.0,192.0
+2022-03-02,pegged,calibration rejected (boundary-pegged),0.009480219560198573,12.0,79.0,192.0
+2022-03-07,pegged,calibration rejected (boundary-pegged),0.010075250248716696,12.0,77.0,192.0
+2022-03-08,pegged,calibration rejected (boundary-pegged),0.01032105884506847,12.0,73.0,192.0
+2022-03-10,pegged,calibration rejected (boundary-pegged),0.0108111894630337,12.0,93.0,192.0
+2022-03-11,pegged,calibration rejected (boundary-pegged),0.011844360007186304,12.0,98.0,192.0
+2022-03-14,pegged,calibration rejected (boundary-pegged),0.011040192658358013,12.0,94.0,192.0
+2022-03-15,pegged,calibration rejected (boundary-pegged),0.010553999478364464,12.0,82.0,192.0
+2022-03-16,pegged,calibration rejected (boundary-pegged),0.009465211933014464,12.0,84.0,192.0
+2022-03-17,pegged,calibration rejected (boundary-pegged),0.012618156374346635,12.0,91.0,192.0
+2022-03-18,pegged,calibration rejected (boundary-pegged),0.005452553106960711,12.0,82.0,192.0
+2022-03-21,pegged,calibration rejected (boundary-pegged),0.008670019315637273,12.0,80.0,192.0
+2022-03-22,pegged,calibration rejected (boundary-pegged),0.008518636740034165,12.0,78.0,192.0
+2022-03-23,pegged,calibration rejected (boundary-pegged),0.004281524458564332,12.0,85.0,190.0
+2022-03-24,pegged,calibration rejected (boundary-pegged),0.009797194831652157,12.0,92.0,191.0
+2022-03-25,pegged,calibration rejected (boundary-pegged),0.009519134915363953,12.0,83.0,192.0
+2022-03-28,pegged,calibration rejected (boundary-pegged),0.009689885985620832,11.0,67.0,176.0
+2022-03-29,pegged,calibration rejected (boundary-pegged),0.009845097179187863,12.0,72.0,192.0
+2022-03-30,pegged,calibration rejected (boundary-pegged),0.010540008418470805,12.0,74.0,185.0
+2022-03-31,pegged,calibration rejected (boundary-pegged),0.004478803240342291,12.0,94.0,192.0
+2022-04-01,pegged,calibration rejected (boundary-pegged),0.010469752545113715,12.0,89.0,192.0
+2022-04-04,pegged,calibration rejected (boundary-pegged),0.0047521994721762655,12.0,98.0,186.0
+2022-04-05,pegged,calibration rejected (boundary-pegged),0.005608584519494444,12.0,78.0,192.0
+2022-04-06,pegged,calibration rejected (boundary-pegged),0.011680077899911417,12.0,97.0,192.0
+2022-04-07,pegged,calibration rejected (boundary-pegged),0.0054863384929041675,12.0,108.0,192.0
+2022-04-08,pegged,calibration rejected (boundary-pegged),0.005123307886648818,12.0,103.0,190.0
+2022-04-11,pegged,calibration rejected (boundary-pegged),0.0056516123281300755,12.0,103.0,191.0
+2022-04-12,pegged,calibration rejected (boundary-pegged),0.00780625668349048,12.0,95.0,184.0
+2022-04-13,pegged,calibration rejected (boundary-pegged),0.012236529016524906,12.0,104.0,187.0
+2022-04-14,pegged,calibration rejected (boundary-pegged),0.010575299396804561,12.0,105.0,192.0
+2022-04-18,pegged,calibration rejected (boundary-pegged),0.00932245951140539,12.0,92.0,192.0
+2022-04-19,pegged,calibration rejected (boundary-pegged),0.010008095023479558,12.0,83.0,181.0
+2022-04-20,pegged,calibration rejected (boundary-pegged),0.005648429307208251,12.0,93.0,192.0
+2022-04-21,pegged,calibration rejected (boundary-pegged),0.007253350960567953,12.0,78.0,192.0
+2022-04-22,pegged,calibration rejected (boundary-pegged),0.008706733944238562,12.0,56.0,192.0
+2022-04-25,pegged,calibration rejected (boundary-pegged),0.006584138207672997,12.0,63.0,192.0
+2022-04-26,pegged,calibration rejected (boundary-pegged),0.007464797797285684,12.0,67.0,192.0
+2022-04-28,pegged,calibration rejected (boundary-pegged),0.009147992730217757,12.0,83.0,192.0
+2022-04-29,pegged,calibration rejected (boundary-pegged),0.008514832634573342,12.0,73.0,190.0
+2022-05-02,pegged,calibration rejected (boundary-pegged),0.006505226496238746,12.0,66.0,192.0
+2022-05-03,pegged,calibration rejected (boundary-pegged),0.00656267944019075,12.0,87.0,192.0
+2022-05-04,pegged,calibration rejected (boundary-pegged),0.008620362283709165,12.0,83.0,192.0
+2022-05-06,pegged,calibration rejected (boundary-pegged),0.00874575351074525,12.0,82.0,192.0
+2022-05-09,pegged,calibration rejected (boundary-pegged),0.007325253236375115,12.0,76.0,192.0
+2022-05-10,pegged,calibration rejected (boundary-pegged),0.0077478392111370005,12.0,83.0,192.0
+2022-05-11,pegged,calibration rejected (boundary-pegged),0.006578150885545704,12.0,80.0,192.0
+2022-05-13,pegged,calibration rejected (boundary-pegged),0.00566468459341039,12.0,79.0,192.0
+2022-05-16,pegged,calibration rejected (boundary-pegged),0.004980530431058181,12.0,78.0,192.0
+2022-05-17,pegged,calibration rejected (boundary-pegged),0.005574192211807383,12.0,87.0,192.0
+2022-05-18,pegged,calibration rejected (boundary-pegged),0.00727796605602797,12.0,86.0,192.0
+2022-05-19,pegged,calibration rejected (boundary-pegged),0.007136212893891899,12.0,74.0,192.0
+2022-05-20,pegged,calibration rejected (boundary-pegged),0.005921022016974588,12.0,72.0,192.0
+2022-05-23,pegged,calibration rejected (boundary-pegged),0.003133513399122659,12.0,84.0,192.0
+2022-05-25,pegged,calibration rejected (boundary-pegged),0.005921940009044987,12.0,93.0,192.0
+2022-05-26,pegged,calibration rejected (boundary-pegged),0.005056996022833137,12.0,81.0,192.0
+2022-05-27,pegged,calibration rejected (boundary-pegged),0.004996987660934395,12.0,90.0,192.0
+2022-05-31,pegged,calibration rejected (boundary-pegged),0.0062870179176754545,12.0,95.0,192.0
+2022-06-01,pegged,calibration rejected (boundary-pegged),0.007106631514215191,12.0,86.0,192.0
+2022-06-03,pegged,calibration rejected (boundary-pegged),0.008233510752628143,12.0,88.0,188.0
+2022-06-06,pegged,calibration rejected (boundary-pegged),0.005011443141445638,12.0,98.0,189.0
+2022-06-09,pegged,calibration rejected (boundary-pegged),0.005848257263177711,12.0,81.0,189.0
+2022-06-13,pegged,calibration rejected (boundary-pegged),0.0036402786379886665,12.0,68.0,192.0
+2022-06-15,pegged,calibration rejected (boundary-pegged),0.006469393574468592,12.0,78.0,190.0
+2022-06-17,pegged,calibration rejected (boundary-pegged),0.0064331846475626,12.0,80.0,189.0
+2022-06-22,pegged,calibration rejected (boundary-pegged),0.006129504421205679,12.0,86.0,181.0
+2022-06-24,pegged,calibration rejected (boundary-pegged),0.006529637418747348,12.0,81.0,192.0
+2022-06-27,pegged,calibration rejected (boundary-pegged),0.004933055454529233,12.0,89.0,188.0
+2022-06-28,pegged,calibration rejected (boundary-pegged),0.0049069176919339,12.0,93.0,177.0
+2022-07-05,pegged,calibration rejected (boundary-pegged),0.006238825896565343,11.0,101.0,172.0
+2022-07-11,pegged,calibration rejected (boundary-pegged),0.0076091528851066886,12.0,102.0,185.0
+2022-07-12,pegged,calibration rejected (boundary-pegged),0.007471083325032076,12.0,92.0,183.0
+2022-07-13,pegged,calibration rejected (boundary-pegged),0.006607283347803602,12.0,77.0,182.0
+2022-07-18,pegged,calibration rejected (boundary-pegged),0.00870187731317685,12.0,102.0,184.0
+2022-07-19,pegged,calibration rejected (boundary-pegged),0.0053236887117121615,12.0,90.0,192.0
+2022-07-20,pegged,calibration rejected (boundary-pegged),0.007104244361154726,12.0,98.0,184.0
+2022-07-27,pegged,calibration rejected (boundary-pegged),0.005138693613825347,12.0,77.0,189.0
+2022-07-28,pegged,calibration rejected (boundary-pegged),0.007447827885049692,12.0,82.0,192.0
+2022-08-01,pegged,calibration rejected (boundary-pegged),0.004570742833768945,12.0,75.0,192.0
+2022-08-03,pegged,calibration rejected (boundary-pegged),0.007418603015845639,12.0,95.0,184.0
+2022-08-09,pegged,calibration rejected (boundary-pegged),0.005991930174419016,12.0,89.0,189.0
+2022-08-10,pegged,calibration rejected (boundary-pegged),0.005983477772078513,12.0,81.0,192.0
+2022-08-15,pegged,calibration rejected (boundary-pegged),0.005454574799999978,12.0,87.0,192.0
+2022-08-22,pegged,calibration rejected (boundary-pegged),0.00743320806331579,12.0,80.0,191.0
+2022-08-24,pegged,calibration rejected (boundary-pegged),0.007572517816666672,12.0,111.0,186.0
+2022-08-26,pegged,calibration rejected (boundary-pegged),0.006854931335860315,12.0,85.0,192.0
+2022-08-29,pegged,calibration rejected (boundary-pegged),0.0034736709675221708,12.0,81.0,192.0
+2022-09-02,pegged,calibration rejected (boundary-pegged),0.005662846330317177,12.0,90.0,191.0
+2022-09-07,pegged,calibration rejected (boundary-pegged),0.008068005434637393,12.0,101.0,188.0
+2022-09-09,pegged,calibration rejected (boundary-pegged),0.003943272060944877,12.0,71.0,192.0
+2022-09-12,pegged,calibration rejected (boundary-pegged),0.004195664062147247,12.0,84.0,192.0
+2022-09-15,pegged,calibration rejected (boundary-pegged),0.0033632023417179153,12.0,80.0,186.0
+2022-09-22,pegged,calibration rejected (boundary-pegged),0.003454222591474639,12.0,77.0,192.0
+2022-09-23,pegged,calibration rejected (boundary-pegged),0.003938118294544994,12.0,73.0,192.0
+2022-09-26,pegged,calibration rejected (boundary-pegged),0.005026560073045323,12.0,88.0,190.0
+2022-09-29,pegged,calibration rejected (boundary-pegged),0.0031966273347246487,12.0,97.0,192.0
+2022-10-04,pegged,calibration rejected (boundary-pegged),0.004704978127004723,12.0,85.0,192.0
+2022-10-06,pegged,calibration rejected (boundary-pegged),0.006078880261883871,12.0,111.0,187.0
+2022-10-11,pegged,calibration rejected (boundary-pegged),0.009497611351120342,12.0,96.0,185.0
+2022-10-12,pegged,calibration rejected (boundary-pegged),0.004909954311588354,12.0,108.0,190.0
+2022-10-13,pegged,calibration rejected (boundary-pegged),0.006206006905526587,12.0,86.0,190.0
+2022-10-17,pegged,calibration rejected (boundary-pegged),0.0038954270319750527,12.0,92.0,192.0
+2022-10-18,pegged,calibration rejected (boundary-pegged),0.010066759143790736,12.0,90.0,185.0
+2022-10-20,pegged,calibration rejected (boundary-pegged),0.004966529635872534,12.0,91.0,191.0
+2022-10-21,pegged,calibration rejected (boundary-pegged),0.003861095276202602,12.0,91.0,190.0
+2022-10-25,pegged,calibration rejected (boundary-pegged),0.0035125182631628995,12.0,84.0,190.0
+2022-10-26,pegged,calibration rejected (boundary-pegged),0.0048849041034277445,12.0,71.0,191.0
+2022-11-02,pegged,calibration rejected (boundary-pegged),0.018276879912327217,12.0,88.0,182.0
+2022-11-03,pegged,calibration rejected (boundary-pegged),0.004239293948782851,12.0,82.0,186.0
+2022-11-08,pegged,calibration rejected (boundary-pegged),0.005174302811153775,12.0,91.0,192.0
+2022-11-10,pegged,calibration rejected (boundary-pegged),0.003652311559272691,12.0,80.0,189.0
+2022-11-11,pegged,calibration rejected (boundary-pegged),0.005654414900171504,12.0,83.0,192.0
+2022-11-14,pegged,calibration rejected (boundary-pegged),0.003930644640813365,12.0,95.0,192.0
+2022-11-16,pegged,calibration rejected (boundary-pegged),0.0067102412446961406,11.0,99.0,170.0
+2022-11-18,pegged,calibration rejected (boundary-pegged),0.003582281501469878,11.0,93.0,172.0
+2022-11-28,pegged,calibration rejected (boundary-pegged),0.0036429331718254646,12.0,82.0,191.0
+2022-11-30,pegged,calibration rejected (boundary-pegged),0.007999754118929767,12.0,77.0,189.0
+2022-12-05,pegged,calibration rejected (boundary-pegged),0.005401751395810898,12.0,97.0,192.0
+2022-12-06,pegged,calibration rejected (boundary-pegged),0.006556122817179491,12.0,92.0,192.0
+2022-12-07,pegged,calibration rejected (boundary-pegged),0.00612889018888198,12.0,109.0,192.0
+2022-12-12,pegged,calibration rejected (boundary-pegged),0.006392267123505314,11.0,95.0,170.0
+2022-12-14,pegged,calibration rejected (boundary-pegged),0.005573874193882997,12.0,95.0,181.0
+2022-12-15,pegged,calibration rejected (boundary-pegged),0.006039736667379431,12.0,82.0,192.0
+2022-12-16,pegged,calibration rejected (boundary-pegged),0.005393558685415449,12.0,93.0,192.0
+2022-12-20,pegged,calibration rejected (boundary-pegged),0.005713537499047913,12.0,95.0,192.0
+2022-12-21,pegged,calibration rejected (boundary-pegged),0.005921522096738754,12.0,81.0,192.0
+2022-12-22,pegged,calibration rejected (boundary-pegged),0.006584864533862311,12.0,84.0,189.0
+2022-12-30,pegged,calibration rejected (boundary-pegged),0.005307264440185523,12.0,109.0,188.0
+2023-01-04,pegged,calibration rejected (boundary-pegged),0.003257097752121083,12.0,91.0,188.0
+2023-01-05,pegged,calibration rejected (boundary-pegged),0.0033615061115828708,12.0,97.0,192.0
+2023-01-06,pegged,calibration rejected (boundary-pegged),0.004155563261438377,12.0,82.0,192.0
+2023-01-10,pegged,calibration rejected (boundary-pegged),0.0036197175459607815,12.0,92.0,191.0
+2023-01-12,pegged,calibration rejected (boundary-pegged),0.004349456604363901,12.0,87.0,192.0
+2023-01-17,pegged,calibration rejected (boundary-pegged),0.004016808146358882,12.0,72.0,192.0
+2023-01-18,pegged,calibration rejected (boundary-pegged),0.006713410569604331,12.0,97.0,192.0
+2023-01-20,pegged,calibration rejected (boundary-pegged),0.005242965657046237,12.0,77.0,192.0
+2023-01-23,pegged,calibration rejected (boundary-pegged),0.006022771783336905,12.0,68.0,192.0
+2023-01-26,pegged,calibration rejected (boundary-pegged),0.002526371433274287,12.0,69.0,192.0
+2023-01-27,pegged,calibration rejected (boundary-pegged),0.002458814339614291,12.0,52.0,192.0
+2023-01-30,pegged,calibration rejected (boundary-pegged),0.0038645497196653166,12.0,75.0,192.0
+2023-02-01,pegged,calibration rejected (boundary-pegged),0.0040300679918091825,12.0,66.0,192.0
+2023-02-02,pegged,calibration rejected (boundary-pegged),0.004872345579818921,12.0,63.0,192.0
+2023-02-06,pegged,calibration rejected (boundary-pegged),0.005263693653249081,12.0,72.0,189.0
+2023-02-09,pegged,calibration rejected (boundary-pegged),0.005123659193619537,12.0,75.0,192.0
+2023-02-13,pegged,calibration rejected (boundary-pegged),0.004888880156430451,12.0,82.0,192.0
+2023-02-14,pegged,calibration rejected (boundary-pegged),0.003408909673945249,12.0,86.0,192.0
+2023-02-16,pegged,calibration rejected (boundary-pegged),0.006094586111674113,12.0,87.0,192.0
+2023-02-21,pegged,calibration rejected (boundary-pegged),0.002851714109384028,12.0,59.0,192.0
+2023-02-22,pegged,calibration rejected (boundary-pegged),0.0022859387672959108,12.0,57.0,192.0
+2023-02-23,pegged,calibration rejected (boundary-pegged),0.003422966563693454,12.0,71.0,192.0
+2023-02-24,pegged,calibration rejected (boundary-pegged),0.0031987755987578827,12.0,77.0,192.0
+2023-02-27,pegged,calibration rejected (boundary-pegged),0.0022276977821228208,12.0,54.0,192.0
+2023-02-28,pegged,calibration rejected (boundary-pegged),0.0038053670988947,12.0,79.0,192.0
+2023-03-02,pegged,calibration rejected (boundary-pegged),0.004948133090088616,12.0,76.0,192.0
+2023-03-03,pegged,calibration rejected (boundary-pegged),0.0032031702306687857,12.0,58.0,192.0
+2023-03-06,pegged,calibration rejected (boundary-pegged),0.0023785387843974796,12.0,64.0,192.0
+2023-03-08,pegged,calibration rejected (boundary-pegged),0.0026540553651908665,12.0,77.0,192.0
+2023-03-09,pegged,calibration rejected (boundary-pegged),0.00657536767702926,12.0,63.0,192.0
+2023-03-10,pegged,calibration rejected (boundary-pegged),0.007745970915295223,12.0,49.0,192.0
+2023-03-13,pegged,calibration rejected (boundary-pegged),0.00594016792530656,12.0,62.0,192.0
+2023-03-14,pegged,calibration rejected (boundary-pegged),0.00530707133500523,12.0,65.0,192.0
+2023-03-15,pegged,calibration rejected (boundary-pegged),0.006026176312644024,12.0,60.0,192.0
+2023-03-16,pegged,calibration rejected (boundary-pegged),0.006702776919952444,12.0,58.0,192.0
+2023-03-17,pegged,calibration rejected (boundary-pegged),0.005417444891051939,12.0,65.0,192.0
+2023-03-20,pegged,calibration rejected (boundary-pegged),0.0055670731968575984,12.0,74.0,186.0
+2023-03-21,pegged,calibration rejected (boundary-pegged),0.0058817094053871125,12.0,72.0,192.0
+2023-03-23,pegged,calibration rejected (boundary-pegged),0.0075511053153565644,12.0,79.0,192.0
+2023-03-28,pegged,calibration rejected (boundary-pegged),0.006605912511890365,12.0,87.0,190.0
+2023-03-29,pegged,calibration rejected (boundary-pegged),0.004593028567581772,12.0,71.0,192.0
+2023-03-30,pegged,calibration rejected (boundary-pegged),0.0035498211499419736,12.0,63.0,192.0
+2023-03-31,pegged,calibration rejected (boundary-pegged),0.005116593237581955,12.0,68.0,192.0
+2023-04-03,pegged,calibration rejected (boundary-pegged),0.0057554849622981985,12.0,72.0,192.0
+2023-04-04,pegged,calibration rejected (boundary-pegged),0.005456844610646849,12.0,73.0,192.0
+2023-04-05,pegged,calibration rejected (boundary-pegged),0.005394626604256715,12.0,69.0,192.0
+2023-04-06,pegged,calibration rejected (boundary-pegged),0.004283685354984789,12.0,83.0,192.0
+2023-04-10,pegged,calibration rejected (boundary-pegged),0.0038793860687297665,12.0,85.0,192.0
+2023-04-12,pegged,calibration rejected (boundary-pegged),0.006374185740877007,12.0,90.0,192.0
+2023-04-17,pegged,calibration rejected (boundary-pegged),0.004280916875245767,12.0,77.0,192.0
+2023-04-18,pegged,calibration rejected (boundary-pegged),0.0035141565657856007,12.0,66.0,192.0
+2023-04-20,pegged,calibration rejected (boundary-pegged),0.0032228334542694767,12.0,74.0,192.0
+2023-04-21,pegged,calibration rejected (boundary-pegged),0.008117019677016899,12.0,81.0,192.0
+2023-04-24,pegged,calibration rejected (boundary-pegged),0.008877492732999424,12.0,84.0,192.0
+2023-04-25,pegged,calibration rejected (boundary-pegged),0.008098048898014631,12.0,73.0,192.0
+2023-04-26,pegged,calibration rejected (boundary-pegged),0.007245713061317841,12.0,67.0,192.0
+2023-04-27,pegged,calibration rejected (boundary-pegged),0.009246201460323823,12.0,75.0,192.0
+2023-04-28,pegged,calibration rejected (boundary-pegged),0.007742135984520387,12.0,62.0,192.0
+2023-05-01,pegged,calibration rejected (boundary-pegged),0.0030605858102330983,12.0,72.0,191.0
+2023-05-02,pegged,calibration rejected (boundary-pegged),0.007852966551256604,12.0,64.0,192.0
+2023-05-03,pegged,calibration rejected (boundary-pegged),0.008405439626443127,12.0,93.0,192.0
+2023-05-04,pegged,calibration rejected (boundary-pegged),0.006842722997177263,12.0,89.0,192.0
+2023-05-05,pegged,calibration rejected (boundary-pegged),0.005773530494970171,12.0,99.0,191.0
+2023-05-08,pegged,calibration rejected (boundary-pegged),0.004180849032009838,12.0,84.0,187.0
+2023-05-09,pegged,calibration rejected (boundary-pegged),0.00440817688522009,12.0,88.0,192.0
+2023-05-10,pegged,calibration rejected (boundary-pegged),0.004321666968475263,12.0,81.0,192.0
+2023-05-11,pegged,calibration rejected (boundary-pegged),0.007041422899181342,12.0,85.0,192.0
+2023-05-12,pegged,calibration rejected (boundary-pegged),0.007633245001668244,12.0,86.0,192.0
+2023-05-15,pegged,calibration rejected (boundary-pegged),0.007589008996354853,12.0,69.0,192.0
+2023-05-16,pegged,calibration rejected (boundary-pegged),0.003696724911358775,12.0,79.0,192.0
+2023-05-17,pegged,calibration rejected (boundary-pegged),0.003876289571290277,12.0,84.0,192.0
+2023-05-18,pegged,calibration rejected (boundary-pegged),0.008351921201516945,12.0,74.0,192.0
+2023-05-19,pegged,calibration rejected (boundary-pegged),0.00830038977951172,12.0,62.0,192.0
+2023-05-22,pegged,calibration rejected (boundary-pegged),0.008966986388003457,12.0,76.0,192.0
+2023-05-23,pegged,calibration rejected (boundary-pegged),0.008051763398119962,12.0,78.0,192.0
+2023-05-25,pegged,calibration rejected (boundary-pegged),0.005245452646330508,12.0,81.0,190.0
+2023-05-31,pegged,calibration rejected (boundary-pegged),0.007734339548272869,12.0,69.0,190.0
+2023-06-01,pegged,calibration rejected (boundary-pegged),0.003860991607797649,12.0,76.0,185.0
+2023-06-02,pegged,calibration rejected (boundary-pegged),0.007878844467535572,12.0,65.0,192.0
+2023-06-09,pegged,calibration rejected (boundary-pegged),0.0021003703352678975,12.0,60.0,192.0
+2023-06-13,pegged,calibration rejected (boundary-pegged),0.0017810641699797717,12.0,57.0,192.0
+2023-06-14,pegged,calibration rejected (boundary-pegged),0.0019061280569885233,12.0,50.0,192.0
+2023-06-15,pegged,calibration rejected (boundary-pegged),0.0018434135301130686,12.0,51.0,192.0
+2023-06-16,pegged,calibration rejected (boundary-pegged),0.0022955927601473144,12.0,60.0,192.0
+2023-06-20,pegged,calibration rejected (boundary-pegged),0.0021565738521723507,12.0,60.0,192.0
+2023-06-26,pegged,calibration rejected (boundary-pegged),0.005329502174343016,12.0,79.0,184.0
+2023-06-27,pegged,calibration rejected (boundary-pegged),0.0031550529910699793,12.0,81.0,192.0
+2023-06-30,pegged,calibration rejected (boundary-pegged),0.0017177634009562398,12.0,59.0,192.0
+2023-07-07,pegged,calibration rejected (boundary-pegged),0.0042880808952117065,12.0,75.0,189.0
+2023-08-16,pegged,calibration rejected (boundary-pegged),0.00227114625894261,12.0,71.0,186.0
+2023-08-30,pegged,calibration rejected (boundary-pegged),0.001799011795445744,12.0,71.0,192.0
+2023-09-07,pegged,calibration rejected (boundary-pegged),0.0025608933644086494,12.0,77.0,192.0
+2023-09-18,pegged,calibration rejected (boundary-pegged),0.0034555842900520174,12.0,86.0,192.0
+2023-09-29,pegged,calibration rejected (boundary-pegged),0.002754597479872555,12.0,76.0,192.0
+2023-10-03,pegged,calibration rejected (boundary-pegged),0.004816158963522912,12.0,62.0,191.0
+2023-10-06,pegged,calibration rejected (boundary-pegged),0.003944948157067846,12.0,79.0,192.0
+2023-10-18,pegged,calibration rejected (boundary-pegged),0.004727841716606599,12.0,74.0,191.0
+2023-10-23,pegged,calibration rejected (boundary-pegged),0.004297491084506284,12.0,70.0,192.0
+2023-10-24,pegged,calibration rejected (boundary-pegged),0.0037562828148270584,12.0,90.0,188.0
+2023-10-25,pegged,calibration rejected (boundary-pegged),0.0032017463928544223,12.0,70.0,192.0
+2023-10-27,pegged,calibration rejected (boundary-pegged),0.0033671087433384326,12.0,60.0,192.0
+2023-10-30,pegged,calibration rejected (boundary-pegged),0.0020859764916035797,12.0,68.0,192.0
+2023-10-31,pegged,calibration rejected (boundary-pegged),0.0037345028536136756,12.0,79.0,192.0
+2023-11-02,pegged,calibration rejected (boundary-pegged),0.0013361458448429,12.0,66.0,192.0
+2023-11-14,pegged,calibration rejected (boundary-pegged),0.0017955184926217774,12.0,50.0,192.0
+2023-11-15,pegged,calibration rejected (boundary-pegged),0.002016142226550844,12.0,78.0,192.0
+2023-11-16,pegged,calibration rejected (boundary-pegged),0.0036630309940388164,12.0,74.0,192.0
+2023-11-17,pegged,calibration rejected (boundary-pegged),0.002029812634927504,12.0,79.0,192.0
+2023-11-20,pegged,calibration rejected (boundary-pegged),0.0015690976158205438,12.0,65.0,192.0
+2023-11-28,pegged,calibration rejected (boundary-pegged),0.002795516520328919,12.0,83.0,192.0
+2023-12-12,pegged,calibration rejected (boundary-pegged),0.0030168007903818663,12.0,81.0,189.0
+2023-12-13,pegged,calibration rejected (boundary-pegged),0.0026535947548163774,12.0,67.0,190.0
+2023-12-18,pegged,calibration rejected (boundary-pegged),0.0020442862434734504,11.0,70.0,176.0
+2024-01-08,pegged,calibration rejected (boundary-pegged),0.002486329811740071,12.0,70.0,192.0
+2024-01-10,pegged,calibration rejected (boundary-pegged),0.0024397503831731296,12.0,75.0,192.0
+2024-01-12,pegged,calibration rejected (boundary-pegged),0.0014381779968299375,12.0,82.0,192.0
+2024-01-16,pegged,calibration rejected (boundary-pegged),0.001497598758423323,12.0,74.0,192.0
+2024-01-17,pegged,calibration rejected (boundary-pegged),0.0022734286627681165,12.0,93.0,192.0
+2024-01-19,pegged,calibration rejected (boundary-pegged),0.0016526408692635914,12.0,57.0,192.0
+2024-01-24,pegged,calibration rejected (boundary-pegged),0.0020658621468490667,12.0,59.0,192.0
+2024-01-30,pegged,calibration rejected (boundary-pegged),0.0015189506501690233,12.0,57.0,192.0
+2024-01-31,pegged,calibration rejected (boundary-pegged),0.0027632687760598793,12.0,70.0,192.0
+2024-02-02,pegged,calibration rejected (boundary-pegged),0.0013340489849093156,12.0,52.0,192.0
+2024-02-05,pegged,calibration rejected (boundary-pegged),0.00281371929844327,12.0,69.0,192.0
+2024-02-07,pegged,calibration rejected (boundary-pegged),0.001372878016867975,12.0,51.0,192.0
+2024-02-09,pegged,calibration rejected (boundary-pegged),0.003477170928095035,12.0,72.0,192.0
+2024-02-12,pegged,calibration rejected (boundary-pegged),0.002343211541486355,12.0,75.0,192.0
+2024-02-22,pegged,calibration rejected (boundary-pegged),0.0021637369299246072,12.0,54.0,192.0
+2024-02-23,pegged,calibration rejected (boundary-pegged),0.0036505400982628465,12.0,65.0,186.0
+2024-02-26,pegged,calibration rejected (boundary-pegged),0.002847983910061822,12.0,67.0,192.0
+2024-02-29,pegged,calibration rejected (boundary-pegged),0.0034101866409310916,12.0,80.0,190.0
+2024-03-01,pegged,calibration rejected (boundary-pegged),0.0028087396244271087,12.0,61.0,192.0
+2024-03-05,pegged,calibration rejected (boundary-pegged),0.001870849706970377,12.0,68.0,192.0
+2024-03-06,pegged,calibration rejected (boundary-pegged),0.002394022593464401,12.0,81.0,192.0
+2024-03-07,pegged,calibration rejected (boundary-pegged),0.00236857158688479,12.0,63.0,192.0
+2024-03-19,pegged,calibration rejected (boundary-pegged),0.002263569207398639,12.0,68.0,192.0
+2024-03-20,pegged,calibration rejected (boundary-pegged),0.0030540582094517187,12.0,79.0,192.0
+2024-03-28,pegged,calibration rejected (boundary-pegged),0.0029076931154758475,12.0,75.0,192.0
+2024-04-11,pegged,calibration rejected (boundary-pegged),0.00391811526866275,12.0,93.0,185.0
+2024-04-12,pegged,calibration rejected (boundary-pegged),0.002860605393403075,12.0,73.0,192.0
+2024-04-17,pegged,calibration rejected (boundary-pegged),0.004295938304904615,12.0,69.0,192.0
+2024-04-18,pegged,calibration rejected (boundary-pegged),0.002677090431865887,12.0,77.0,192.0
+2024-04-22,pegged,calibration rejected (boundary-pegged),0.002816708428458385,12.0,72.0,192.0
+2024-04-23,pegged,calibration rejected (boundary-pegged),0.0022260034477982658,12.0,74.0,192.0
+2024-04-25,pegged,calibration rejected (boundary-pegged),0.002816512415314533,12.0,72.0,192.0
+2024-04-26,pegged,calibration rejected (boundary-pegged),0.0020285372777098265,12.0,73.0,192.0
+2024-04-30,pegged,calibration rejected (boundary-pegged),0.0022790786760637405,12.0,79.0,192.0
+2024-05-02,pegged,calibration rejected (boundary-pegged),0.00227830217425258,12.0,85.0,192.0
+2024-05-03,pegged,calibration rejected (boundary-pegged),0.0021045489714144345,12.0,71.0,192.0
+2024-05-06,pegged,calibration rejected (boundary-pegged),0.0020629457366078585,12.0,82.0,192.0
+2024-05-10,pegged,calibration rejected (boundary-pegged),0.002212396673463402,12.0,66.0,192.0
+2024-05-15,pegged,calibration rejected (boundary-pegged),0.002366874308690931,12.0,74.0,192.0
+2024-05-16,pegged,calibration rejected (boundary-pegged),0.002098843340315851,12.0,71.0,192.0
+2024-05-17,pegged,calibration rejected (boundary-pegged),0.0022929065497644258,12.0,73.0,192.0
+2024-05-20,pegged,calibration rejected (boundary-pegged),0.0022533118305842433,12.0,79.0,192.0
+2024-05-22,pegged,calibration rejected (boundary-pegged),0.0027743576878325967,12.0,74.0,192.0
+2024-05-23,pegged,calibration rejected (boundary-pegged),0.002427687666854152,12.0,66.0,192.0
+2024-06-05,pegged,calibration rejected (boundary-pegged),0.0018985127556432116,12.0,65.0,192.0
+2024-06-12,pegged,calibration rejected (boundary-pegged),0.0021608425239265008,12.0,64.0,192.0
+2024-06-17,pegged,calibration rejected (boundary-pegged),0.0019783628304460925,12.0,59.0,192.0
+2024-06-26,pegged,calibration rejected (boundary-pegged),0.0059371384030922235,12.0,95.0,190.0
+2024-06-27,pegged,calibration rejected (boundary-pegged),0.003145882990751461,12.0,79.0,192.0
+2024-07-10,pegged,calibration rejected (boundary-pegged),0.002300720605488208,12.0,55.0,192.0
+2024-07-15,pegged,calibration rejected (boundary-pegged),0.00264929674469663,12.0,73.0,192.0
+2024-08-05,iv_miss,calibration rejected (iv_rmse=0.0251 > 0.02),0.025100212059915566,12.0,58.0,192.0
+2024-08-06,pegged,calibration rejected (boundary-pegged),0.009250405555945453,12.0,69.0,192.0
+2024-09-19,pegged,calibration rejected (boundary-pegged),0.0013680541380900518,12.0,69.0,192.0
+2024-10-03,pegged,calibration rejected (boundary-pegged),0.00479026627989608,12.0,98.0,186.0
+2024-10-10,pegged,calibration rejected (boundary-pegged),0.006139177397328376,12.0,98.0,189.0
+2024-10-15,pegged,calibration rejected (boundary-pegged),0.0023474272787854045,11.0,86.0,176.0

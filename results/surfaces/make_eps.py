@@ -90,7 +90,6 @@ def write_otm_TeX(spot, date, params, market, fit):
     TeX = \
 r"""
 \subsubsection{Example option prices} Produced by the market\!\,\footnote{
-The surface above is the Heston model's own implied volatility on <date>.
 The fit uses <nhelpers> calibration cells across <nmats> maturities and <nstrikes> strikes,
 backed by <volume> contracts of traded volume.
 The reference spot was $S_{\mathrm{ref}} = <spot>$,
@@ -101,12 +100,12 @@ with a relative-price RMSE of <rmse>.
 The Feller condition <fellersign> at this calibration,
 with $2\kappa\theta - \eta^2 = <feller>$.
 } 
-calibrated pricing operator $C_{\mathrm{H}}(\Phi^\star)$~\eqref{eq:heston-price}~\eqref{eq:accept}.
+calibrated pricing operator $C_{\mathrm{H}}(\Phi^{\star})$~\eqref{eq:heston-price}~\eqref{eq:accept}.
 \begin{figure}[H]
     \begin{center}
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/surfaces/plots/tex/price_surface_puts.eps}
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/surfaces/plots/tex/price_surface_calls.eps}
-        \caption{Heston OTM option prices for $S_{\mathrm{ref}}$ <spot> on <date> with $\Phi = (<theta>,\ <kappa>,\ <eta>,\ <rho>,\ <v0>)$: puts wing (left) and calls wing (right).}
+        \caption{Heston OTM option prices for $S_{\mathrm{ref}}$ <spot> on <date> with $\Phi^{\star} = (<theta>,\ <kappa>,\ <eta>,\ <rho>,\ <v0>)$: puts wing (left) and calls wing (right).}
         \label{Fig:wings}
     \end{center}
     \begin{center}

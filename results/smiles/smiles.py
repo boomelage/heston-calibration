@@ -103,7 +103,7 @@ def _row_caption(day):
            f"\\,{p['rho']:.4f},\\,{p['v0']:.4f})")
     return (f"{day['tag']}:  "
             f"$S_{{\\mathrm{{ref}}}}={day['spot']:.2f}$,  "
-            f"$\\Phi={phi}$,  "
+            r"$\Phi^{\star}=$"f"${phi}$,  "
             f"$\\mathcal{{F}}={f['feller']:.4f}$,  "
             f"IV-RMSE$={f['iv_rmse']*100:.2f}$,  "
             f"RMSE$={f['rmse']:.4f}$")

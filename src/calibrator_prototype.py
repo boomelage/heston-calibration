@@ -271,7 +271,7 @@ def main():
     
     TRADES = Path(__file__).parent.parent / "data" / "options" / "raw"
     files = [f for f in os.listdir(TRADES) if f.endswith('.csv')]
-    files = pd.Series([os.path.join(TRADES, f) for f in files]).sort_values(ascending=True).reset_index(drop=True)[-100:]
+    files = pd.Series([os.path.join(TRADES, f) for f in files]).sort_values(ascending=True).reset_index(drop=True)
 
     # Every attempted day returns exactly one row: an accepted calibration (no 'reason' key) or a
     # rejection (carries 'reason'). Split them into the two complementary files. The loop covers all

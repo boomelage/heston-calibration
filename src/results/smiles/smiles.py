@@ -17,23 +17,26 @@ plt.rcParams.update({
     'font.size': 8,
 })
 
-SMILES = Path(__file__).parent
-RESULTS = SMILES.parent
-REPO = RESULTS.parent
-SURFACES = RESULTS / "surfaces"
-# SURFACES_DATA = SURFACES / "data"
+# This script now lives under src/results/smiles/, but reads raw trades from data/ and writes
+# figures into the repo-level results/ tree. SMILES is the moved code dir; RESULTS/REPO route I/O.
+SMILES = Path(__file__).parent.resolve()        # src/results/smiles
+SRC = SMILES.parents[1]                           # src/ (shared utils.py, config.py)
+REPO = SMILES.parents[2]                          # repo root (smiles->results->src->repo)
+RESULTS = REPO / "results"                        # real results data/figure dir
+CODE_SURFACES = SMILES.parent / "surfaces"        # src/results/surfaces (moved example_surface)
 RAW = REPO / "data" / "options" / "raw"
 
-if str(SURFACES) not in sys.path:
-    sys.path.insert(0, str(SURFACES))
+for _p in (str(SRC), str(CODE_SURFACES)):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 from example_surface import make_surface, OBJECTIVE # type: ignore --> Intentional Pylance ingore
-from utils import build_heston_engine, implied_vol # type: ignore
+from utils import build_heston_engine, heston_implied_vol # type: ignore
 
-FIGURES = SMILES / "figures"
+FIGURES = RESULTS / "smiles" / "figures"
 FIGURES.mkdir(parents=True,exist_ok=True)
 
-TMIN, TMAX = 70, 730
+TMIN, TMAX = 100, 730
 
 # Number of maturities to draw per figure. The plotted set always includes the lowest and highest
 # available maturity (within TMIN..TMAX); the remaining NT-2 are spaced as equally as possible
@@ -122,7 +125,7 @@ def _model_wing_iv(engine, bsm, spot, maturity_date, m_grid, wing):
     off the OTM option at each strike (w=None), so it stays stable across the whole window and is
     a pure function of strike, independent of the wing it is drawn on."""
     strikes = (spot / m_grid) if wing == 'call' else (m_grid * spot)
-    return np.array([implied_vol(float(k), maturity_date, spot, engine, bsm) for k in strikes])
+    return np.array([heston_implied_vol(float(k), maturity_date, spot, engine, bsm) for k in strikes])
 
 
 def _load_market_vols(tag):
@@ -366,7 +369,7 @@ def make_surfaces_for(dates):
 
 
 if __name__ == "__main__":
-    CALIBRATIONS_FILE = SURFACES.parent / "calibrations" / OBJECTIVE / "calibrations.csv"
+    CALIBRATIONS_FILE = RESULTS / "calibrations" / OBJECTIVE / "calibrations.csv"
     cal = pd.read_csv(CALIBRATIONS_FILE)
     cal = cal.sort_values(by='iv_rmse',ascending=True).reset_index(drop=True)[:24].copy()
     dates = cal['date']

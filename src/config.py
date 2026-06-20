@@ -64,7 +64,7 @@ IV_ACC, IV_MAXEVAL, IV_LO, IV_HI = 1e-6, 500, 1e-4, 5.0
 # Selection and the gate always run off IV-space RMSE; the objective only changes what each restart
 # minimises. The string->QuantLib-enum map (`_ERR`) stays next to the engine (live ql objects).
 OBJECTIVE_NAMES = ("price", "vol")
-DEFAULT_OBJECTIVE = "price"
+DEFAULT_OBJECTIVE = "vol"
 
 # ---- Engine: wing weighting (PLAN.md Phase 3 Lever B) ----
 # Up-weight OTM wing cells in the LM objective by |log(Kstar/S_ref)| so the fit stops trading the

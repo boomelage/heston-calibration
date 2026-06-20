@@ -10,7 +10,7 @@ that includes them like the example's `analysis_090924.tex`. EPS embeds in LaTeX
 `\\includegraphics`; with pdflatex, convert first (`epstopdf *.eps`) or compile the provided .tex
 with `latex price_surface.tex` (the classic dvips route) -- or just `pdflatex` after epstopdf.
 
-Run:  python results/make_price_surface_eps.py
+Run:  python src/results/surfaces/make_eps.py
 Out:  results/price_surface_calls.eps, price_surface_puts.eps, price_surface_both.eps
       results/price_surface.tex
 """
@@ -22,7 +22,12 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # registers the '3d' projection; also the ax type below
 from pathlib import Path
 
-SURFACES = Path(__file__).parent
+# This script now lives under src/results/surfaces/, but reads/writes the repo-level results/ tree.
+# `from example_surface import ...` resolves from this dir; SURFACES routes figure I/O to repo/results/.
+HERE = Path(__file__).parent.resolve()                 # src/results/surfaces
+REPO = HERE.parents[2]                                  # repo root (surfaces->results->src->repo)
+RESULTS = REPO / "results"
+SURFACES = RESULTS / "surfaces"                         # real data/figure dir at repo/results/surfaces
 SURFACE_CSV = SURFACES / "data" / "example_surface.csv"
 DAY_RESULTS = SURFACES / "data" / "day_results.pkl"
 TEXDIR = SURFACES / "plots" / "tex"
@@ -88,7 +93,7 @@ def write_otm_TeX(spot, date, params, market, fit):
 
     TeX = \
 r"""
-\subsubsection{Example option prices} Produced by the market\!\,\footnote{
+\subsection{Example option prices} Produced by the market\!\,\footnote{
 The fit uses <nhelpers> calibration cells across <nmats> maturities and <nstrikes> strikes,
 backed by <volume> contracts of traded volume.
 The reference spot was $S_{\mathrm{ref}} = <spot>$,

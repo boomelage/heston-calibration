@@ -15,21 +15,30 @@ inversion returns spurious roots in the short-dated far-OTM corner (prices ~0), 
 We sample on a moneyness grid (strikes = m * spot) and a maturity grid (in days), and write the
 result both long-form (one row per grid point) and as a strike x maturity pivot for inspection.
 
-Run:  python results/example_surface.py
+Run:  python src/results/surfaces/example_surface.py
 Out:  results/example_surface.csv        (long: strike, maturity_days, moneyness, implied_vol)
       results/example_surface_grid.csv   (pivot: index=strike, columns=maturity_days)
 """
 # import pickle
+import sys
 import numpy as np
 import pandas as pd
 import QuantLib as ql
 from pathlib import Path
 
-SURFACES = Path(__file__).parent.resolve()
-OBJECTIVE = "vol" #input("Validate `vol` or `price` calibrations? ").strip().lower()
+# This script now lives under src/results/surfaces/, but reads/writes the repo-level results/ tree.
+# HERE is the script dir; SRC holds the shared utils/config; RESULTS routes data I/O to repo/results/.
+HERE = Path(__file__).parent.resolve()                 # src/results/surfaces
+SRC = HERE.parents[1]                                   # src/ (shared utils.py, config.py)
+REPO = HERE.parents[2]                                  # repo root (surfaces->results->src->repo)
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
+RESULTS = REPO / "results"
+SURFACES = RESULTS / "surfaces"                         # real data dir at repo/results/surfaces
+OBJECTIVE = "vol" # input("Validate `vol` or `price` calibrations? ").strip().lower()
 DATA = SURFACES / "data"
 DATA.mkdir(parents=True, exist_ok=True)
-CALIBRATIONS_FILE = SURFACES.parent / "calibrations" / OBJECTIVE / "calibrations.csv"
+CALIBRATIONS_FILE = RESULTS / "calibrations" / OBJECTIVE / "calibrations.csv"
 
 # Grid the surface is sampled on. Moneyness K/S around the money; maturities in calendar days
 # spanning the range the calibration actually sees (>= MIN_DTM=7 up to ~1y).
@@ -37,9 +46,9 @@ MONEYNESS = np.round(np.arange(0.75, 1.25, 0.005), 4).tolist()   # 0.80 .. 1.20
 
 MATURITIES_DAYS = np.arange(start=30,stop=730,step=30).tolist()
 
-from utils import implied_vol, build_heston_engine, heston_price
+from utils import heston_implied_vol, build_heston_engine, heston_price
 
-def make_surface(target_date=None, OUT=DATA, SAVE=True):
+def make_surface(target_date=None, OUT=DATA, SAVE=False):
     if SAVE:
         OUT.mkdir(parents=True, exist_ok=True)
     calibrations = pd.read_csv(CALIBRATIONS_FILE, parse_dates=['date'])
@@ -76,7 +85,7 @@ def make_surface(target_date=None, OUT=DATA, SAVE=True):
         for m in MONEYNESS:
             strike = m * spot
             for w in ('call', 'put'):
-                iv = implied_vol(strike, maturity_date, spot, heston_engine, bsm_process, w=w)
+                iv = heston_implied_vol(strike, maturity_date, spot, heston_engine, bsm_process, w=w)
                 price = heston_price(strike, maturity_date, spot, w, heston_engine)
                 records.append({
                     's_ref':spot,

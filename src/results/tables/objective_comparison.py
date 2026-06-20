@@ -10,7 +10,7 @@ parameter-level, and pathology figures quoted in CLAUDE.md, PLAN.md, and
 heston-calibration.tex. Re-run it after regenerating either objective and check
 the prose against it. Paths resolve from __file__, so it runs from any cwd.
 
-    python results/tables/objective_comparison.py
+    python src/results/tables/objective_comparison.py
 
 Output: one row per metric, columns ``metric, price, vol, delta_vol_minus_price``.
 IV-space RMSE rows are reported in vol points (the stored fraction x100, the unit
@@ -22,8 +22,13 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-TABLES = Path(__file__).parent.resolve()
-CALIB = TABLES.parent / "calibrations"
+# This script now lives under src/results/tables/, but reads calibrations from and writes its table
+# into the repo-level results/ tree. RESULTS routes both to repo/results/.
+HERE = Path(__file__).parent.resolve()                 # src/results/tables
+REPO = HERE.parents[2]                                  # repo root (tables->results->src->repo)
+RESULTS = REPO / "results"
+TABLES = RESULTS / "tables"                             # real table dir at repo/results/tables
+CALIB = RESULTS / "calibrations"
 OBJECTIVES = ("price", "vol")
 OUT = TABLES / "objective_comparison.csv"
 

@@ -46,9 +46,9 @@ prototype, not a clean design.
 The pipeline is three stages. There is no build/lint/test tooling — you run scripts directly. All
 model/calibration constants (surface coverage knobs, box bounds, the acceptance gate, the OTM
 filter floor/cutoff, the wing-weight knobs, the seed grid) live in one place: `src/config.py`. Tune
-there, not in the individual modules. **The driver currently calibrates only the last 100 raw files**
-(`files = ...[-100:]` in `calibrator_prototype.main`), a fast-iteration cap — remove the slice to run
-the full multi-year sample.
+there, not in the individual modules. The driver calibrates **every** raw file in
+`data/options/raw/` (no slice); the full multi-year sample is ~3,217 trading days and one `vol` run
+takes a few hours on this machine (multi-start LM, ~1,500 cells/day, 8 parallel jobs).
 
 ```bash
 # Stage 1: market rates. NOT run standalone -- data/get_rg.py is imported by Stage 2
@@ -61,7 +61,7 @@ python -c "import sys; sys.path.insert(0,'data'); from get_rg import rg; print(r
 #            accepted params to the single results/calibrations/<objective>/calibrations.csv, one row
 #            per REJECTED day (with the cause) to results/calibrations/<objective>/rejections.csv, and
 #            per-day repricing diagnostics to results/calibrations/<objective>/calibration_tests/.
-#            <objective> is `price` (default) or `vol`, selected by --OBJECTIVE. Prints the accept
+#            <objective> is `vol` (default) or `price`, selected by --OBJECTIVE. Prints the accept
 #            rate and a rejections-by-reason tally. Resolves paths from __file__, runs from any dir.
 python src/calibrator_prototype.py
 
@@ -85,14 +85,25 @@ cleaning is done in-memory by the calibrator (no on-disk OTM snapshots).
 day) is **git-ignored** for the same reason — it grows with years of data. A fresh clone has none of
 them — to bootstrap, drop `UnderlyingOptionsTradesCalcs_*.csv` into `data/options/raw/`, then run
 Stage 2+3 (which regenerates `calibration_tests/`). Only the
-small derived artefacts are tracked: the `{calibrations,rejections,validation}.csv` triples for **both**
-objectives (`results/calibrations/price/` and `results/calibrations/vol/`) plus `data/market/`. Each
-objective's bulky per-day `calibration_tests/` stays git-ignored (only a `.gitkeep` is tracked).
+small derived artefacts are tracked: the `{calibrations,rejections,validation}.csv` triple for the
+default **`vol`** objective (`results/calibrations/vol/`) plus `data/market/`. The `price` objective is
+still selectable (`--OBJECTIVE price`) but its outputs are **not committed on this branch** (the older
+narrow-config `price` baseline lives on `master`). Each objective's bulky per-day `calibration_tests/`
+stays git-ignored (only a `.gitkeep` is tracked).
 
 There is no single-test command because there are no tests. To exercise just the engine, import
-`calibrate_heston(vol_matrix, s, r, g, objective="price")` from `src/calibrate_heston.py` with a
-strike×maturity IV DataFrame. `objective` selects the in-engine LM objective ("price" relative-price,
-default, or "vol" IV-space); the orchestrator passes its `OBJECTIVE` constant through.
+`calibrate_heston(vol_matrix, s, r, g, objective="vol")` from `src/calibrate_heston.py` with a
+strike×maturity IV DataFrame. `objective` selects the in-engine LM objective ("vol" IV-space,
+the default, or "price" relative-price); the orchestrator passes its `OBJECTIVE` constant through.
+
+**Downstream figure/table scripts** live under `src/results/` (moved there from `results/`):
+`surfaces/example_surface.py` (rebuilds a model IV/price surface from one calibration row),
+`surfaces/make_eps.py` (writes the OTM surface/smile EPS + `otm.tex`), `smiles/smiles.py` (per-day
+market-vs-model smile EPS + `smiles.tex`), and `tables/objective_comparison.py` (price-vs-vol metrics
+table). They resolve `REPO = Path(__file__).parents[2]` and read calibrations from / write figures into
+the **repo-level** `results/` tree, and share the QuantLib helpers (`build_heston_engine`,
+`heston_price`, `heston_implied_vol`) in `src/utils.py`. Run e.g. `python src/results/surfaces/make_eps.py`
+then `python src/results/smiles/smiles.py` after a calibration to refresh the paper's figures.
 
 ## Pipeline architecture
 
@@ -176,8 +187,8 @@ separated by directory), where `<date>` is sliced out of the OTM filename. The d
 the two stay in lock-step. (The calibrations/rejections/validation files are likewise objective-dependent,
 all under `results/calibrations/<objective>/`: `calibrations.csv` + `rejections.csv` + `validation.csv`,
 built from `_objective_paths` (`OUT` in the validator) and not derived from the input path.) The
-objective is selected by the `--OBJECTIVE {price,vol}` CLI flag (default `price`) and threaded through
-to `calibrate_heston`.
+objective is selected by the `--OBJECTIVE {price,vol}` CLI flag (default `vol`, set by
+`config.DEFAULT_OBJECTIVE`) and threaded through to `calibrate_heston`.
 
 **Stage 3 — calibration engine (`src/calibrate_heston.py`).** Pure function
 `calibrate_heston(vol_matrix, s, r, g) -> dict`, **hardened** (PLAN Work items 2 & 3). Builds a QuantLib
@@ -189,8 +200,8 @@ date — immaterial under the flat-forward curves used here). It then:
    calibrates with Levenberg–Marquardt under **box bounds**
    (`ql.NonhomogeneousBoundaryConstraint(LOW, HIGH)`), and keeps the fit with the lowest
    **IV-space RMSE**. The LM objective itself is switchable via `objective` (`_ERR` maps it to the
-   `HestonModelHelper` error type): `"price"` (`RelativePriceError`, default) or `"vol"`
-   (`ImpliedVolError`). This only changes what each restart minimises; selection and the gate always
+   `HestonModelHelper` error type): `"vol"` (`ImpliedVolError`, the default — `config.DEFAULT_OBJECTIVE`)
+   or `"price"` (`RelativePriceError`). This only changes what each restart minimises; selection and the gate always
    use IV-RMSE, so it is independent of how a day is chosen/accepted. `"vol"` is more expensive (a
    Black-vol inversion per residual per LM iteration) and can throw mid-search (caught per-restart).
    `rmse` (relative-price) is computed directly from model/market values, so it keeps its meaning
@@ -214,12 +225,11 @@ date — immaterial under the flat-forward curves used here). It then:
    `IV_RMSE_ACCEPT` (`0.02`, ~2 vol points) **or** any parameter is pinned within `BOUND_TOL` of a
    bound (a boundary fit is a non-fit). The old "did the params move from the fixed guess" sentinel
    is **removed**. Note: on the pooled per-day surfaces the genuine fit is excellent — accepted days
-   have IV-RMSE well under 1 vol point, so IV-RMSE essentially never gates; the binding rejection is
-   boundary pegging. Accepted days are also **pegging-free by construction** (the gate rejects any
-   boundary-pegged param), so a clean `kappa`/`rho` in `calibrations.csv` is *not* evidence pegging is
-   solved — it is just what survives the gate. For acceptance-rate figures and the pegging audit see
-   the boundary-pegging Known-issue bullet (and note both the coverage and the sample have changed,
-   so the old full-sample numbers no longer describe the current config — see there).
+   have IV-RMSE around 0.8 vol points (median), far inside the 2-vol-point gate, so IV-RMSE essentially
+   never gates; the binding rejection is boundary pegging. Accepted days are also **pegging-free by
+   construction** (the gate rejects any boundary-pegged param), so a clean `kappa`/`rho` in
+   `calibrations.csv` is *not* evidence pegging is solved — it is just what survives the gate. For
+   acceptance-rate figures and the pegging audit see the boundary-pegging Known-issue bullet.
 
 Returns `{theta, kappa, eta, rho, v0, feller, iv_rmse, rmse, n_helpers, accepted}` with
 `feller = 2*kappa*theta - eta**2` for an accepted fit; a rejected fit returns params/`feller` as
@@ -269,40 +279,35 @@ breaks a downstream stage:
 - **Coverage was widened and a deep-OTM floor added (current config).** `MAX_NK`=40 (was 8), `MAX_NT`=20
   (was 12), `MIN_DTM`=14 (was 29/7), `MAX_DTM`=730 (was 400), plus `OTM_MONEYNESS_FLOOR`=0.6. Putting the
   wings *into* the calibration (not just near-money) and dropping the deep lottery-ticket tail removed what
-  looked like a systematic "model underestimates the wings": on the recent 100-day `vol` subset the
-  per-`|log-moneyness|` residual is small and mixed-sign (bands within ±0.005, overall mean ~0), so the wing
-  underfit seen in the smile plots was largely an **extrapolation artefact** of near-money-only calibration,
-  not an in-sample bias. The floor recovered acceptance (64→71/100 on that subset) and tightened IV-RMSE.
-  The earlier figures below are the **pre-widening `price` baseline** and have not been re-run on the full
-  sample at the new config (the driver caps at the last 100 files).
-- **Boundary pegging is the open Phase 3 lever — and `calibrations.csv` cannot show it.** Pre-widening
-  baseline (old config, `MAX_NK`=8, `MIN_DTM`=29, full multi-year sample, **`price`** objective): **3215**
-  attempted, **1713 (~53%)** accepted. The accepted set has 0 pegged `kappa`/`rho`, but that is
-  **tautological**: the gate (`_on_boundary`) rejects any boundary-pegged fit, so pegged days never reach the
-  file. Rejection cause is logged to `results/calibrations/price/rejections.csv`
-  (`reason` ∈ `no_trades/no_rate/thin/pegged/iv_miss/no_fit`); on that baseline the split was **pegged 1398,
-  iv_miss 103, no_trades 1** — pegging the dominant cause (93%). At the widened coverage pegging is still the
-  dominant rejection cause (~27–33 pegged days per 100 on the `vol` subset). `MIN_DTM`=14 (Lever A) is now
-  in; `weights` (Lever B) is wired but default-off and tested null; `fixParameters` and the Feller penalty
-  (Levers C/D) remain unimplemented.
-- **The `vol` (IV-space) objective does not help — it slightly worsens pegging.** *(Pre-widening
-  full-sample baseline, old config.)* Running the same sample with `--OBJECTIVE vol` accepts
-  **1645/3215 (51.2%)**, ~68 fewer than `price`, with pegging an even larger share of rejections (**pegged 1479, iv_miss 90, no_trades 1**;
-  94%). The objective only changes what LM minimises, not the `(kappa, rho, eta)` degeneracy that drives the
-  pegging; weighting the deep-OTM wings evenly (vol points) demands *more* skew, so the box wall is hit more
-  often. The fit in its own metric is marginally tighter (median `iv_rmse` 0.0045 vs 0.0048) and the
-  accepted-set parameter medians are unchanged within noise (`rho`≈−0.78, `theta`≈0.054, `kappa`≈2.1,
-  `eta`≈0.90, `v0`≈0.016), so the economic reading is objective-invariant; the two accepted sets overlap on
-  1579 days (134 `price`-only, 66 `vol`-only). One artefact: because `vol` no longer controls relative price,
-  the returned `rmse` blows up on a handful of accepted days (max 36.3 vs 0.32 under `price`; 18 days > 0.2 vs
-  2). Takeaway: the objective knob is **not** a Phase 3 lever; the identification fixes (A–E) are needed under
-  either objective.
-- **Feller is the standout issue in the accepted set.** The gate does **not** reject on Feller (it is a
-  *suspicious*, not hard-reject, validator flag — short-tenor Heston violates it routinely), so accepted
-  days routinely violate it. *(Pre-widening full-sample baseline:)* `feller = 2·kappa·theta − eta² < 0` on
-  **1701/1713 (99%)** accepted days, and `eta > 1.5` on ~8.5% (146 days, max ≈1.99, near its 2.0 cap). Still
-  true at the widened coverage (Feller violated on essentially every accepted day on the 100-day `vol`
-  subset). This is PLAN.md Lever D (soft Feller penalty + revisit the `eta` cap).
+  looked like a systematic "model underestimates the wings": on the **full-sample `vol` run**
+  (`src/wing_residuals.py`) the per-`|log-moneyness|` residual is small and mixed-sign (bands within ±0.009,
+  overall RMSE ~0.011, mean +0.0015 vol pts), so the wing underfit seen in the old smile plots was largely an
+  **extrapolation artefact** of near-money-only calibration, not an in-sample bias. The cost: the widening
+  lifts `eta` and pushes Feller violation to 100% of accepted days (see the Feller bullet).
+- **Boundary pegging is the open Phase 3 lever — and `calibrations.csv` cannot show it.** Current committed
+  default (**`vol`** objective, widened config, full sample, `results/calibrations/vol/`): **3217** attempted,
+  **1631 (50.7%)** accepted, spanning 2012-01-03..2024-10-15. The accepted set has 0 pegged `kappa`/`rho`, but
+  that is **tautological**: the gate (`_on_boundary`) rejects any boundary-pegged fit, so pegged days never
+  reach the file. Rejection cause is logged to `results/calibrations/vol/rejections.csv`
+  (`reason` ∈ `no_trades/no_rate/thin/pegged/iv_miss/no_fit`); the split is **pegged 1467, iv_miss 116,
+  no_trades 3** — pegging the dominant cause (92.5% of rejections, 45.6% of attempted). `MIN_DTM`=14 (Lever A)
+  is in; `weights` (Lever B) is wired but default-off and tested null; `fixParameters` and the Feller penalty
+  (Levers C/D) remain unimplemented. (For reference, the prior **`price`** baseline at the *old narrow* config
+  — `MAX_NK`=8, `MIN_DTM`=29 — accepted 1713/3215 (~53%); not a controlled comparison, the coverage differs.)
+- **The objective knob is not a lever; it does not move pegging.** `vol` (the default) and `price` change only
+  what LM minimises, not the `(kappa, rho, eta)` degeneracy that pegs — selection and the gate always run off
+  IV-RMSE. On the current `vol` run the accepted-set IV-RMSE is tight (median 0.0080, p90 0.0115, max 0.0199
+  vol pts). One artefact of the `vol` default: it no longer controls relative price, so the returned `rmse`
+  blows up on cheap deep-OTM wing cells (max 120.8; **656 of 1631** accepted days > 0.2). The identification
+  fixes (anchor `kappa`, Feller penalty) are needed regardless of objective. `src/results/tables/objective_comparison.py`
+  builds a side-by-side `price` vs `vol` metrics table when both objectives are present on disk.
+- **Feller is the standout issue in the accepted set.** The gate does **not** reject on Feller (a
+  *suspicious*, not hard-reject, validator flag — short-tenor Heston violates it routinely), so accepted days
+  violate it. On the current full-sample `vol` run `feller = 2·kappa·theta − eta² < 0` on **all 1631** accepted
+  days (median −1.44), and `eta > 1.5` on **596 (36.5%)**, max ≈1.997 (near its 2.0 cap). The widened coverage
+  is the driver: fitting the full wings demands more vol-of-vol, so both `eta` and the Feller violation run
+  higher than the old near-money `price` baseline (`eta` median ≈0.89, `eta>1.5` ~8.5%, Feller<0 on 99.3%).
+  This is PLAN.md Lever D (soft Feller penalty + revisit the `eta` cap).
 - The `data/__pycache__/` holds bytecode for deleted modules (`get_data`, `get_options`, ...) — ignore it.
 
 ## Writing prose (`gpu-options.tex` and other `.tex` documents)

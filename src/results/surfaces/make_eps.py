@@ -99,7 +99,7 @@ def write_otm_TeX(spot, date, params, market, fit):
 
     TeX = \
 r"""
-\subsection{Example option prices} Produced by the market\!\,\footnote{
+\section{Example option prices} Produced by the market\!\,\footnote{
 The fit uses <nhelpers> calibration cells across <nmats> maturities and <nstrikes> strikes,
 backed by <volume> contracts of traded volume.
 The reference spot was $S_{\mathrm{ref}} = <spot>$,

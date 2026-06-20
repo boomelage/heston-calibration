@@ -588,7 +588,7 @@
 	($J_{\mathrm{iv}}>\varepsilon_{\mathrm{iv}}$), and $3$ for having no usable trades.
 	Pegging (almost always $\kappa\!\to\!20$ or $\rho\!\to\!-0.999$ hitting the box wall)
 	is therefore the binding constraint on the accept rate, not surface quality.
-	\\ 
+	\\
 	\textbf{Fit quality.} On the accepted set the surface fit is excellent. The IV-space
 	error \eqref{eq:obj-iv} has a median of $0.80$ vol points (mean $0.84$, $90$th percentile
 	$1.15$, maximum $1.99$), so $J_{\mathrm{iv}}$ sits inside the $2$-vol-point gate on every
@@ -670,9 +670,22 @@
 	to carry the tail the single-factor vol-of-vol now overfits. Whether that relieves the
 	$(\kappa,\rho,\eta)$ degeneracy and the $\eta$-driven Feller violation across the full 2012--2024
 	sample is the question a full Bates run would settle.
-	
-	\input{results/heston/surfaces/plots/tex/otm.tex}
-	
+
+	Rough volatility is the natural next paradigm, but a separate one. Empirical realised variance is
+	well described by a fractional process with Hurst exponent $H\approx 0.1$ \citep{gatheral2018}, far
+	from the $H=\tfrac12$ that the diffusive Heston and Bates dynamics assume. A rough model fits the
+	steep short-maturity skew that single-factor Heston cannot reach without driving $\eta$ to its cap,
+	so it speaks directly to the degeneracy and Feller findings above. It does not, however, fit the
+	routine of this paper. The dynamics are non-Markovian, so the finite-dimensional box, the seed grid,
+	and the Feller quantity have no direct analogue. There is no QuantLib engine for it. The fastest
+	tractable variant, rough Heston, prices through a fractional Riccati equation
+	\citep{eleuch2019} that is far heavier per evaluation than the closed-form Heston integral, and
+	rough Bergomi \citep{bayer2016} prices by Monte Carlo. Multi-start calibration over thousands of
+	days is then out of reach without a surrogate pricer. There is also a tension with the present
+	surface: the rough skew is sharpest at the shortest maturities, exactly the tenors the pre-filter
+	drops at $\tau_{\min}=14$ days \eqref{eq:prefilter}. A fair test would re-admit the short end, build
+	a rough-Heston pricer or a learned surrogate, and run on a pilot window rather than the full sample.
+	We leave it to separate work.
 	
 	\vfill
 	\nocite{ballotta2025,eberlein2010}
@@ -681,60 +694,61 @@
 		\bibliography{refs-heston-calibration}
 	}
 	\vfill
-	
 	\newpage
+	
 	\appendix
 	
-	\section{Algorithm}\label{sec:algorithm}
-	
-	\algsetup{linenosize=\scriptsize}
-	Algorithm~\ref{alg:perday} states the per-day routine in the active vector $\Psi$; the driver
-	applies it to every trading day and accumulates accepted rows into a single file
-	(\S\ref{sec:output}). Heston is the default ($\Psi=\Phi$). The Bates fit is the same algorithm with
-	$\Psi=\Theta$: the engine is the \texttt{BatesEngine} and the box $\mathcal{B}$ is the
-	$\dim\Theta$-dimensional one, while the pegging test \eqref{eq:pegged} still ranges over the
-	$\dim\Phi$ diffusive coordinates only.
-	\begin{algorithm}[H]
-		\captionsetup{font=scriptsize}
-		\caption{Per-day calibration}\label{alg:perday}
-		\begin{algorithmic}[1]
-			\REQUIRE day $d$ of OTM trades; rates $r(d),g(d)$; constants of Table~\ref{tab:const}
-			\STATE $\mathcal{D} \leftarrow \{ i : \sigma_i>0,\ \tau_i\ge\tau_{\min}\}$ \hfill (pre-filter \eqref{eq:prefilter})
-			\IF{$r(d)$ or $g(d)$ undefined on/before $d$}
-			\STATE \textbf{return} $\varnothing$ \hfill (no rate)
-			\ENDIF
-			\STATE $S_{\mathrm{ref}} \leftarrow (\sum q_i S_i)/(\sum q_i)$; \\
-			$R \leftarrow \max_i S_i / \min_i S_i - 1$; \\
-			$\textsc{high\_move}\leftarrow \mathbf{1}\{R>R_{\max}\}$
-			\STATE $K^\star_i \leftarrow \Delta\,\round(m_i S_{\mathrm{ref}}/\Delta)$ with $m_i=K_i/S_i$ \hfill (re-strike \eqref{eq:kstar})
-			\STATE $\mathcal{T}\leftarrow$ top-$N_t$ maturities by volume;\ \ build $\mathcal{K}_\tau$ ($n_k$ per wing); \\ pivot to $\{\hat\sigma_{k,\tau}\}$, cells $\mathcal{N}$
-			\IF{coverage \eqref{eq:coverage} fails}
-			\STATE clear stale diagnostics;\ \textbf{return} $\varnothing$
-			\ENDIF
-			\STATE $\hat v \leftarrow \clip(\med(\hat\sigma)^2,[10^{-3},0.25])$;\ \ build seeds $\mathcal{S}$ \eqref{eq:seeds}
-			\FOR{$s \in \mathcal{S}$}
-			\STATE $\widehat\Psi_s \leftarrow$ LM minimiser of $\sum_n(\varepsilon^{\mathrm{obj}}_n)^2$ on $\mathcal{B}$ from $s$ \hfill \eqref{eq:localproblem}
-			\STATE compute $J_{\mathrm{iv}}(\widehat\Psi_s)$ \hfill \eqref{eq:obj-iv}
-			\ENDFOR
-			\STATE $\Psi^\star \leftarrow \argmin_{s} J_{\mathrm{iv}}(\widehat\Psi_s)$ \hfill (select \eqref{eq:select})
-			\IF{$J_{\mathrm{iv}}(\Psi^\star) \le \varepsilon_{\mathrm{iv}}$ \AND $\lnot\,\textsc{pegged}(\Psi^\star)$}
-			\STATE write repriced diagnostics;\ \textbf{return} row$(d,S_{\mathrm{ref}},r,g,\Psi^\star,\mathcal{F},J_{\mathrm{iv}},J_{\mathrm{px}},\dots)$
-			\ELSE
-			\STATE clear stale diagnostics;\ \textbf{return} $\varnothing$ \hfill (rejected)
-			\ENDIF
-		\end{algorithmic}
-	\end{algorithm}
-	
+	\input{results/heston/surfaces/plots/tex/otm.tex}
 	\newpage
+	
+	\section{Algorithm}\label{sec:algorithm}
+		\algsetup{linenosize=\small}
+		Algorithm~\ref{alg:perday} states the per-day routine in the active vector $\Psi$; the driver
+		applies it to every trading day and accumulates accepted rows into a single file
+		(\S\ref{sec:output}). Heston is the default ($\Psi=\Phi$). The Bates fit is the same algorithm with
+		$\Psi=\Theta$: the engine is the \texttt{BatesEngine} and the box $\mathcal{B}$ is the
+		$\dim\Theta$-dimensional one, while the pegging test \eqref{eq:pegged} still ranges over the
+		$\dim\Phi$ diffusive coordinates only.
+		\begin{algorithm}[H]
+			\captionsetup{font=normal}
+			\caption{Per-day calibration}\label{alg:perday}
+			\begin{algorithmic}[1]
+				\REQUIRE day $d$ of OTM trades; rates $r(d),g(d)$; constants of Table~\ref{tab:const}
+				\STATE $\mathcal{D} \leftarrow \{ i : \sigma_i>0,\ \tau_i\ge\tau_{\min}\}$ \hfill (pre-filter \eqref{eq:prefilter})
+				\IF{$r(d)$ or $g(d)$ undefined on/before $d$}
+				\STATE \textbf{return} $\varnothing$ \hfill (no rate)
+				\ENDIF
+				\STATE $S_{\mathrm{ref}} \leftarrow (\sum q_i S_i)/(\sum q_i)$; \\
+				$R \leftarrow \max_i S_i / \min_i S_i - 1$; \\
+				$\textsc{high\_move}\leftarrow \mathbf{1}\{R>R_{\max}\}$
+				\STATE $K^\star_i \leftarrow \Delta\,\round(m_i S_{\mathrm{ref}}/\Delta)$ with $m_i=K_i/S_i$ \hfill (re-strike \eqref{eq:kstar})
+				\STATE $\mathcal{T}\leftarrow$ top-$N_t$ maturities by volume;\ \ build $\mathcal{K}_\tau$ ($n_k$ per wing); \\ pivot to $\{\hat\sigma_{k,\tau}\}$, cells $\mathcal{N}$
+				\IF{coverage \eqref{eq:coverage} fails}
+				\STATE clear stale diagnostics;\ \textbf{return} $\varnothing$
+				\ENDIF
+				\STATE $\hat v \leftarrow \clip(\med(\hat\sigma)^2,[10^{-3},0.25])$;\ \ build seeds $\mathcal{S}$ \eqref{eq:seeds}
+				\FOR{$s \in \mathcal{S}$}
+				\STATE $\widehat\Psi_s \leftarrow$ LM minimiser of $\sum_n(\varepsilon^{\mathrm{obj}}_n)^2$ on $\mathcal{B}$ from $s$ \hfill \eqref{eq:localproblem}
+				\STATE compute $J_{\mathrm{iv}}(\widehat\Psi_s)$ \hfill \eqref{eq:obj-iv}
+				\ENDFOR
+				\STATE $\Psi^\star \leftarrow \argmin_{s} J_{\mathrm{iv}}(\widehat\Psi_s)$ \hfill (select \eqref{eq:select})
+				\IF{$J_{\mathrm{iv}}(\Psi^\star) \le \varepsilon_{\mathrm{iv}}$ \AND $\lnot\,\textsc{pegged}(\Psi^\star)$}
+				\STATE write repriced diagnostics;\ \textbf{return} row$(d,S_{\mathrm{ref}},r,g,\Psi^\star,\mathcal{F},J_{\mathrm{iv}},J_{\mathrm{px}},\dots)$
+				\ELSE
+				\STATE clear stale diagnostics;\ \textbf{return} $\varnothing$ \hfill (rejected)
+				\ENDIF
+			\end{algorithmic}
+		\end{algorithm}
+		\newpage
 	\begingroup
 	\raggedbottom
-	\section{Best fits}
 	
-	\setlength{\floatsep}{1pt plus 1pt minus 1pt}
-	\setlength{\textfloatsep}{1pt plus 1pt minus 1pt}
-	\setlength{\intextsep}{1pt plus 1pt minus 1pt}
-	\input{results/heston/smiles/figures/smiles.tex}
-	\endgroup
+	\section{Best fits}
+		\setlength{\floatsep}{1pt plus 1pt minus 1pt}
+		\setlength{\textfloatsep}{1pt plus 1pt minus 1pt}
+		\setlength{\intextsep}{1pt plus 1pt minus 1pt}
+		\input{results/heston/smiles/figures/smiles.tex}
+		\endgroup
 	
 	
 \end{document}

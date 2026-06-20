@@ -60,6 +60,18 @@ IV_ACC, IV_MAXEVAL, IV_LO, IV_HI = 1e-6, 500, 1e-4, 5.0
 OBJECTIVE_NAMES = ("price", "vol")
 DEFAULT_OBJECTIVE = "price"
 
+# ---- Engine: wing weighting (PLAN.md Phase 3 Lever B) ----
+# Up-weight OTM wing cells in the LM objective by |log(Kstar/S_ref)| so the fit stops trading the
+# wings away for the body. weight = 1 + GAIN * (|log(K/S)| / SCALE) ** POWER  (1 at ATM, rising into
+# both wings). Applied ONLY under the "vol" objective: "price" (RelativePriceError) already implicitly
+# up-weights cheap wings via the price denominator, so stacking a wing weight there double-counts and
+# over-pulls rho/eta into their bounds. GAIN=0.0 is the exact identity (uniform weights = current
+# behaviour) and stays the default until the lever is validated. QuantLib normalises the weights, so
+# only their ratios matter.
+WING_WEIGHT_GAIN = 0.0      # 0 => uniform (no-op). Try 0.5, 1.0, 2.0 under --OBJECTIVE vol.
+WING_WEIGHT_POWER = 1.0     # ramp curvature: 1 linear in |log-moneyness|, 2 far-wing emphasis
+WING_WEIGHT_SCALE = 0.05    # reference |log-moneyness| (~5% OTM) at which weight = 1 + GAIN
+
 # ---- Engine: seed grid (calibrate_heston._seed_grid) ----
 # var is the surface's median-vol^2, clamped to [SEED_VAR_LO, SEED_VAR_HI] (fallback when empty).
 # Each template row is (v0_mult, kappa, theta_mult, eta, rho); the function expands v0 = var*v0_mult

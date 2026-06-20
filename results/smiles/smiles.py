@@ -46,7 +46,7 @@ ENRICH_MARKET = True
 # Fallback moneyness window for the model lines / x-axis, used only when a day has no market data to
 # frame on (S/K calls, K/S puts). When market data is present each wing is instead framed to the full
 # range of that day's available market moneyness (see `_save_day_figure`).
-XLO, XHI = 0.5, 1.75
+XLO, XHI = 0.8, 1.15
 
 # Market-scatter window. OTM market moneyness (S/K for calls, K/S for puts) is always in (0, 1];
 # we drop the deep wing below MARKET_M_MIN and clip the IV outliers the deep-OTM corner throws.
@@ -321,5 +321,5 @@ if __name__ == "__main__":
     CALIBRATIONS_FILE = SURFACES.parent / "calibrations" / OBJECTIVE / "calibrations.csv"
     cal = pd.read_csv(CALIBRATIONS_FILE)
     cal = cal.sort_values(by='iv_rmse',ascending=True).reset_index(drop=True)
-    dates = cal['date'][:24].copy()
+    dates = cal['date'][:4].copy()
     make_surfaces_for(dates=dates)

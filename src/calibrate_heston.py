@@ -33,6 +33,7 @@ from config import (
     LOW, HIGH, IV_RMSE_ACCEPT, BOUND_TOL,
     IV_ACC, IV_MAXEVAL, IV_LO, IV_HI,
     DEFAULT_OBJECTIVE, SEED_GRID_TEMPLATE, SEED_VAR_FALLBACK, SEED_VAR_LO, SEED_VAR_HI,
+    WING_WEIGHT_GAIN, WING_WEIGHT_POWER, WING_WEIGHT_SCALE,
 )
 
 # String->QuantLib-enum objective map. Kept next to the engine (live ql objects, not serialisable);
@@ -70,28 +71,52 @@ def _seed_grid(vol_matrix):
             for v0_mult, kappa, theta_mult, eta, rho in SEED_GRID_TEMPLATE]
 
 
-def _iv_rmse(helpers, mkt_vols):
-    """RMSE between each helper's model-implied Black vol and its market vol, in vol points."""
-    resid = []
-    for h, mkt in zip(helpers, mkt_vols):
+def _wing_weight(k, s):
+    """LM weight for a cell at strike k against reference spot s: 1 at ATM, rising into the wings by
+    |log(k/s)|. GAIN=0 => 1.0 everywhere (uniform). QuantLib normalises these, so only ratios matter."""
+    x = abs(np.log(float(k) / float(s)))
+    return 1.0 + WING_WEIGHT_GAIN * (x / WING_WEIGHT_SCALE) ** WING_WEIGHT_POWER
+
+
+def _iv_rmse(helpers, mkt_vols, weights=None):
+    """RMSE between each helper's model-implied Black vol and its market vol, in vol points.
+
+    With `weights` (aligned to `helpers`) it returns the weight-normalised RMSE
+    sqrt(sum(w*r^2)/sum(w)) -- used for restart *ranking* so a wing-weighted LM fit is ranked on the
+    same objective it minimised. Unweighted (weights=None) it is the plain RMSE the acceptance gate
+    and the reported `iv_rmse` use, so the gate keeps its "~2 vol points everywhere" meaning."""
+    resid, wts = [], []
+    for i, (h, mkt) in enumerate(zip(helpers, mkt_vols)):
         try:
             model_iv = h.impliedVolatility(h.modelValue(), IV_ACC, IV_MAXEVAL, IV_LO, IV_HI)
         except RuntimeError:
             continue
         if np.isfinite(model_iv):
             resid.append(model_iv - mkt)
+            wts.append(1.0 if weights is None else weights[i])
     resid = np.asarray(resid)
-    return float(np.sqrt(np.mean(resid ** 2))) if resid.size else np.nan
+    if not resid.size:
+        return np.nan
+    wts = np.asarray(wts)
+    return float(np.sqrt(np.sum(wts * resid ** 2) / np.sum(wts)))
 
 
-def _calibrate_once(start, surface, s, r_ts, g_ts, S_handle, constraint, error_type):
-    """One bounded calibration from `start`. Returns (params_list, iv_rmse, price_rmse, n_helpers)."""
+def _calibrate_once(start, surface, s, r_ts, g_ts, S_handle, constraint, error_type, objective):
+    """One bounded calibration from `start`.
+
+    Returns (params_list, iv_rmse_sel, iv_rmse_gate, price_rmse, n_helpers). `iv_rmse_sel` is the
+    wing-weighted IV-RMSE the LM objective saw (for restart ranking); `iv_rmse_gate` is the unweighted
+    IV-RMSE (for the acceptance gate and reporting). With wing weighting off they are identical."""
     v0, kappa, theta, eta, rho = start
     process = ql.HestonProcess(r_ts, g_ts, S_handle, v0, kappa, theta, eta, rho)
     model = ql.HestonModel(process)
     engine = ql.AnalyticHestonEngine(model)
 
-    helpers, mkt_vols = [], []
+    # Wing weights only meaningful in vol space: "price" already up-weights the cheap wings via the
+    # price denominator, so stacking a wing weight there double-counts (see config.py / PLAN Lever B).
+    apply_wing = (objective == "vol") and (WING_WEIGHT_GAIN > 0.0)
+
+    helpers, mkt_vols, weights = [], [], []
     for t in surface.columns:
         for k in surface.index:
             vol = surface.loc[k, t]
@@ -106,17 +131,25 @@ def _calibrate_once(start, surface, s, r_ts, g_ts, S_handle, constraint, error_t
                 helper.setPricingEngine(engine)
                 helpers.append(helper)
                 mkt_vols.append(float(vol))
+                weights.append(_wing_weight(k, s) if apply_wing else 1.0)
 
     lm = ql.LevenbergMarquardt(1e-8, 1e-8, 1e-8)
-    model.calibrate(helpers, lm, ql.EndCriteria(1000, 100, 1e-8, 1e-8, 1e-8), constraint)
+    end = ql.EndCriteria(1000, 100, 1e-8, 1e-8, 1e-8)
+    if apply_wing:
+        # weights must be a plain python list (a DoubleVector); ql.Array does NOT bind this overload.
+        model.calibrate(helpers, lm, end, constraint, weights)
+    else:
+        # Preserve the exact current call path so GAIN=0 reproduces the committed baselines.
+        model.calibrate(helpers, lm, end, constraint)
 
     # Relative-price RMSE computed directly from model/market values, so `rmse` keeps the same
     # meaning regardless of `error_type` (h.calibrationError() would otherwise follow the objective).
     errs = np.array([(h.modelValue() - h.marketValue()) / h.marketValue()
                      for h in helpers if h.marketValue() != 0.0])
     price_rmse = float(np.sqrt(np.mean(errs ** 2))) if errs.size else np.nan
-    iv_rmse = _iv_rmse(helpers, mkt_vols)
-    return list(model.params()), iv_rmse, price_rmse, len(helpers)
+    iv_rmse_gate = _iv_rmse(helpers, mkt_vols)
+    iv_rmse_sel = _iv_rmse(helpers, mkt_vols, weights) if apply_wing else iv_rmse_gate
+    return list(model.params()), iv_rmse_sel, iv_rmse_gate, price_rmse, len(helpers)
 
 
 def calibrate_heston(vol_matrix, s, r, g, objective=DEFAULT_OBJECTIVE) -> dict:
@@ -129,22 +162,24 @@ def calibrate_heston(vol_matrix, s, r, g, objective=DEFAULT_OBJECTIVE) -> dict:
     S_handle = ql.QuoteHandle(ql.SimpleQuote(float(s)))
     constraint = ql.NonhomogeneousBoundaryConstraint(ql.Array(LOW), ql.Array(HIGH))
 
-    best = None  # (params, iv_rmse, price_rmse, n_helpers), ranked by iv_rmse
+    # best ranked by iv_rmse_sel (wing-weighted, the objective LM saw); the gate uses iv_rmse_gate
+    # (unweighted). With wing weighting off the two are identical, so ranking/gating are unchanged.
+    best = None  # (params, iv_rmse_sel, iv_rmse_gate, price_rmse, n_helpers)
     for start in _seed_grid(vol_matrix):
         try:
-            params, iv_rmse, price_rmse, n_helpers = _calibrate_once(
-                start, vol_matrix, s, r_ts, g_ts, S_handle, constraint, error_type)
+            params, iv_rmse_sel, iv_rmse_gate, price_rmse, n_helpers = _calibrate_once(
+                start, vol_matrix, s, r_ts, g_ts, S_handle, constraint, error_type, objective)
         except RuntimeError:
             continue
-        if not np.isfinite(iv_rmse):
+        if not np.isfinite(iv_rmse_sel):
             continue
-        if best is None or iv_rmse < best[1]:
-            best = (params, iv_rmse, price_rmse, n_helpers)
+        if best is None or iv_rmse_sel < best[1]:
+            best = (params, iv_rmse_sel, iv_rmse_gate, price_rmse, n_helpers)
 
     if best is None:
         return {**_FAIL, "n_helpers": 0, "accepted": False}
 
-    params, iv_rmse, price_rmse, n_helpers = best
+    params, iv_rmse_sel, iv_rmse, price_rmse, n_helpers = best
     theta, kappa, eta, rho, v0 = params
     accepted = (iv_rmse <= IV_RMSE_ACCEPT) and not _on_boundary(params)
     if not accepted:

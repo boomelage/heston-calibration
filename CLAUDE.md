@@ -67,6 +67,12 @@ python src/calibrator_prototype.py
 #          (price/vol), writes results/calibrations/<objective>/validation.csv, and prints a per-day
 #          summary plus a cross-day stability block. Does not modify the pipeline.
 python src/validate_calibrations.py
+
+# Wing-residual diagnostic (read-only): invert each repriced contract's Heston price back to a Black
+#          IV and report resid = model_iv - market_iv, stratified by signed log-moneyness, by
+#          |log-moneyness| (the axis config.WING_WEIGHT_* up-weights), and by maturity x wing. This is
+#          the metric a WING_WEIGHT_GAIN sweep is graded on (PLAN Lever B). OBJECTIVE constant at top.
+python src/wing_residuals.py
 ```
 
 **Data not in version control.** `data/options/raw/` (raw CBOE trade files, ~80–90 MB/day — near
@@ -182,6 +188,15 @@ date — immaterial under the flat-forward curves used here). It then:
    Black-vol inversion per residual per LM iteration) and can throw mid-search (caught per-restart).
    `rmse` (relative-price) is computed directly from model/market values, so it keeps its meaning
    under either objective.
+   **Wing weighting (PLAN Lever B, wired but default-off).** `_calibrate_once` can up-weight OTM wing
+   cells in the LM objective by `_wing_weight(k, s) = 1 + WING_WEIGHT_GAIN*(|log(k/S_ref)|/SCALE)**POWER`
+   (config knobs). It is applied **only under `"vol"`** (the `"price"`/`RelativePriceError` denominator
+   already up-weights cheap wings, so stacking there double-counts) and is passed to QuantLib as the 5th
+   positional `weights` arg of `model.calibrate(...)` — a **plain python list**, not `ql.Array`. When
+   weighting is on, restart **ranking** uses the wing-weighted IV-RMSE (`iv_rmse_sel`, the objective LM
+   saw) while the gate and the reported `iv_rmse` stay **unweighted** (`iv_rmse_gate`), so
+   `IV_RMSE_ACCEPT` keeps its meaning. `WING_WEIGHT_GAIN=0` (the default) makes both the call path and
+   the two metrics identical — an exact no-op vs the pre-lever engine.
 2. **IV-space error (the gate metric).** Each helper's fitted model price is inverted back to a
    Black vol via `BlackCalibrationHelper.impliedVolatility(modelValue, ...)` and compared to the
    market vol that built it; the RMSE of those residuals is in **vol points**. This replaces the old
@@ -208,8 +223,9 @@ Returns `{theta, kappa, eta, rho, v0, feller, iv_rmse, rmse, n_helpers, accepted
 `config.py` as the named `BOUNDS` dict; `LOW`/`HIGH` are derived as `[BOUNDS[p][L/H] for p in
 PARAM_ORDER]`, with `PARAM_ORDER = ("theta","kappa","eta","rho","v0")` declaring that order in exactly
 one place (get `PARAM_ORDER` wrong and bounds land on the wrong params). The engine imports `LOW`/`HIGH`
-/`IV_RMSE_ACCEPT`/`BOUND_TOL`/the IV-inversion controls/the seed-grid template from `config.py`; only
-the `_ERR` string→QuantLib-enum map (live `ql` objects) stays in `calibrate_heston.py`.
+/`IV_RMSE_ACCEPT`/`BOUND_TOL`/the IV-inversion controls/the seed-grid template/the `WING_WEIGHT_*` knobs
+from `config.py`; only the `_ERR` string→QuantLib-enum map (live `ql` objects) stays in
+`calibrate_heston.py`.
 
 ## DataFrame column contracts (the "hard-coded names" the README warns about)
 

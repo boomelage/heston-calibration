@@ -113,14 +113,14 @@ with $2\kappa\theta - \eta^2 = <feller>$.
 calibrated pricing operator $C_{\mathrm{H}}(\Phi^{\star})$~\eqref{eq:heston-price}~\eqref{eq:accept}.
 \begin{figure}[H]
     \begin{center}
-        \includegraphics[width=6.25cm,keepaspectratio=true]{results/surfaces/plots/tex/price_surface_puts.eps}
-        \includegraphics[width=6.25cm,keepaspectratio=true]{results/surfaces/plots/tex/price_surface_calls.eps}
-        \caption{Heston OTM option prices for $S_{\mathrm{ref}}$ <spot> on <date> with $\Phi^{\star} = (<theta>,\ <kappa>,\ <eta>,\ <rho>,\ <v0>)$: puts wing (left) and calls wing (right).}
+        \includegraphics[width=6.25cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/price_surface_puts.eps}
+        \includegraphics[width=6.25cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/price_surface_calls.eps}
+        \caption{<MODEL_LABEL> OTM option prices for $S_{\mathrm{ref}}$ <spot> on <date> with $\Phi^{\star} = (<theta>,\ <kappa>,\ <eta>,\ <rho>,\ <v0>)$: puts wing (left) and calls wing (right).}
         \label{Fig:wings}
     \end{center}
     \begin{center}
-        \includegraphics[width=6.25cm,keepaspectratio=true]{results/surfaces/plots/tex/put_smile.eps}
-        \includegraphics[width=6.25cm,keepaspectratio=true]{results/surfaces/plots/tex/call_smile.eps}
+        \includegraphics[width=6.25cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/put_smile.eps}
+        \includegraphics[width=6.25cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/call_smile.eps}
         \caption{All put (left) and call (right) options from Figure~\ref{Fig:wings}}
     \end{center}
 \end{figure}
@@ -148,8 +148,8 @@ calibrated pricing operator $C_{\mathrm{H}}(\Phi^{\star})$~\eqref{eq:heston-pric
         r' The intraday range exceeded the 3\% threshold, so treat $S_{\mathrm{ref}}$ with caution.'
         if fit['high_move'] else '')
     # Model-namespace the figure include paths and the caption label (Heston / Bates).
-    TeX = TeX.replace('results/surfaces/', f'results/{MODEL}/surfaces/')
-    TeX = TeX.replace('Heston OTM option prices', f'{MODEL_LABEL} OTM option prices')
+    TeX = TeX.replace('<MODEL>', str(MODEL))
+    TeX = TeX.replace('<MODEL_LABEL>', str(MODEL_LABEL))
 
     tex_path = TEXDIR / r"otm.tex"
     tex_path.write_text(TeX)

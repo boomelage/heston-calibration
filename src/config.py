@@ -78,6 +78,13 @@ BATES_JUMP_SEED = (0.1, -0.1, 0.1)   # (lambda, nu, delta) in BatesProcess const
 
 # ---- Models ----
 MODEL_NAMES = ("heston", "bates")
+DEFAULT_MODEL = "heston"
+
+# ---- Engine: in-engine LM objective ----
+# Selection and the gate always run off IV-space RMSE; the objective only changes what each restart
+# minimises. The string->QuantLib-enum map (`_ERR`) stays next to the engine (live ql objects).
+OBJECTIVE_NAMES = ("price", "vol")
+DEFAULT_OBJECTIVE = "price"
 
 # ---- Engine: acceptance gate / tolerances ----
 # IV-space RMSE (vol points): model-implied vol vs market vol per helper. ~2 vol points is a tight
@@ -88,12 +95,6 @@ BOUND_TOL = 1e-3        # fraction of a bound's span within which a param counts
 # ---- Engine: IV inversion controls ----
 # For BlackCalibrationHelper.impliedVolatility(price, accuracy, maxEval, lo, hi).
 IV_ACC, IV_MAXEVAL, IV_LO, IV_HI = 1e-6, 500, 1e-4, 5.0
-
-# ---- Engine: in-engine LM objective ----
-# Selection and the gate always run off IV-space RMSE; the objective only changes what each restart
-# minimises. The string->QuantLib-enum map (`_ERR`) stays next to the engine (live ql objects).
-OBJECTIVE_NAMES = ("price", "vol")
-DEFAULT_OBJECTIVE = "vol"
 
 # ---- Engine: wing weighting (PLAN.md Phase 3 Lever B) ----
 # Up-weight OTM wing cells in the LM objective by |log(Kstar/S_ref)| so the fit stops trading the

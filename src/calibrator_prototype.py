@@ -57,6 +57,7 @@ from config import (
     MAX_NT, MAX_NK, STRIKE_GRID, MIN_DTM, MAX_DTM,
     MIN_MATS, MIN_STRIKES, MIN_CELLS, MAX_MOVE_PCT,
     IV_RMSE_ACCEPT, OBJECTIVE_NAMES, MODEL_NAMES, calib_paths,
+    DEFAULT_MODEL, DEFAULT_OBJECTIVE
 )
 
 # Per-model engine, the extra Bates parameter columns, and the repriced model-price column name.
@@ -266,9 +267,9 @@ def calibrate_by_day(filepath, OBJECTIVE, MODEL):
 
 def main():
     parser = argparse.ArgumentParser(description="Attempt per-day calibration of Heston/Bates paramaters off option trades data")
-    parser.add_argument("--OBJECTIVE", type=str, default="vol", choices=list(OBJECTIVE_NAMES),
+    parser.add_argument("--OBJECTIVE", type=str, default=DEFAULT_OBJECTIVE, choices=list(OBJECTIVE_NAMES),
                         help="Decide whether to minimize residuals of `price` or `vol`")
-    parser.add_argument("--MODEL", type=str, default="heston", choices=list(MODEL_NAMES),
+    parser.add_argument("--MODEL", type=str, default=DEFAULT_MODEL, choices=list(MODEL_NAMES),
                         help="Model to calibrate: `heston` (5 params) or `bates` (Heston + jumps, 8 params)")
     parser.add_argument("--LIMIT", type=int, default=0,
                         help="If >0, calibrate only the LIMIT most recent trading days (by date). 0 = all.")

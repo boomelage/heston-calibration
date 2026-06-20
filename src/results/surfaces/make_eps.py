@@ -24,10 +24,23 @@ from pathlib import Path
 
 # This script now lives under src/results/surfaces/, but reads/writes the repo-level results/ tree.
 # `from example_surface import ...` resolves from this dir; SURFACES routes figure I/O to repo/results/.
+# RESULTS_CODE (src/results) holds results_config.py, the central knob file for the figure scripts.
+import sys
 HERE = Path(__file__).parent.resolve()                 # src/results/surfaces
+SRC = HERE.parents[1]                                   # src/ (shared utils.py, config.py)
+RESULTS_CODE = HERE.parent                              # src/results (results_config.py)
 REPO = HERE.parents[2]                                  # repo root (surfaces->results->src->repo)
 RESULTS = REPO / "results"
-SURFACES = RESULTS / "surfaces"                         # real data/figure dir at repo/results/surfaces
+for _p in (str(HERE), str(SRC), str(RESULTS_CODE)):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+# All tunable parameters live in results_config.py. MODEL/OBJECTIVE pick the engine, the
+# calibrations source, and the results/<model>/surfaces/ figure tree.
+from results_config import (  # type: ignore
+    MODEL, OBJECTIVE, PLOT_RCPARAMS, SURFACE_ELEV, SURFACE_AZIM, SURFACE_FIGSIZE)
+from config import calib_paths  # type: ignore
+MODEL_LABEL = MODEL.capitalize()
+SURFACES = RESULTS / MODEL / "surfaces"                 # data/figure dir at repo/results/<model>/surfaces
 SURFACE_CSV = SURFACES / "data" / "example_surface.csv"
 DAY_RESULTS = SURFACES / "data" / "day_results.pkl"
 TEXDIR = SURFACES / "plots" / "tex"
@@ -35,15 +48,8 @@ TEXDIR.mkdir(parents=True, exist_ok=True)
 
 # Match the default LaTeX font (Computer Modern serif) so the axis text blends with the surrounding
 # document. Uses matplotlib's bundled Computer Modern (cmr10) -- no LaTeX/usetex toolchain required.
-plt.rcParams.update({
-    'font.family': 'serif',
-    'font.serif': ['cmr10', 'Computer Modern Roman', 'DejaVu Serif'],
-    'mathtext.fontset': 'cm',
-    'axes.formatter.use_mathtext': True,   # tick labels in Computer Modern too
-    'axes.unicode_minus': False,           # cmr10 lacks U+2212; avoids missing-glyph warnings
-    'font.size': 8,
-})
-ELEV, AZIM = 25, -60
+plt.rcParams.update(PLOT_RCPARAMS)
+ELEV, AZIM = SURFACE_ELEV, SURFACE_AZIM
 
 
 def plot_surface(grid, out_path, title=None, invert_K=False):
@@ -54,7 +60,7 @@ def plot_surface(grid, out_path, title=None, invert_K=False):
     X, Y = np.meshgrid(strikes, maturities)                      # (n_mat, n_strike)
     Z = grid.to_numpy(dtype=float).T                             # (n_mat, n_strike)
 
-    fig = plt.figure(figsize=(5.0, 4.0))
+    fig = plt.figure(figsize=SURFACE_FIGSIZE)
     plt.style.use('fast')
     ax: Axes3D = fig.add_subplot(111, projection='3d')  # type: ignore[assignment]
     surf = ax.plot_surface(X, Y, Z, rstride=3, cstride=3,
@@ -141,6 +147,9 @@ calibrated pricing operator $C_{\mathrm{H}}(\Phi^{\star})$~\eqref{eq:heston-pric
     TeX = TeX.replace('<movenote>',
         r' The intraday range exceeded the 3\% threshold, so treat $S_{\mathrm{ref}}$ with caution.'
         if fit['high_move'] else '')
+    # Model-namespace the figure include paths and the caption label (Heston / Bates).
+    TeX = TeX.replace('results/surfaces/', f'results/{MODEL}/surfaces/')
+    TeX = TeX.replace('Heston OTM option prices', f'{MODEL_LABEL} OTM option prices')
 
     tex_path = TEXDIR / r"otm.tex"
     tex_path.write_text(TeX)
@@ -160,8 +169,8 @@ def smile_for(df, side):
     return surface.pivot(index='strike', columns='maturity_days', values='price')
     
 def main():
-    from example_surface import make_surface, OBJECTIVE
-    CALIBRATIONS_FILE = SURFACES.parent / "calibrations" / OBJECTIVE / "calibrations.csv"
+    from example_surface import make_surface  # type: ignore (MODEL/OBJECTIVE imported at module top)
+    CALIBRATIONS_FILE = calib_paths(MODEL, OBJECTIVE)[0]
     cal = pd.read_csv(CALIBRATIONS_FILE)
     cal = cal.sort_values(by='iv_rmse',ascending=True).reset_index(drop=True)
 

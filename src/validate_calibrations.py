@@ -30,18 +30,27 @@ SRC = Path(__file__).parent.resolve()
 RESULTS = SRC.parent / "results"
 
 from utils import implied_vol
-from config import BOUNDS, IV_RMSE_ACCEPT, OBJECTIVE_NAMES
+from config import BOUNDS, IV_RMSE_ACCEPT, OBJECTIVE_NAMES, MODEL_NAMES, calib_paths
 
-OBJECTIVE = 'vol' #input("Validate `vol` or `price` calibrations? ").strip().lower()
+# Switch these two constants to grade a different run (mirrors the orchestrator's --MODEL/--OBJECTIVE).
+MODEL = 'bates'     # 'heston' or 'bates'
+OBJECTIVE = 'vol'    # 'vol' or 'price'
 if OBJECTIVE not in OBJECTIVE_NAMES:
     raise SystemExit(f"unknown objective {OBJECTIVE!r}; expected one of {OBJECTIVE_NAMES}")
+if MODEL not in MODEL_NAMES:
+    raise SystemExit(f"unknown model {MODEL!r}; expected one of {MODEL_NAMES}")
 
-# Mirror calibrator_prototype._objective_paths: results/calibrations/<objective>/ holds
-# calibrations.csv, the per-day calibration_tests/ files, and the validation.csv written here.
-OUT = RESULTS / "calibrations" / OBJECTIVE
-CALIBRATIONS_FILE = OUT / "calibrations.csv"
-TESTS = OUT / "calibration_tests"
+# Built from the same config.calib_paths rule the calibrator uses, so the paths stay in lock-step:
+# results/<model>/calibrations/<objective>/ holds calibrations.csv, the per-day calibration_tests/
+# files, and the validation.csv written here. The repriced model-price column in the tests files is
+# named after the model ('heston' or 'bates').
+CALIBRATIONS_FILE, _REJECTIONS_FILE, TESTS = calib_paths(MODEL, OBJECTIVE)
+OUT = CALIBRATIONS_FILE.parent
 WRITEPATH = OUT / "validation.csv"
+PRICE_COL = MODEL
+
+# Bates appends the jump triple; grade/stability include them when present.
+JUMP_PARAMS = ["lambda_", "nu", "delta"] if MODEL == "bates" else []
 
 # Tunable acceptance/flag thresholds. "hard" = financially impossible -> reject;
 # "susp" (suspicious) = possible but atypical for SPX at these tenors -> flag, don't reject.
@@ -57,7 +66,7 @@ THRESHOLDS = dict(
     iv_rmse_pts=IV_RMSE_ACCEPT,                                              # fit within ~2 vol points
 )
 
-STRUCTURAL = ["theta", "kappa", "eta", "rho", "v0"]
+STRUCTURAL = ["theta", "kappa", "eta", "rho", "v0"] + JUMP_PARAMS
 
 
 
@@ -68,12 +77,13 @@ def day_metrics(test_df):
     nearest-ATM market IV (reference for the v0 check), and the contract count.
     """
     df = test_df.copy()
-    df["rel_err"] = (df["heston"] - df["trade_price"]).abs() / df["trade_price"]
+    # The repriced model-price column is named after the model ('heston' or 'bates').
+    df["rel_err"] = (df[PRICE_COL] - df["trade_price"]).abs() / df["trade_price"]
     T = df["days_to_maturity"] / 365.0
     df["model_iv"] = [
         implied_vol(p, w, S, K, r, g, t)
         for p, w, S, K, r, g, t in zip(
-            df["heston"], df["w"], df["spot_price"], df["strike_price"],
+            df[PRICE_COL], df["w"], df["spot_price"], df["strike_price"],
             df["risk_free_rate"], df["dividend_rate"], T,
         )
     ]
@@ -156,6 +166,8 @@ def print_day(report):
           f"{int(r.get('n_maturities', 0))} maturities x {int(r.get('n_strikes', 0))} strikes) ===")
     print(f"  params : theta={r['theta']:.4f} kappa={r['kappa']:.4f} eta={r['eta']:.4f} "
           f"rho={r['rho']:.4f} v0={r['v0']:.4f}  feller={r['feller']:.4f}")
+    if JUMP_PARAMS:
+        print(f"  jumps  : lambda={r['lambda_']:.4f} nu={r['nu']:.4f} delta={r['delta']:.4f}")
     print(f"  fit    : engine rmse {r.get('rmse', float('nan')):.4f}   "
           f"repricing rel-err median {r['rel_err_median']:.1%} p90 {r['rel_err_p90']:.1%}   "
           f"IV RMSE {r['iv_rmse']:.4f} vol pts")

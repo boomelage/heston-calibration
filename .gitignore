@@ -1,6 +1,5 @@
 results/*.pdf
 results/*.tex
-
 .DS_Store
 
 # ----- Large per-day option data: keep folders, ignore contents (see README.md / CLAUDE.md) -----
@@ -9,10 +8,9 @@ results/*.tex
 data/options/raw/*
 !data/options/raw/.gitkeep
 # per-day repricing diagnostics: one file per trading day, grows with years of data
-results/calibrations/price/calibration_tests/*
-!results/calibrations/price/calibration_tests/.gitkeep
-results/calibrations/vol/calibration_tests/*
-!results/calibrations/vol/calibration_tests/.gitkeep
+results/calibrations/*/calibration_tests/*
+results/*/calibrations/*/calibration_tests/*
+!results/calibrations/*/calibration_tests/.gitkeep
 
 # ----- Python exlcusions -----
 

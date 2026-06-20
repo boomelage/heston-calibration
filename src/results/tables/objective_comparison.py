@@ -27,15 +27,19 @@ import pandas as pd
 HERE = Path(__file__).parent.resolve()                 # src/results/tables
 REPO = HERE.parents[2]                                  # repo root (tables->results->src->repo)
 RESULTS = REPO / "results"
-TABLES = RESULTS / "tables"                             # real table dir at repo/results/tables
-CALIB = RESULTS / "calibrations"
+# Compares this MODEL's price vs vol runs; both objectives must exist on disk under
+# results/<model>/calibrations/{price,vol}/ (otherwise objective_metrics raises FileNotFoundError).
+MODEL = "heston"                                        # 'heston' or 'bates'
+TABLES = RESULTS / MODEL / "tables"                     # table dir at repo/results/<model>/tables
+TABLES.mkdir(parents=True, exist_ok=True)
+CALIB = RESULTS / MODEL / "calibrations"
 OBJECTIVES = ("price", "vol")
 OUT = TABLES / "objective_comparison.csv"
 
 # Rejection reason categories the orchestrator can emit (calibrator_prototype._skip_day).
 REASONS = ["pegged", "iv_miss", "no_trades", "thin", "no_rate", "no_fit"]
-# model.params() order; the accepted-set structural parameters.
-PARAMS = ["theta", "kappa", "eta", "rho", "v0"]
+# Accepted-set structural parameters; Bates appends the jump triple.
+PARAMS = ["theta", "kappa", "eta", "rho", "v0"] + (["lambda_", "nu", "delta"] if MODEL == "bates" else [])
 # Validator soft-flag columns (validate_calibrations.grade_day).
 SOFT_FLAGS = ["feller_violated", "eta_susp", "rho_pegged",
               "v0_atm_mismatch", "kappa_degenerate", "rho_wrong_sign"]

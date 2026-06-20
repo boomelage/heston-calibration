@@ -118,3 +118,34 @@ def heston_price(strike, maturity_date, spot, w, heston_engine):
                                ql.EuropeanExercise(maturity_date))
     option.setPricingEngine(heston_engine)
     return option.NPV()
+
+
+def build_bates_engine(row, calculation_date):
+    """Rebuild the Bates model from one calibrations.csv row; return its pricing engine plus the spot
+    handle and term structures (same return shape as build_heston_engine). The row must carry the
+    jump triple `lambda_, nu, delta` alongside the five Heston params."""
+    ql.Settings.instance().evaluationDate = calculation_date
+    day_count = ql.Actual365Fixed()
+    r_ts = ql.YieldTermStructureHandle(
+        ql.FlatForward(calculation_date, float(row['risk_free_rate']), day_count))
+    g_ts = ql.YieldTermStructureHandle(
+        ql.FlatForward(calculation_date, float(row['dividend_rate']), day_count))
+    s_handle = ql.QuoteHandle(ql.SimpleQuote(float(row['spot_price'])))
+    # BatesProcess constructor order: (r, g, S0, v0, kappa, theta, eta, rho, lambda, nu, delta)
+    process = ql.BatesProcess(
+        r_ts, g_ts, s_handle,
+        float(row['v0']), float(row['kappa']), float(row['theta']),
+        float(row['eta']), float(row['rho']),
+        float(row['lambda_']), float(row['nu']), float(row['delta']),
+    )
+    engine = ql.BatesEngine(ql.BatesModel(process))
+    return engine, s_handle, r_ts, g_ts, day_count
+
+
+def build_model_engine(row, calculation_date, model):
+    """Dispatch to the Heston or Bates engine builder by model name. Same return shape either way, so
+    the figure scripts (example_surface, smiles) stay model-agnostic. The downstream pricing/inversion
+    helpers (`heston_price`, `heston_implied_vol`) take the engine and work with either."""
+    if model == "bates":
+        return build_bates_engine(row, calculation_date)
+    return build_heston_engine(row, calculation_date)

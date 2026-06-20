@@ -11,6 +11,7 @@ objective map points at live QuantLib enum objects (kept next to the engine); th
 template a function expands. Expressing the bounds as a named dict (`BOUNDS`) with `PARAM_ORDER`
 turns the positional-order footgun into a single declared mapping.
 """
+from pathlib import Path
 
 # ---- Surface selection / coverage (calibrator_prototype._select_surface / calibrate_by_day) ----
 # Pooling the whole day (one fit) lets us take more maturities than the old per-spot path.
@@ -49,6 +50,34 @@ BOUNDS = {
 }
 LOW = [BOUNDS[p][0] for p in PARAM_ORDER]
 HIGH = [BOUNDS[p][1] for p in PARAM_ORDER]
+
+# ---- Engine: Bates box bounds (calibrate_bates) ----
+# Bates = Heston + Merton lognormal jumps: three extra params lambda (jumps/yr), nu (mean log-jump),
+# delta (log-jump std). BATES_PARAM_ORDER is QuantLib's BatesModel.params() order, CONFIRMED live by
+# building a model with distinct sentinels: the first five follow HestonModel.params()
+# (theta,kappa,eta,rho,v0), then the jump triple appends as (nu, delta, lambda) -- NOT (lambda,nu,delta),
+# and the first five are NOT the constructor order. Get this wrong and bounds land on the wrong params.
+# The five Heston ranges are reused; jump bounds are equity-skew priors (jumps skew down, so nu allows
+# more negative room). lambda floor is exactly 0 so the fit can collapse to pure Heston.
+BATES_PARAM_ORDER = ("theta", "kappa", "eta", "rho", "v0", "nu", "delta", "lambda_")
+BATES_BOUNDS = {
+    "theta":   (1e-4, 1.0),
+    "kappa":   (1e-2, 20.0),
+    "eta":     (1e-2, 2.0),
+    "rho":     (-0.999, 0.5),
+    "v0":      (1e-4, 1.0),
+    "nu":      (-0.5, 0.2),
+    "delta":   (1e-3, 0.5),
+    "lambda_": (0.0, 5.0),
+}
+BATES_LOW = [BATES_BOUNDS[p][0] for p in BATES_PARAM_ORDER]
+BATES_HIGH = [BATES_BOUNDS[p][1] for p in BATES_PARAM_ORDER]
+# One fixed jump seed appended to each Heston seed row (restart count stays 6). lambda near zero so the
+# fit can start from "almost no jumps" and grow them only if they help; nu slightly negative (down-jump).
+BATES_JUMP_SEED = (0.1, -0.1, 0.1)   # (lambda, nu, delta) in BatesProcess constructor order
+
+# ---- Models ----
+MODEL_NAMES = ("heston", "bates")
 
 # ---- Engine: acceptance gate / tolerances ----
 # IV-space RMSE (vol points): model-implied vol vs market vol per helper. ~2 vol points is a tight
@@ -93,3 +122,26 @@ SEED_GRID_TEMPLATE = [
     (0.8, 2.0, 1.2, 0.60, -0.75),
     (1.0, 8.0, 1.0, 1.20, -0.40),
 ]
+
+# ---- Result routing (model x objective) ----
+# Outputs are namespaced by model AND objective (results/<model>/calibrations/<objective>/) so Heston
+# and Bates results coexist and the two objectives never clobber each other. This resolver is the
+# single source of truth for the per-model, per-objective directory; calibrator_prototype._objective_paths
+# is a thin wrapper over it, and the downstream results scripts import it as they are migrated
+# (PLAN-Bates.md). The layout is uniform across models -- heston lives under results/heston/, matching
+# the migrated tree on disk and the results/*/calibrations/*/ pattern in .gitignore.
+REPO = Path(__file__).resolve().parent.parent   # src/config.py -> repo root
+RESULTS = REPO / "results"
+
+
+def calib_paths(model, objective):
+    """Resolve (calibrations.csv, rejections.csv, tests_dir) for a (model, objective) pair.
+
+    Uniform layout: results/<model>/calibrations/<objective>/ holds calibrations.csv, rejections.csv
+    and the per-day calibration_tests/ directory. No model is special-cased.
+    """
+    base = RESULTS / model / "calibrations" / objective
+    base.mkdir(parents=True, exist_ok=True)
+    return (base / "calibrations.csv",
+            base / "rejections.csv",
+            base / "calibration_tests")

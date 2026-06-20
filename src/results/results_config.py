@@ -1,0 +1,102 @@
+"""Central configuration for the downstream figure/table scripts under ``src/results/``.
+
+Every tunable knob for the figure generators lives here so a surface/smile can be
+re-shaped from one place instead of editing the individual scripts. The two master
+switches are ``MODEL`` (picks the QuantLib engine -- Heston vs Bates -- AND the
+``results/<model>/`` output tree) and ``OBJECTIVE`` (picks which calibration run to
+read, ``results/<model>/calibrations/<objective>/``). Everything else is per-script
+grid/plot parameters, grouped by the script that consumes it.
+
+Imported by ``surfaces/example_surface.py``, ``smiles/smiles.py`` and
+``surfaces/make_eps.py`` (each adds ``src/results`` to ``sys.path`` then
+``import results_config``).
+"""
+import numpy as np
+
+# ------- shared across all results scripts
+
+# MODEL picks the QuantLib engine (Heston vs Bates) AND the results/<model>/ output tree.
+# OBJECTIVE picks which calibration run to read (results/<model>/calibrations/<objective>/).
+# This module is the single source for both -- the other scripts import them from here.
+MODEL = "bates"      # 'heston' or 'bates'
+OBJECTIVE = "vol"     # 'vol' or 'price'
+
+# Matplotlib styling shared by smiles.py and make_eps.py. Computer Modern serif to match the
+# LaTeX document; cmr10 lacks U+2212 so unicode_minus is disabled to avoid missing-glyph warnings.
+PLOT_RCPARAMS = {
+    'font.family': 'serif',
+    'font.serif': ['cmr10', 'Computer Modern Roman', 'DejaVu Serif'],
+    'mathtext.fontset': 'cm',
+    'axes.formatter.use_mathtext': True,   # tick labels in Computer Modern too
+    'axes.unicode_minus': False,           # cmr10 lacks U+2212; avoids missing-glyph warnings
+    'font.size': 8,
+}
+
+# Placeholder Black vol seeded into BlackConstantVol for the price->IV inversion. impliedVolatility
+# solves for the vol that reprices the model NPV, so this value is ignored; it only initialises the
+# term structure. Used by example_surface.make_surface and smiles._day_engine.
+INVERSION_PLACEHOLDER_VOL = 0.20
+
+
+# ------- `surfaces/example_surface.py` parameters
+
+# Moneyness grid (strike = m * spot) the model surface is sampled on. K/S around the money.
+MONEYNESS = np.round(np.arange(0.75, 1.25, 0.005), 4).tolist()   # 0.75 .. 1.245
+
+# Maturity grid in calendar days the model surface is sampled on (>= MIN_DTM up to ~MAX_DTM).
+MATURITIES_DAYS = np.arange(start=30, stop=730, step=30).tolist()
+
+
+# ------- `smiles/smiles.py` parameters
+
+# Plotted maturity window (calendar days). Market trades and model lines are both restricted to it,
+# so the scatter, the x-axis framing and the maturity colour key all line up.
+TMIN, TMAX = 100, 730
+
+# Number of maturities drawn per figure. The plotted set always includes the lowest and highest
+# available maturity; the remaining NT-2 are spaced as equally as possible. Set NT >= the number
+# of available maturities to draw them all.
+NT = 5
+
+# Per-row maturity key: True draws a legend, False draws a colorbar.
+USE_LEGEND = True
+
+# Overlay real market implied vols (trade_iv) from data/options/raw/ as a scatter. The raw CBOE
+# trade files are git-ignored, so this is a no-op (with a printed warning) on a fresh clone.
+ENRICH_MARKET = True
+
+# Fallback moneyness window for the model lines / x-axis, used only when a day has no market data
+# to frame on (S/K calls, K/S puts). With market data present each wing is framed to that day's
+# available market moneyness instead.
+XLO, XHI = 0.8, 1.15
+
+# Market-scatter window. OTM market moneyness (S/K calls, K/S puts) is always in (0, 1]; we drop the
+# deep wing below MARKET_M_MIN and clip IV outliers from the deep-OTM corner at MARKET_IV_MAX.
+# Reparameterising each strike onto both wings maps the floor to the reciprocal ceiling MARKET_M_MAX,
+# so kept points span [MARKET_M_MIN, MARKET_M_MAX] on each wing.
+MARKET_M_MIN = 0.75
+MARKET_M_MAX = 1.0 / MARKET_M_MIN
+MARKET_IV_MAX = 2.0
+
+# Market-scatter thinning. Keep a sparse subset spaced ~MKTMONSTEP apart in moneyness (percentage
+# terms). 0.05 => ~5% gaps. Set to 0 to disable thinning (draw every point).
+MKTMONSTEP = 0.05
+
+# Moneyness step for the model smile lines (put_grid/call_grid resolution).
+SMILE_M_STEP = 0.005
+
+# Figure size (inches) for the two-panel smile figure, and the maturity colormap name.
+SMILE_FIGSIZE = (8, 2.7)
+SMILE_CMAP = "jet"
+
+
+# ------- `surfaces/make_eps.py` parameters
+
+# 3D view angle (elevation, azimuth) for the price-surface renders.
+SURFACE_ELEV, SURFACE_AZIM = 25, -60
+
+# Figure size (inches) for each 3D surface render.
+SURFACE_FIGSIZE = (5.0, 4.0)
+
+
+# ------- `tables/objective_comparison.py` parameters

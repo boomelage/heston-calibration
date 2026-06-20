@@ -29,9 +29,12 @@ import QuantLib as ql
 SRC = Path(__file__).parent.resolve()
 RESULTS = SRC.parent / "results"
 
-OBJECTIVE = input("Validate `vol` or `price` calibrations? ").strip().lower()
-if OBJECTIVE not in ("price", "vol"):
-    raise SystemExit(f"unknown objective {OBJECTIVE!r}; expected 'price' or 'vol'")
+from utils import implied_vol
+from config import BOUNDS, IV_RMSE_ACCEPT, OBJECTIVE_NAMES
+
+OBJECTIVE = 'vol' #input("Validate `vol` or `price` calibrations? ").strip().lower()
+if OBJECTIVE not in OBJECTIVE_NAMES:
+    raise SystemExit(f"unknown objective {OBJECTIVE!r}; expected one of {OBJECTIVE_NAMES}")
 
 # Mirror calibrator_prototype._objective_paths: results/calibrations/<objective>/ holds
 # calibrations.csv, the per-day calibration_tests/ files, and the validation.csv written here.
@@ -42,30 +45,20 @@ WRITEPATH = OUT / "validation.csv"
 
 # Tunable acceptance/flag thresholds. "hard" = financially impossible -> reject;
 # "susp" (suspicious) = possible but atypical for SPX at these tenors -> flag, don't reject.
+# The hard-reject ranges that must agree with the engine (the box bounds and the IV gate) are
+# pulled from config.BOUNDS / config.IV_RMSE_ACCEPT so the two cannot drift. The remaining knobs
+# (peg/susp tolerances, kappa_lo) are validator-only judgement calls and stay local.
 THRESHOLDS = dict(
-    rho_peg=0.995, rho_lo=-0.999, rho_hi=0.5,      # leverage effect => rho negative
-    eta_lo=0.01, eta_hi=2.0, eta_susp=1.5,         # SPX vol-of-vol ~0.3-1.2
-    theta_lo=1e-4, theta_hi=1.0, theta_susp=0.25,  # long-run variance (vol>50% suspicious)
-    v0_lo=1e-4, v0_hi=1.0, v0_atm_tol=0.05,        # sqrt(v0) should ~ front-month ATM IV
-    kappa_lo=0.0, kappa_hi=20.0,                   # mean-reversion speed
-    iv_rmse_pts=0.02,                              # accept days fitting within ~2 vol points
+    rho_peg=0.995, rho_lo=BOUNDS["rho"][0], rho_hi=BOUNDS["rho"][1],          # leverage => rho negative
+    eta_lo=BOUNDS["eta"][0], eta_hi=BOUNDS["eta"][1], eta_susp=1.5,           # SPX vol-of-vol ~0.3-1.2
+    theta_lo=BOUNDS["theta"][0], theta_hi=BOUNDS["theta"][1], theta_susp=0.25,  # vol>50% suspicious
+    v0_lo=BOUNDS["v0"][0], v0_hi=BOUNDS["v0"][1], v0_atm_tol=0.05,            # sqrt(v0) ~ front ATM IV
+    kappa_lo=0.0, kappa_hi=BOUNDS["kappa"][1],                               # mean-reversion speed
+    iv_rmse_pts=IV_RMSE_ACCEPT,                                              # fit within ~2 vol points
 )
 
 STRUCTURAL = ["theta", "kappa", "eta", "rho", "v0"]
 
-
-def implied_vol(price, w, S, K, r, g, T):
-    """Invert a Black price to an implied vol (vol points), dividend-consistent via the forward."""
-    if not np.isfinite(price) or price <= 0 or T <= 0:
-        return np.nan
-    F = S * np.exp((r - g) * T)
-    disc = np.exp(-r * T)
-    opt = ql.Option.Call if w == "call" else ql.Option.Put
-    try:
-        sd = ql.blackFormulaImpliedStdDev(opt, K, F, price, disc)
-        return sd / np.sqrt(T)
-    except RuntimeError:
-        return np.nan
 
 
 def day_metrics(test_df):

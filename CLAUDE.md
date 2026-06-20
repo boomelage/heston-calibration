@@ -43,24 +43,26 @@ prototype, not a clean design.
 
 ## How to run
 
-The pipeline is four stages. There is no build/lint/test tooling — you run scripts directly.
+The pipeline is three stages. There is no build/lint/test tooling — you run scripts directly. All
+model/calibration constants (surface coverage knobs, box bounds, the acceptance gate, the OTM
+filter floor/cutoff, the wing-weight knobs, the seed grid) live in one place: `src/config.py`. Tune
+there, not in the individual modules. The driver calibrates **every** raw file in
+`data/options/raw/` (no slice); the full multi-year sample is ~3,217 trading days and one `vol` run
+takes a few hours on this machine (multi-start LM, ~1,500 cells/day, 8 parallel jobs).
 
 ```bash
-# Stage 1: market rates. NOT run standalone -- data/get_rg.py is imported by Stage 3
+# Stage 1: market rates. NOT run standalone -- data/get_rg.py is imported by Stage 2
 #          (`from get_rg import rg`) and builds the `rg` rate table on import. Optional
 #          sanity check of the rates it will feed the calibrator:
 python -c "import sys; sys.path.insert(0,'data'); from get_rg import rg; print(rg[['risk_free_rate','dividend_rate']].head())"
 
-# Stage 2: clean raw trades -> OTM-only snapshots. Resolves paths from __file__,
-#          so it runs from any working directory.
-python data/extract_otms.py
-
-# Stage 3+4: calibrate ONCE per trading day. Writes accepted params to the single
-#            results/calibrations/<objective>/calibrations.csv, one row per REJECTED day (with the
-#            cause) to results/calibrations/<objective>/rejections.csv, and per-day repricing
-#            diagnostics to results/calibrations/<objective>/calibration_tests/. <objective> is
-#            `price` (default) or `vol`, selected by --OBJECTIVE. Prints the accept rate and a
-#            rejections-by-reason tally. Resolves paths from __file__, so it runs from any working dir.
+# Stage 2+3: calibrate ONCE per trading day. Reads raw trades directly and does the OTM cleaning
+#            in-memory (utils._prepare_options), so there is no separate extraction script. Writes
+#            accepted params to the single results/calibrations/<objective>/calibrations.csv, one row
+#            per REJECTED day (with the cause) to results/calibrations/<objective>/rejections.csv, and
+#            per-day repricing diagnostics to results/calibrations/<objective>/calibration_tests/.
+#            <objective> is `vol` (default) or `price`, selected by --OBJECTIVE. Prints the accept
+#            rate and a rejections-by-reason tally. Resolves paths from __file__, runs from any dir.
 python src/calibrator_prototype.py
 
 # Validation (read-only): grade results/calibrations/<objective>/calibrations.csv + calibration_tests/
@@ -68,34 +70,51 @@ python src/calibrator_prototype.py
 #          (price/vol), writes results/calibrations/<objective>/validation.csv, and prints a per-day
 #          summary plus a cross-day stability block. Does not modify the pipeline.
 python src/validate_calibrations.py
+
+# Wing-residual diagnostic (read-only): invert each repriced contract's Heston price back to a Black
+#          IV and report resid = model_iv - market_iv, stratified by signed log-moneyness, by
+#          |log-moneyness| (the axis config.WING_WEIGHT_* up-weights), and by maturity x wing. This is
+#          the metric a WING_WEIGHT_GAIN sweep is graded on (PLAN Lever B). OBJECTIVE constant at top.
+python src/wing_residuals.py
 ```
 
 **Data not in version control.** `data/options/raw/` (raw CBOE trade files, ~80–90 MB/day — near
-GitHub's 100 MB/file limit) and `data/options/otm/` (the OTM snapshots derived from them, ~6 MB/day)
-are **git-ignored**; only a `.gitkeep` keeps each folder present.
+GitHub's 100 MB/file limit) is **git-ignored**; only a `.gitkeep` keeps the folder present. The OTM
+cleaning is done in-memory by the calibrator (no on-disk OTM snapshots).
 `results/calibrations/{price,vol}/calibration_tests/` (per-day repricing diagnostics, one file per
 day) is **git-ignored** for the same reason — it grows with years of data. A fresh clone has none of
-them — to bootstrap, drop `UnderlyingOptionsTradesCalcs_*.csv` into `data/options/raw/`, run Stage 2
-to materialise `data/options/otm/`, then Stages 3+4 (which regenerate `calibration_tests/`). Only the
-small derived artefacts are tracked: the `{calibrations,rejections,validation}.csv` triples for **both**
-objectives (`results/calibrations/price/` and `results/calibrations/vol/`) plus `data/market/`. Each
-objective's bulky per-day `calibration_tests/` stays git-ignored (only a `.gitkeep` is tracked).
+them — to bootstrap, drop `UnderlyingOptionsTradesCalcs_*.csv` into `data/options/raw/`, then run
+Stage 2+3 (which regenerates `calibration_tests/`). Only the
+small derived artefacts are tracked: the `{calibrations,rejections,validation}.csv` triple for the
+default **`vol`** objective (`results/calibrations/vol/`) plus `data/market/`. The `price` objective is
+still selectable (`--OBJECTIVE price`) but its outputs are **not committed on this branch** (the older
+narrow-config `price` baseline lives on `master`). Each objective's bulky per-day `calibration_tests/`
+stays git-ignored (only a `.gitkeep` is tracked).
 
 There is no single-test command because there are no tests. To exercise just the engine, import
-`calibrate_heston(vol_matrix, s, r, g, objective="price")` from `src/calibrate_heston.py` with a
-strike×maturity IV DataFrame. `objective` selects the in-engine LM objective ("price" relative-price,
-default, or "vol" IV-space); the orchestrator passes its `OBJECTIVE` constant through.
+`calibrate_heston(vol_matrix, s, r, g, objective="vol")` from `src/calibrate_heston.py` with a
+strike×maturity IV DataFrame. `objective` selects the in-engine LM objective ("vol" IV-space,
+the default, or "price" relative-price); the orchestrator passes its `OBJECTIVE` constant through.
+
+**Downstream figure/table scripts** live under `src/results/` (moved there from `results/`):
+`surfaces/example_surface.py` (rebuilds a model IV/price surface from one calibration row),
+`surfaces/make_eps.py` (writes the OTM surface/smile EPS + `otm.tex`), `smiles/smiles.py` (per-day
+market-vs-model smile EPS + `smiles.tex`), and `tables/objective_comparison.py` (price-vs-vol metrics
+table). They resolve `REPO = Path(__file__).parents[2]` and read calibrations from / write figures into
+the **repo-level** `results/` tree, and share the QuantLib helpers (`build_heston_engine`,
+`heston_price`, `heston_implied_vol`) in `src/utils.py`. Run e.g. `python src/results/surfaces/make_eps.py`
+then `python src/results/smiles/smiles.py` after a calibration to refresh the paper's figures.
 
 ## Pipeline architecture
 
-Data flows left-to-right. `raw/` and `otm/` hold one CSV per trading day (both **git-ignored** — not
-in the repo; see the "Data not in version control" note under How to run); the per-day calibration
-parameters accumulate into a **single** `results/calibrations/<objective>/calibrations.csv` (one row
-per day), while the bulky per-day repricing diagnostics stay one-file-per-day under
+Data flows left-to-right. `raw/` holds one CSV per trading day (**git-ignored** — not in the repo;
+see the "Data not in version control" note under How to run); the per-day calibration parameters
+accumulate into a **single** `results/calibrations/<objective>/calibrations.csv` (one row per day),
+while the bulky per-day repricing diagnostics stay one-file-per-day under
 `results/calibrations/<objective>/calibration_tests/`:
 
 ```
-raw/  --extract_otms.py-->  otm/  --calibrator_prototype.py-->  results/calibrations/<objective>/calibrations.csv  + calibration_tests/
+raw/  --calibrator_prototype.py (utils._prepare_options cleans to OTM in-memory)-->  results/calibrations/<objective>/calibrations.csv  + calibration_tests/
 ```
 
 **Stage 1 — market rates (`data/get_rg.py`).** Imported for its side effect: building a
@@ -108,17 +127,22 @@ module-level DataFrame `rg`. Parses two hard-coded filenames in `data/market/`:
 Downstream only `risk_free_rate` and `dividend_rate` are consumed; the `_vol` columns and `rg`'s
 `spot_price` are computed but unused (spot comes from the options data instead).
 
-**Stage 2 — OTM extraction (`data/extract_otms.py`).** For each `raw/UnderlyingOptionsTradesCalcs_*.csv`
-(CBOE trade-level data): selects/renames a column subset, uses `underlying_bid` as `spot_price`,
-maps `option_type` C/P → `w` call/put, computes `days_to_maturity` (calendar days, `>0` only),
-keeps positive IV/spot/strike, then keeps **only OTM** rows via `ms.df_moneyness` (`moneyness < 0`).
-Writes `otm/cboe_spx_otm_<lastquotedate>.csv`.
+**OTM cleaning (`src/utils._prepare_options`).** No longer a standalone stage/script (the old
+`data/extract_otms.py` is removed). The calibrator calls this in-memory on each raw file: selects/renames
+a column subset, uses `underlying_bid` as `spot_price`, maps `option_type` C/P → `w` call/put, computes
+`days_to_maturity` (calendar days, `>0` only), keeps positive IV/spot/strike, then keeps the OTM band
+via `utils.df_moneyness`: `OTM_MONEYNESS_FLOOR < ratio moneyness < OTM_MONEYNESS_CUTOFF` (0.6 and 0.98
+in `config.py`). The CUTOFF drops near-ATM rows (keeps only OTM); the **FLOOR drops the deep-OTM
+lottery-ticket tail** (ratio moneyness = `e^-|log(K/S)|`, so 0.6 keeps `|log-moneyness| < ~0.51`, ~40%
+OTM). Those far-OTM strikes have extreme prices that peg the fit to its bounds; flooring them recovers
+acceptance and tightens IV-RMSE without losing the tradeable wing.
 
-**Stage 3 — orchestration (`src/calibrator_prototype.py`, `calibrate_by_day`).** The non-obvious
-core. For each OTM file it does **one calibration per trading day** (PLAN Work item 3), over a
+**Stage 2 — orchestration (`src/calibrator_prototype.py`, `calibrate_by_day`).** The non-obvious
+core. For each raw trades file it does **one calibration per trading day** (PLAN Work item 3), over a
 pooled, moneyness-normalised surface — not the old per-0.5-spot-bucket fits:
 
-1. Read trades; keep `trade_iv > 0` **and** `days_to_maturity >= MIN_DTM` (=7). Ultra-short
+1. Read + clean trades (`utils._prepare_options`); keep `trade_iv > 0` **and**
+   `MIN_DTM <= days_to_maturity <= MAX_DTM` (`MIN_DTM`=14, `MAX_DTM`=730 in `config.py`). Ultra-short
    maturities are dropped: Heston fits them poorly and they drive `eta`/`kappa` to Feller-violating
    extremes, polluting the pooled fit.
 2. Look up `r`, `g` from `rg` for the file's quote date (NaN-guarded).
@@ -129,15 +153,15 @@ pooled, moneyness-normalised surface — not the old per-0.5-spot-bucket fits:
    intraday range. Each trade keeps its moneyness `m = strike / spot_row` but is re-struck to
    `K* = m * S_ref` and **snapped to the SPX 5-point grid** (`STRIKE_GRID`), so trades at different
    intraday spots share clean surface columns (`Kstar`).
-5. **Surface.** Rank maturities by traded volume (top `MAX_NT`=12); for each kept maturity take the
-   `MAX_NK`=8 nearest-money `Kstar` per wing (highest OTM puts, lowest OTM calls); `pivot_table`
+5. **Surface.** Rank maturities by traded volume (top `MAX_NT`=20); for each kept maturity take the
+   `MAX_NK`=40 nearest-money `Kstar` per wing (highest OTM puts, lowest OTM calls); `pivot_table`
    into a `Kstar`×maturity IV surface (`values='trade_iv'`). When several trades share a cell the
    **highest-volume** trade's IV is kept (`sel` sorted by `trade_size`, then `aggfunc='last'`), not the
    chronologically last — a volume-weighted mean per cell is under consideration (PLAN.md). Require
    richer coverage than before: `>= MIN_MATS`(3) maturities, `>= MIN_STRIKES`(5) strikes, and
    `>= MIN_CELLS`(12) non-NaN cells.
 6. Call `calibrate_heston(surface, S_ref, r, g)` **once for the whole day**. The engine **rejects**
-   fits it cannot trust (returns `None` params — see Stage 4), printing whether the rejection was a
+   fits it cannot trust (returns `None` params — see Stage 3), printing whether the rejection was a
    thin surface, an IV-RMSE miss, or a **boundary-pegged** param.
 7. **On accept** `calibrate_by_day` *returns* the day's **one row keyed by date** (`S_ref` as
    `spot_price`, `r`, `g`, the five params, `feller`, `iv_rmse`, `rmse`, coverage counts, intraday
@@ -163,10 +187,10 @@ separated by directory), where `<date>` is sliced out of the OTM filename. The d
 the two stay in lock-step. (The calibrations/rejections/validation files are likewise objective-dependent,
 all under `results/calibrations/<objective>/`: `calibrations.csv` + `rejections.csv` + `validation.csv`,
 built from `_objective_paths` (`OUT` in the validator) and not derived from the input path.) The
-objective is selected by the `--OBJECTIVE {price,vol}` CLI flag (default `price`) and threaded through
-to `calibrate_heston`.
+objective is selected by the `--OBJECTIVE {price,vol}` CLI flag (default `vol`, set by
+`config.DEFAULT_OBJECTIVE`) and threaded through to `calibrate_heston`.
 
-**Stage 4 — calibration engine (`src/calibrate_heston.py`).** Pure function
+**Stage 3 — calibration engine (`src/calibrate_heston.py`).** Pure function
 `calibrate_heston(vol_matrix, s, r, g) -> dict`, **hardened** (PLAN Work items 2 & 3). Builds a QuantLib
 `HestonProcess` / `HestonModel` with an `AnalyticHestonEngine` and one `HestonModelHelper` per
 non-NaN surface cell (maturity as `Period(days, Days)`, NYSE calendar, `Date.todaysDate()` as eval
@@ -176,12 +200,21 @@ date — immaterial under the flat-forward curves used here). It then:
    calibrates with Levenberg–Marquardt under **box bounds**
    (`ql.NonhomogeneousBoundaryConstraint(LOW, HIGH)`), and keeps the fit with the lowest
    **IV-space RMSE**. The LM objective itself is switchable via `objective` (`_ERR` maps it to the
-   `HestonModelHelper` error type): `"price"` (`RelativePriceError`, default) or `"vol"`
-   (`ImpliedVolError`). This only changes what each restart minimises; selection and the gate always
+   `HestonModelHelper` error type): `"vol"` (`ImpliedVolError`, the default — `config.DEFAULT_OBJECTIVE`)
+   or `"price"` (`RelativePriceError`). This only changes what each restart minimises; selection and the gate always
    use IV-RMSE, so it is independent of how a day is chosen/accepted. `"vol"` is more expensive (a
    Black-vol inversion per residual per LM iteration) and can throw mid-search (caught per-restart).
    `rmse` (relative-price) is computed directly from model/market values, so it keeps its meaning
    under either objective.
+   **Wing weighting (PLAN Lever B, wired but default-off).** `_calibrate_once` can up-weight OTM wing
+   cells in the LM objective by `_wing_weight(k, s) = 1 + WING_WEIGHT_GAIN*(|log(k/S_ref)|/SCALE)**POWER`
+   (config knobs). It is applied **only under `"vol"`** (the `"price"`/`RelativePriceError` denominator
+   already up-weights cheap wings, so stacking there double-counts) and is passed to QuantLib as the 5th
+   positional `weights` arg of `model.calibrate(...)` — a **plain python list**, not `ql.Array`. When
+   weighting is on, restart **ranking** uses the wing-weighted IV-RMSE (`iv_rmse_sel`, the objective LM
+   saw) while the gate and the reported `iv_rmse` stay **unweighted** (`iv_rmse_gate`), so
+   `IV_RMSE_ACCEPT` keeps its meaning. `WING_WEIGHT_GAIN=0` (the default) makes both the call path and
+   the two metrics identical — an exact no-op vs the pre-lever engine.
 2. **IV-space error (the gate metric).** Each helper's fitted model price is inverted back to a
    Black vol via `BlackCalibrationHelper.impliedVolatility(modelValue, ...)` and compared to the
    market vol that built it; the RMSE of those residuals is in **vol points**. This replaces the old
@@ -191,28 +224,30 @@ date — immaterial under the flat-forward curves used here). It then:
 3. **Acceptance gate:** returns the failure sentinel if the best **IV-RMSE** exceeds
    `IV_RMSE_ACCEPT` (`0.02`, ~2 vol points) **or** any parameter is pinned within `BOUND_TOL` of a
    bound (a boundary fit is a non-fit). The old "did the params move from the fixed guess" sentinel
-   is **removed**. Note: on the pooled per-day surfaces the genuine fit is excellent — across the full
-   multi-year run accepted days have IV-RMSE ~0.5 vol points (median `iv_rmse` 0.0048), so IV-RMSE
-   never gates. Accepted days are also **pegging-free by construction** (the gate rejects any
-   boundary-pegged param), so a clean `kappa`/`rho` in `calibrations.csv` is *not* evidence pegging is
-   solved — it is just what survives the gate. Over **3215** attempted days **1713 (~53%)** accept; the
-   1502 rejected never reach `calibrations.csv`, but their cause is logged to
-   `results/calibrations/<objective>/rejections.csv`, which confirms boundary-pegged `kappa` (→20) /
-   `rho` (→−0.999) as the dominant cause
-   (**pegged 1398, iv_miss 103, no_trades 1**) — still the open Phase 3 lever.
+   is **removed**. Note: on the pooled per-day surfaces the genuine fit is excellent — accepted days
+   have IV-RMSE around 0.8 vol points (median), far inside the 2-vol-point gate, so IV-RMSE essentially
+   never gates; the binding rejection is boundary pegging. Accepted days are also **pegging-free by
+   construction** (the gate rejects any boundary-pegged param), so a clean `kappa`/`rho` in
+   `calibrations.csv` is *not* evidence pegging is solved — it is just what survives the gate. For
+   acceptance-rate figures and the pegging audit see the boundary-pegging Known-issue bullet.
 
 Returns `{theta, kappa, eta, rho, v0, feller, iv_rmse, rmse, n_helpers, accepted}` with
 `feller = 2*kappa*theta - eta**2` for an accepted fit; a rejected fit returns params/`feller` as
 `None` but keeps `iv_rmse`/`rmse`/`n_helpers`/`accepted=False` for diagnostics.
-**Param order matters:** `model.params()` returns `[theta, kappa, eta, rho, v0]` — the `LOW`/`HIGH`
-bounds arrays follow this exact order (get it wrong and bounds land on the wrong params).
+**Param order matters:** `model.params()` returns `[theta, kappa, eta, rho, v0]`. The bounds live in
+`config.py` as the named `BOUNDS` dict; `LOW`/`HIGH` are derived as `[BOUNDS[p][L/H] for p in
+PARAM_ORDER]`, with `PARAM_ORDER = ("theta","kappa","eta","rho","v0")` declaring that order in exactly
+one place (get `PARAM_ORDER` wrong and bounds land on the wrong params). The engine imports `LOW`/`HIGH`
+/`IV_RMSE_ACCEPT`/`BOUND_TOL`/the IV-inversion controls/the seed-grid template/the `WING_WEIGHT_*` knobs
+from `config.py`; only the `_ERR` string→QuantLib-enum map (live `ql` objects) stays in
+`calibrate_heston.py`.
 
 ## DataFrame column contracts (the "hard-coded names" the README warns about)
 
 Stages communicate through column names, not typed interfaces. Renaming any of these silently
 breaks a downstream stage:
 
-- `otm/*.csv` schema: `quote_datetime, strike_price, w, trade_size, trade_price, trade_iv, spot_price, days_to_maturity`.
+- cleaned OTM snapshot schema (in-memory, from `utils._prepare_options`): `quote_datetime, strike_price, w, trade_size, trade_price, trade_iv, spot_price, days_to_maturity`.
 - `results/calibrations/<objective>/calibrations.csv` schema (**single file, one row per trading day**, keyed by `date`):
   `spot_price` (= `S_ref`), `risk_free_rate, dividend_rate, theta, kappa, rho, eta, v0, feller,
   iv_rmse, rmse, n_helpers, accepted, n_maturities, n_strikes, contracts_count, total_volume,
@@ -223,7 +258,7 @@ breaks a downstream stage:
   n_strikes, n_cells` (NaN unless a surface was built). `date` here is the filename date string.
 - `calibration_tests/*.csv`: the day's repriced surface contracts (original `spot_price`/`strike_price`,
   plus `Kstar`, the fitted params, `volatility` (= `trade_iv`), `black_scholes`, `heston`).
-- `ms.df_moneyness(df)` needs `w, spot_price, strike_price` (returns `spot-strike` for calls, `strike-spot` for puts).
+- `utils.df_moneyness(df)` needs `w, spot_price, strike_price` (returns ratio moneyness: `spot/strike` for calls, `strike/spot` for puts; `< 1` => OTM).
 - `vanp.df_numpy_black_scholes(df)` needs `spot_price, strike_price, days_to_maturity, risk_free_rate, volatility, w`
   (note: `trade_iv` is renamed to `volatility` before this call).
 - `vanp.df_heston_price(df)` needs `spot_price, strike_price, days_to_maturity, risk_free_rate, dividend_rate, w, kappa, theta, rho, eta, v0`.
@@ -241,34 +276,38 @@ breaks a downstream stage:
 - Snapping `Kstar` to the 5-point SPX grid is exact near the money but coarser in the far wings
   (native grid widens to 25/50/100); harmless for QuantLib (any float strike prices) but it slightly
   quantises deep-OTM moneyness.
-- **Boundary pegging is still the open Phase 3 lever — and `calibrations.csv` cannot show it.** Under the
-  default **`price`** objective a multi-year run attempted **3215** trading days and accepted **1713 (~53%)**,
-  just under PLAN.md's 60% target. The accepted set has 0 pegged `kappa`/`rho`, but that is **tautological**:
-  the gate (`_on_boundary`) rejects any boundary-pegged fit, so pegged days never reach the file. The 1502
-  rejected days are dropped before write; their cause is logged to
-  `results/calibrations/price/rejections.csv`
-  (`reason` ∈ `no_trades/no_rate/thin/pegged/iv_miss/no_fit`), and the split is now **measured**:
-  **pegged 1398, iv_miss 103, no_trades 1** — so `pegged` is confirmed the dominant cause (93% of
-  rejections). None of the Phase 3 levers (A–E) are implemented yet (`MIN_DTM`=7, no `weights`, no
-  `fixParameters`, no Feller penalty), so this ~53% is the Phase 2 engine's rate over the long sample,
-  not a post-lever result.
-- **The `vol` (IV-space) objective does not help — it slightly worsens pegging.** Running the same sample
-  with `--OBJECTIVE vol` (committed to `results/calibrations/vol/`) accepts **1645/3215 (51.2%)**, ~68 fewer
-  than `price`, with pegging an even larger share of rejections (**pegged 1479, iv_miss 90, no_trades 1**;
-  94%). The objective only changes what LM minimises, not the `(kappa, rho, eta)` degeneracy that drives the
-  pegging; weighting the deep-OTM wings evenly (vol points) demands *more* skew, so the box wall is hit more
-  often. The fit in its own metric is marginally tighter (median `iv_rmse` 0.0045 vs 0.0048) and the
-  accepted-set parameter medians are unchanged within noise (`rho`≈−0.78, `theta`≈0.054, `kappa`≈2.1,
-  `eta`≈0.90, `v0`≈0.016), so the economic reading is objective-invariant; the two accepted sets overlap on
-  1579 days (134 `price`-only, 66 `vol`-only). One artefact: because `vol` no longer controls relative price,
-  the returned `rmse` blows up on a handful of accepted days (max 36.3 vs 0.32 under `price`; 18 days > 0.2 vs
-  2). Takeaway: the objective knob is **not** a Phase 3 lever; the identification fixes (A–E) are needed under
-  either objective.
-- **Feller is the standout issue in the accepted set.** The gate does **not** reject on Feller (it is a
-  *suspicious*, not hard-reject, validator flag — short-tenor Heston violates it routinely), so accepted
-  days routinely violate it: `feller = 2·kappa·theta − eta² < 0` on **1701/1713 (99%)** accepted days,
-  and `eta > 1.5` on ~8.5% (146 days, max ≈1.99, near its cap). This is PLAN.md Lever D (soft Feller penalty +
-  revisit the `eta` cap).
+- **Coverage was widened and a deep-OTM floor added (current config).** `MAX_NK`=40 (was 8), `MAX_NT`=20
+  (was 12), `MIN_DTM`=14 (was 29/7), `MAX_DTM`=730 (was 400), plus `OTM_MONEYNESS_FLOOR`=0.6. Putting the
+  wings *into* the calibration (not just near-money) and dropping the deep lottery-ticket tail removed what
+  looked like a systematic "model underestimates the wings": on the **full-sample `vol` run**
+  (`src/wing_residuals.py`) the per-`|log-moneyness|` residual is small and mixed-sign (bands within ±0.009,
+  overall RMSE ~0.011, mean +0.0015 vol pts), so the wing underfit seen in the old smile plots was largely an
+  **extrapolation artefact** of near-money-only calibration, not an in-sample bias. The cost: the widening
+  lifts `eta` and pushes Feller violation to 100% of accepted days (see the Feller bullet).
+- **Boundary pegging is the open Phase 3 lever — and `calibrations.csv` cannot show it.** Current committed
+  default (**`vol`** objective, widened config, full sample, `results/calibrations/vol/`): **3217** attempted,
+  **1631 (50.7%)** accepted, spanning 2012-01-03..2024-10-15. The accepted set has 0 pegged `kappa`/`rho`, but
+  that is **tautological**: the gate (`_on_boundary`) rejects any boundary-pegged fit, so pegged days never
+  reach the file. Rejection cause is logged to `results/calibrations/vol/rejections.csv`
+  (`reason` ∈ `no_trades/no_rate/thin/pegged/iv_miss/no_fit`); the split is **pegged 1467, iv_miss 116,
+  no_trades 3** — pegging the dominant cause (92.5% of rejections, 45.6% of attempted). `MIN_DTM`=14 (Lever A)
+  is in; `weights` (Lever B) is wired but default-off and tested null; `fixParameters` and the Feller penalty
+  (Levers C/D) remain unimplemented. (For reference, the prior **`price`** baseline at the *old narrow* config
+  — `MAX_NK`=8, `MIN_DTM`=29 — accepted 1713/3215 (~53%); not a controlled comparison, the coverage differs.)
+- **The objective knob is not a lever; it does not move pegging.** `vol` (the default) and `price` change only
+  what LM minimises, not the `(kappa, rho, eta)` degeneracy that pegs — selection and the gate always run off
+  IV-RMSE. On the current `vol` run the accepted-set IV-RMSE is tight (median 0.0080, p90 0.0115, max 0.0199
+  vol pts). One artefact of the `vol` default: it no longer controls relative price, so the returned `rmse`
+  blows up on cheap deep-OTM wing cells (max 120.8; **656 of 1631** accepted days > 0.2). The identification
+  fixes (anchor `kappa`, Feller penalty) are needed regardless of objective. `src/results/tables/objective_comparison.py`
+  builds a side-by-side `price` vs `vol` metrics table when both objectives are present on disk.
+- **Feller is the standout issue in the accepted set.** The gate does **not** reject on Feller (a
+  *suspicious*, not hard-reject, validator flag — short-tenor Heston violates it routinely), so accepted days
+  violate it. On the current full-sample `vol` run `feller = 2·kappa·theta − eta² < 0` on **all 1631** accepted
+  days (median −1.44), and `eta > 1.5` on **596 (36.5%)**, max ≈1.997 (near its 2.0 cap). The widened coverage
+  is the driver: fitting the full wings demands more vol-of-vol, so both `eta` and the Feller violation run
+  higher than the old near-money `price` baseline (`eta` median ≈0.89, `eta>1.5` ~8.5%, Feller<0 on 99.3%).
+  This is PLAN.md Lever D (soft Feller penalty + revisit the `eta` cap).
 - The `data/__pycache__/` holds bytecode for deleted modules (`get_data`, `get_options`, ...) — ignore it.
 
 ## Writing prose (`gpu-options.tex` and other `.tex` documents)

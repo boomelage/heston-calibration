@@ -22,7 +22,7 @@ Calibrate Heston (1993) stochastic-volatility parameters (`v0, kappa, theta, eta
 CBOE S&P 500 (SPX) intraday option trades, using QuantLib. `eta` is the vol-of-vol (QuantLib's
 `sigma`). The model SDE is documented in `heston-calibration.tex`:
 
-```
+```plain
 dX_t = (r - v_t/2) dt + sqrt(v_t)(rho dW_t + sqrt(1-rho^2) dB_t)
 dv_t = kappa(theta - v_t) dt + eta sqrt(v_t) dW_t
 ```
@@ -154,7 +154,7 @@ accumulate into a **single** `results/<model>/calibrations/<objective>/calibrati
 day), while the bulky per-day repricing diagnostics stay one-file-per-day under
 `results/<model>/calibrations/<objective>/calibration_tests/`:
 
-```
+```plain
 raw/  --calibrator_prototype.py --MODEL {heston,bates} (utils._prepare_options cleans to OTM in-memory)-->  results/<model>/calibrations/<objective>/calibrations.csv  + calibration_tests/
 ```
 

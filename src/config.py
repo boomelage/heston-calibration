@@ -137,7 +137,7 @@ SEED_GRID_TEMPLATE = [
 # and Bates results coexist and the two objectives never clobber each other. This resolver is the
 # single source of truth for the per-model, per-objective directory; calibrator_prototype._objective_paths
 # is a thin wrapper over it, and the downstream results scripts import it as they are migrated
-# (PLAN-Bates.md). The layout is uniform across models -- heston lives under results/heston/, matching
+# (see PLAN.md, Bates extension). The layout is uniform across models -- heston lives under results/heston/, matching
 # the migrated tree on disk and the results/*/calibrations/*/ pattern in .gitignore.
 REPO = Path(__file__).resolve().parent.parent   # src/config.py -> repo root
 RESULTS = REPO / "results"

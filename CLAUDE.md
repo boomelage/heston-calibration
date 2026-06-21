@@ -8,13 +8,35 @@ Never include Claude-Session links, claude.ai URLs, or any other references that
 to Claude or Anthropic tooling in commit messages, comments, or any tracked file. Strip such
 references before committing if they appear in generated content.
 
-## Maintaining this file
+## Maintaining this file (and `PLAN.md`)
 
 Keep this document in sync with the code as you work. When a change alters anything described here —
 files moved or renamed, column contracts changed, a "Known issue" fixed or a newly found one, run
 commands or stages changed — update CLAUDE.md in the **same** change: add what is now true and delete
 what is now stale. A stale line here is worse than a missing one. Do not leave fixed issues marked
 "done"; remove them.
+
+**Treat `CLAUDE.md` and `PLAN.md` as two living organisms.** They are never "finished." They must be
+*constantly evolving* in step with the code and with each other: every session that touches the
+repository should leave them a little more accurate and a little more useful than it found them. A
+document that has stopped changing is a document that has started to rot. Growth, pruning, and revision
+are the normal state, not the exception. The two evolve *together* — a change to one that is not
+reflected in the other is an organism out of sync with itself, and that drift is exactly what these
+files exist to prevent.
+
+**It is the agent's standing duty to keep `CLAUDE.md` and `PLAN.md` continuously current, and to do so
+proactively — not only when asked.** On any session that touches the code or the plan:
+
+- **Propose a resync.** Reread both documents against the actual code, flag every line that has drifted,
+  and bring them back into agreement with what the code now does. Both must stay faithful to the
+  repository; `README.md` too.
+- **Generate new ideas.** Beyond fixing drift, propose improvements: new levers, cleanups, follow-up
+  experiments, or risks worth recording. `PLAN.md` is a living plan, not a frozen log.
+- **Always link the commit and/or pull request** when you complete a task and move it into `PLAN.md`'s
+  `Completed tasks` section (and when you mark a "Known issue" here resolved). Cite the merge/commit hash
+  and, where one exists, the GitHub PR (e.g. `PR #12`,
+  `https://github.com/boomelage/heston-calibration/pull/12`). A completed entry without its commit/PR
+  link is incomplete.
 
 ## Purpose
 
@@ -34,8 +56,8 @@ prototype, not a clean design.
 **A Bates (1996) variant is also supported** (Heston stochastic vol + Merton lognormal jumps: the
 five Heston params plus jump intensity `lambda_`, mean log-jump `nu`, log-jump std `delta`). It is
 selected by the `--MODEL {heston,bates}` flag on `calibrator_prototype.py` (default `heston`) and runs
-through the same orchestrator. See `PLAN-Bates.md` for the design and the Bates engine
-(`src/calibrate_bates.py`).
+through the same orchestrator. The Bates engine is `src/calibrate_bates.py`; its design and pilot
+results are recorded in `PLAN.md`'s `Completed tasks` (Bates extension, PR #12).
 
 ## Environment & dependencies
 
@@ -391,7 +413,7 @@ breaks a downstream stage:
   their bounds (gate-exempt), a sign those two bounds are tight. The downstream consumers are now
   **model-aware** (a `MODEL` constant each; `validate_calibrations.py`, `example_surface.py`,
   `smiles.py`, `make_eps.py`, `objective_comparison.py`). **Not yet done:** a full multi-year Bates run,
-  and an optional `nu`/`delta` bound widening. See `PLAN-Bates.md`.
+  and an optional `nu`/`delta` bound widening. See `PLAN.md`'s `Completed tasks` (Bates extension, PR #12).
 - The `data/__pycache__/` holds bytecode for deleted modules (`get_data`, `get_options`, ...) — ignore it.
 
 ## Writing prose (`heston-calibration.tex` and other `.tex` documents)

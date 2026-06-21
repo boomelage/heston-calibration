@@ -1,6 +1,6 @@
 # PLAN.md — Heston calibration: correctness and economic-reasonability plan
 
-This file tracks the work to make the calibrated parameters in `results/calibrations/<objective>/calibrations.csv`
+This file tracks the work to make the calibrated parameters in `results/heston/calibrations/<objective>/calibrations.csv`
 **trustworthy**: numerically correct (the optimizer actually fit the surface) and economically
 reasonable (the parameters describe a plausible SPX vol process). Keep it in sync with the code, and
 keep `CLAUDE.md` in sync with both.
@@ -14,7 +14,7 @@ keep `CLAUDE.md` in sync with both.
 - **Phase 3 — acceptance (open, this plan).** The fits are good (median ~0.8 vol points) but a
   **minority of days are accepted**. The current committed default (**`vol`** objective, widened config,
   full sample of **3,217 days**) **accepts 1,631 (50.7%)**, short of the 60% target. The rest mostly peg a
-  skew parameter to its bound — confirmed, not presumed: `results/calibrations/vol/rejections.csv`
+  skew parameter to its bound — confirmed, not presumed: `results/heston/calibrations/vol/rejections.csv`
   enumerates **pegged 1467, iv_miss 116, no_trades 3** (pegging 92.5% of rejections). The accepted set is
   peg-free only because the gate enforces it. A second issue: **all** accepted days have `feller < 0` (the
   gate doesn't reject on Feller) — Lever D.
@@ -44,9 +44,9 @@ keep `CLAUDE.md` in sync with both.
   acceptance gate always run off the IV-space RMSE, so the objective does not change how a day is chosen
   or accepted. `"vol"` is more expensive (a Black-vol inversion per residual per LM iteration) and can
   throw mid-search (caught per-restart). **Output routing follows the knob:** every run writes to
-  `results/calibrations/<objective>/` — `calibrations.csv`, `rejections.csv`, `validation.csv`, and the
+  `results/heston/calibrations/<objective>/` — `calibrations.csv`, `rejections.csv`, `validation.csv`, and the
   per-day `calibration_tests/` — so the two objectives land in separate directories and do not clobber
-  each other. **The committed default is now `vol`** (`results/calibrations/vol/`): **3,217 attempted,
+  each other. **The committed default is now `vol`** (`results/heston/calibrations/vol/`): **3,217 attempted,
   1,631 accepted (50.7%)**, split **pegged 1467 / iv_miss 116 / no_trades 3**, with the Feller/`eta`
   shares quoted throughout this plan. The `price` objective remains selectable but its outputs are **not
   committed on this branch**; the older narrow-config `price` baseline (3,215 attempted, 1,713 accepted
@@ -82,6 +82,7 @@ Line numbers in any sketch below drift — match on code, not line numbers.
 | Phase 2 — IV-space acceptance gate | `src/calibrate_heston.py` | medium | ✅ done |
 | Write-desync fix | `src/calibrator_prototype.py` | low | ✅ done |
 | **Phase 3 — resolve boundary pegging (raise accept rate)** | `src/calibrate_heston.py`, `src/config.py`, `src/utils.py` | medium | ⏳ **open** (Lever A `MIN_DTM`=14 + coverage-widen + OTM floor landed; Lever B wired but tested null; C/D/E open) |
+| Bates (1996) extension — engine, model-namespaced routing, downstream | `src/calibrate_bates.py`, `src/_engine_common.py`, `src/config.py`, `src/pricing/` | high (schema) | ✅ done (pilot baseline; full multi-year run + `nu`/`delta` widening deferred) |
 
 **QuantLib 1.35 API facts** (confirmed in this environment; the plan relies on no non-existent calls):
 
@@ -118,7 +119,7 @@ multi-year run **attempted 3215 trading days and accepted only 1713 (~53%)**, ju
 Crucially, `calibrations.csv` holds **only accepted days**, and the gate (`_on_boundary`) rejects any
 boundary-pegged fit — so its 0 pegged `kappa`/`rho` is **tautological**, *not* evidence the pegging is
 fixed. The 1502 rejected days are dropped before write, but their cause is now logged to
-`results/calibrations/price/rejections.csv` (`reason` ∈ `no_trades/no_rate/thin/pegged/iv_miss/no_fit`), so the
+`results/heston/calibrations/price/rejections.csv` (`reason` ∈ `no_trades/no_rate/thin/pegged/iv_miss/no_fit`), so the
 pegged-vs-thin split is no longer presumed but **measured**: **pegged 1398, iv_miss 103, no_trades 1**
 (thin/no_rate/no_fit 0). Pegging is thus confirmed the dominant cause — 1398 of 1502 rejections (93%),
 43% of all attempted days — and the open lever. What the long run *also* reveals — because the gate
@@ -276,9 +277,9 @@ python src/calibrator_prototype.py           # default --OBJECTIVE vol; runs eve
 python src/validate_calibrations.py
 python src/wing_residuals.py                  # per-|log-moneyness| residual (grades the wing fit / floor)
 # full-set summary (aggregate, do not dump every day). Default output is the `vol` objective; with
-# --OBJECTIVE price the run writes results/calibrations/price/ instead — point the path at whichever
+# --OBJECTIVE price the run writes results/heston/calibrations/price/ instead — point the path at whichever
 # objective you just ran.
-python -c "import pandas as pd; d=pd.read_csv('results/calibrations/vol/calibrations.csv'); print(len(d),'days'); print('accept rate (of attempted)', len(d)); print(d[['kappa','rho','eta','feller','iv_rmse']].describe())"
+python -c "import pandas as pd; d=pd.read_csv('results/heston/calibrations/vol/calibrations.csv'); print(len(d),'days'); print('accept rate (of attempted)', len(d)); print(d[['kappa','rho','eta','feller','iv_rmse']].describe())"
 ```
 
 **Pass criteria.** A majority of the full set's days accept (≥ 60%) with **no pegged bound**,
@@ -311,13 +312,13 @@ issue" bullet and the Done criteria below in the **same** change as whichever le
 - [x] **Phase 2 — engine:** box bounds + multi-start + IV-space gate; boundary/high-RMSE fits
       rejected; `rmse`/`iv_rmse`/`accepted` returned; old "== guess" sentinel removed.
 - [x] **Phase 2 — per-day:** one calibration per day over a moneyness-normalised multi-maturity
-      surface; single `results/calibrations/<objective>/calibrations.csv`, one row/day. Cross-day params tight
+      surface; single `results/heston/calibrations/<objective>/calibrations.csv`, one row/day. Cross-day params tight
       (`theta` 0.029–0.031, `v0` 0.007–0.026, `eta` 0.8–1.5) versus the old cross-bucket `theta`
       0.037 → 11.93 swing; genuine fit ~0.7–1.0 vol points.
 - [ ] **Phase 3 — acceptance (open):** ≥ 60% of the full multi-year set's days accept with no pegged
       bound, `eta < 1.5`, Feller mostly satisfied, `theta`/`v0` unchanged. **Current committed default**
       (`vol`, widened config, full sample of 3,217 days): **1,631 accepted (50.7%)** — short of target;
-      `results/calibrations/vol/rejections.csv` split **pegged 1467 (92.5%), iv_miss 116, no_trades 3**;
+      `results/heston/calibrations/vol/rejections.csv` split **pegged 1467 (92.5%), iv_miss 116, no_trades 3**;
       Feller `< 0` on **all 1,631** accepted days, `eta > 1.5` on **36.5%** (median `eta` 1.34). **Landed:**
       default objective `vol`, Lever A (`MIN_DTM`=14), coverage-widen (`MAX_NK`=40/`MAX_NT`=20/`MAX_DTM`=730),
       `OTM_MONEYNESS_FLOOR`=0.6; Lever B wired default-off (tested null). The wing residual is now small and
@@ -390,7 +391,7 @@ re-struck to `K* = m·S_ref` (volume-weighted `S_ref`) and snapped to the 5-pt S
 the day under sticky-moneyness; large-move days are flagged `high_move`. Short maturities below `MIN_DTM`
 are dropped (7 at Phase 2; now 14 — Lever A); coverage gates `MIN_MATS = 3`, `MIN_STRIKES = 5`,
 `MIN_CELLS = 12`. The output
-schema changed to **one row per day** in a single `results/calibrations/<objective>/calibrations.csv` (fully regenerated each
+schema changed to **one row per day** in a single `results/heston/calibrations/<objective>/calibrations.csv` (fully regenerated each
 run), replacing the old per-day `calibrations/` directory; `calibration_tests/*.csv` still reprices
 one-file-per-day at the contract's *original* spot/strike. Result: cross-day params now cluster
 tightly (see Done criteria) — the under-determination is fixed. `CLAUDE.md` was updated for the new
@@ -401,5 +402,74 @@ schema, engine behaviour, and validation stage.
 The two per-day outputs were written under independent conditions, so a day with no accepted fit left
 a stale `calibrations` file beside an emptied `calibration_tests` file. Fix: only accepted fits are
 repriced, both outputs are written under one decision, and a zero-accept day removes both — the single
-`results/calibrations/<objective>/calibrations.csv` is regenerated from accepted rows each run, and the
+`results/heston/calibrations/<objective>/calibrations.csv` is regenerated from accepted rows each run, and the
 per-day tests file is cleared by `_skip_day`. Verified on the 2024-10-07..11 run.
+
+### Bates (1996) extension — engine, routing, downstream (✅)
+
+Landed in **PR [#12](https://github.com/boomelage/heston-calibration/pull/12)** (`boomelage/bates-test`,
+merge `fcc2d99`): commits `2b5e99f` (engine, model-namespaced routing, centralized figure config),
+`64739fe` (paper write-up with generic parameter notation), `cdbf0a1` (rough-volatility avenue, paper
+retitle). This absorbs the former `PLAN-Bates.md`, which is now deleted.
+
+**What it adds.** A **Bates (1996)** variant: Heston stochastic vol plus Merton lognormal jumps, the five
+Heston params plus jump intensity `lambda_`, mean log-jump `nu`, and log-jump std `delta`. With
+`lambda_ = 0` Bates collapses to pure Heston, so its lower bound is exactly `0`. A Bates fit is **not** a
+collapsed-Heston fit in practice: with 8 free params the optimizer almost never lands at exactly
+`lambda_ = 0`, using a small jump to absorb skew and redistributing it across `rho`/`eta` and the jump
+triple, so the two runs are genuinely different result sets. The value is the **Heston-vs-Bates
+comparison**, which needs both result sets on disk at once — hence routing is branched by model.
+
+- **New engine** `src/calibrate_bates.py`, structurally mirroring `calibrate_heston` (swaps
+  `HestonProcess`/`HestonModel`/`AnalyticHestonEngine` for `BatesProcess`/`BatesModel`/`BatesEngine`).
+  The helper stays `ql.HestonModelHelper` (**no `ql.BatesHelper` exists** in QuantLib 1.35); only the
+  attached pricing engine is a `BatesEngine`. `calibrate_bates(...)` returns a **superset** of the
+  Heston dict (same keys plus `lambda_, nu, delta`), so the orchestrator reads it unchanged.
+- **Shared helpers** factored into `src/_engine_common.py` (`_on_boundary(params, low, high)`,
+  `_seed_var`, `_wing_weight`, `_iv_rmse`) so both engines reuse identical boundary/IV-RMSE/wing logic
+  and cannot drift. `_on_boundary` takes its `low`/`high` so a caller can gate a parameter subset (Bates
+  gates only `params[:5]`, the Heston params). The factor-out is **behaviour-neutral for Heston**: the
+  refactored engine reproduces the committed `vol` `calibrations.csv` row to full float precision.
+- **THREE distinct orderings, confirmed live (do not conflate):** (1) `BatesModel.params()` returns
+  `[theta, kappa, eta, rho, v0, nu, delta, lambda]` — Heston's `params()` order then `(nu, delta,
+  lambda)`; this drives `BATES_PARAM_ORDER`/`BATES_LOW`/`BATES_HIGH` and the result unpack. (2) The
+  `BatesProcess(...)` constructor takes `(..., v0, kappa, theta, eta, rho, lambda, nu, delta)`, driving
+  the seed expansion. (3) `vanp.bates_price(...)`/`df_bates_price` arg order
+  `(s, k, t, r, g, w, kappa, theta, rho, eta, v0, lambda_, nu, delta)`. The planning hypothesis for
+  `params()` was wrong on both counts and was corrected against a live build.
+- **Config (additive)** `BATES_PARAM_ORDER`, `BATES_BOUNDS` (the five Heston ranges reused plus jump
+  bounds `lambda_ (0, 5)`, `nu (-0.5, 0.2)`, `delta (1e-3, 0.5)`), `BATES_LOW`/`BATES_HIGH`,
+  `BATES_JUMP_SEED`, `MODEL_NAMES`. Shared gate/IV/wing knobs are reused unchanged. The Heston
+  `PARAM_ORDER`/`BOUNDS`/`LOW`/`HIGH`/seed are untouched.
+- **Acceptance gate** checks IV-RMSE ≤ `IV_RMSE_ACCEPT` and pegging on the **5 Heston params only**; the
+  jump triple is **exempt** (`lambda_ ≈ 0` is a legitimate Heston collapse, and `nu`/`delta` are
+  unidentified when `lambda_ ≈ 0`, so they may park on a bound without meaning). `feller = 2·kappa·theta
+  − eta²` stays the Heston-diffusion quantity (jumps do not enter it; reported, never gates).
+- **Repricer** `row_bates_price`/`df_bates_price` added to the vendored `src/pricing` (mirroring the
+  Heston wrappers; the scalar `bates_price` already existed). The Bates model-price column in
+  `calibration_tests/*.csv` is named `bates` (Heston keeps `heston`).
+- **Orchestrator** gains `--MODEL {heston,bates}` (default `heston`, preserving current behaviour). One
+  resolution per run picks `engine_fn`, the model-appropriate param list, the repricer, and its output
+  column. `_objective_paths` became a thin wrapper over `config.calib_paths(MODEL, OBJECTIVE)`.
+- **Routing branched by model:** uniform `results/<model>/calibrations/<objective>/` plus
+  `results/<model>/{smiles,surfaces,tables}/`. The existing Heston tree was migrated from
+  `results/calibrations/...` to `results/heston/...`; Bates writes under `results/bates/...`.
+  `config.calib_paths(model, objective)` is the single source of truth.
+- **Downstream consumers made model-aware** (a module-level `MODEL` constant each, routing through
+  `config.calib_paths` / `utils.build_model_engine`): `validate_calibrations.py`, `example_surface.py`,
+  `smiles.py`, `make_eps.py`, `objective_comparison.py`. `utils.py` gained `build_bates_engine` + the
+  `build_model_engine(row, calc_date, model)` dispatcher; the pricing/inversion helpers were already
+  engine-agnostic.
+
+**Pilot result (committed Bates baseline).** A 100-day pilot (`--LIMIT 100`, 2024-05-23..2024-10-15,
+`results/bates/calibrations/vol/`) accepted **94/100** vs Heston **63/100** on the same window (+31 days,
+36 of them Heston-rejected days the jumps rescued from pegging). On the 58 days both accept, Bates
+IV-RMSE is **35% tighter** (median 0.0043 vs 0.0067, better on all 58) and median **`eta` halves**
+(1.17 → 0.52: jumps absorb the tail the Heston vol-of-vol was overfitting). Feller barely moves (still
+< 0 on 56/58). Jumps behaved as designed: `lambda_` median 0.065, 31/94 near-zero (Heston collapse); the
+weakly-identified `nu`/`delta` park on their bounds (gate-exempt), a sign those two bounds are tight.
+
+**Still deferred (not yet done).** A **full multi-year Bates run** for a committed baseline (the
+`BatesEngine` is ~4.5× slower per day, ~7 h for the full sample), and an optional **`nu`/`delta` bound
+widening** (e.g. -1.0 / 1.0) so rare-jump days find an interior optimum and the jump params stay
+interpretable. A Bates write-up section in `heston-calibration.tex` is a separate document task.

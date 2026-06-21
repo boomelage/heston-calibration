@@ -1,4 +1,4 @@
-"""Bates (1996) calibration engine -- a drop-in alternative to calibrate_heston (PLAN-Bates.md).
+"""Bates (1996) calibration engine -- a drop-in alternative to calibrate_heston (see PLAN.md, Bates extension).
 
 Bates is Heston stochastic vol plus Merton lognormal jumps in the log-price, so it adds three
 parameters to Heston's five: jump intensity `lambda` (jumps/yr), mean log-jump `nu`, and log-jump std

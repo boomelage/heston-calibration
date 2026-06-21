@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import QuantLib as ql
 
-from config import OTM_MONEYNESS_CUTOFF, OTM_MONEYNESS_FLOOR
+from config import OTM_MONEYNESS_CUTOFF, OTM_MONEYNESS_FLOOR, day_count as _day_count
 
 def df_moneyness(df):
     """Ratio moneyness: spot/strike for calls, strike/spot for puts.
@@ -95,7 +95,7 @@ def build_heston_engine(row, calculation_date):
     """Rebuild the Heston model from one calibrations.csv row; return its pricing engine plus the
     spot handle and term structures (reused to build the Black process the inversion runs against)."""
     ql.Settings.instance().evaluationDate = calculation_date
-    day_count = ql.Actual365Fixed()
+    day_count = _day_count()
     r_ts = ql.YieldTermStructureHandle(
         ql.FlatForward(calculation_date, float(row['risk_free_rate']), day_count))
     g_ts = ql.YieldTermStructureHandle(
@@ -125,7 +125,7 @@ def build_bates_engine(row, calculation_date):
     handle and term structures (same return shape as build_heston_engine). The row must carry the
     jump triple `lambda_, nu, delta` alongside the five Heston params."""
     ql.Settings.instance().evaluationDate = calculation_date
-    day_count = ql.Actual365Fixed()
+    day_count = _day_count()
     r_ts = ql.YieldTermStructureHandle(
         ql.FlatForward(calculation_date, float(row['risk_free_rate']), day_count))
     g_ts = ql.YieldTermStructureHandle(

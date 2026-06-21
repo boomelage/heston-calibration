@@ -17,7 +17,7 @@ THREE DISTINCT ORDERINGS (conflating them mis-bounds the fit):
      HestonModel.params() order; the jump triple appends as (nu, delta, lambda).
   2. `BatesProcess(...)` constructor takes `(..., v0, kappa, theta, eta, rho, lambda, nu, delta)`.
      This drives how `_seed_grid` rows are expanded (NOT the params() order).
-  3. `vanilla_pricer.bates_price(...)` arg order is handled in quantlib_pricers, not here.
+  3. `vanilla_pricer.bates_price(...)` arg order is handled in `src/pricing`, not here.
 
 Jump params and the acceptance gate. The boundary-pegging gate is checked on the FIVE Heston params
 only. `lambda ~ 0` is a legitimate Heston collapse (not a wall-hit), and when `lambda ~ 0` the
@@ -33,6 +33,7 @@ from config import (
     BATES_LOW, BATES_HIGH, BATES_JUMP_SEED, IV_RMSE_ACCEPT,
     DEFAULT_OBJECTIVE, SEED_GRID_TEMPLATE,
     WING_WEIGHT_GAIN,
+    day_count as _day_count, calendar as _calendar,
 )
 # Model-agnostic helpers shared with calibrate_heston.py (factored out so the two engines can't drift).
 from _engine_common import _on_boundary, _seed_var, _wing_weight, _iv_rmse
@@ -84,7 +85,7 @@ def _calibrate_once(start, surface, s, r_ts, g_ts, S_handle, constraint, error_t
             if not pd.isna(vol):
                 helper = ql.HestonModelHelper(
                     ql.Period(int(t), ql.Days),
-                    ql.UnitedStates(ql.UnitedStates.NYSE),
+                    _calendar(),
                     float(s), float(k),
                     ql.QuoteHandle(ql.SimpleQuote(float(vol))),
                     r_ts, g_ts, error_type,
@@ -114,7 +115,7 @@ def calibrate_bates(vol_matrix, s, r, g, objective=DEFAULT_OBJECTIVE) -> dict:
     error_type = _ERR[objective]
     calculation_date = ql.Date.todaysDate()
     ql.Settings.instance().evaluationDate = calculation_date
-    day_count = ql.Actual365Fixed()
+    day_count = _day_count()
     r_ts = ql.YieldTermStructureHandle(ql.FlatForward(calculation_date, float(r), day_count))
     g_ts = ql.YieldTermStructureHandle(ql.FlatForward(calculation_date, float(g), day_count))
     S_handle = ql.QuoteHandle(ql.SimpleQuote(float(s)))

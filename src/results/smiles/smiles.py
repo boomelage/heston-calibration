@@ -30,6 +30,7 @@ from results_config import (  # type: ignore
     SMILE_M_STEP, SMILE_FIGSIZE, SMILE_CMAP)
 from example_surface import make_surface # type: ignore --> Intentional Pylance ingore
 from utils import build_model_engine, heston_implied_vol # type: ignore
+from config import calendar as ql_calendar # type: ignore
 
 plt.rcParams.update(PLOT_RCPARAMS)
 
@@ -83,7 +84,7 @@ def _day_engine(day):
     bsm = ql.BlackScholesMertonProcess(
         s_handle, g_ts, r_ts,
         ql.BlackVolTermStructureHandle(ql.BlackConstantVol(
-            calc_date, ql.UnitedStates(ql.UnitedStates.NYSE),
+            calc_date, ql_calendar(),
             INVERSION_PLACEHOLDER_VOL, day_count)))
     return engine, bsm, calc_date
 

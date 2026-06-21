@@ -45,7 +45,7 @@ SURFACES = RESULTS / MODEL / "surfaces"                 # data dir at repo/resul
 DATA = SURFACES / "data"
 
 
-from config import calib_paths  # type: ignore
+from config import calib_paths, calendar as ql_calendar  # type: ignore
 CALIBRATIONS_FILE = calib_paths(MODEL, OBJECTIVE)[0]
 
 from utils import heston_implied_vol, heston_price, build_model_engine
@@ -74,7 +74,7 @@ def make_surface(target_date=None, OUT=DATA, SAVE=False):
     bsm_process = ql.BlackScholesMertonProcess(
         s_handle, g_ts, r_ts,
         ql.BlackVolTermStructureHandle(ql.BlackConstantVol(
-            calculation_date, ql.UnitedStates(ql.UnitedStates.NYSE),
+            calculation_date, ql_calendar(),
             INVERSION_PLACEHOLDER_VOL, day_count)))
     kappa, theta, rho, eta, v0 = row['kappa'], row['theta'], row['rho'], row['eta'], row['v0']
     print(f"Option surface for {row['date']}  (model={MODEL}, spot={spot:.2f}, "

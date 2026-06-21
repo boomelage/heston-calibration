@@ -33,6 +33,7 @@ from config import (
     LOW, HIGH, IV_RMSE_ACCEPT,
     DEFAULT_OBJECTIVE, SEED_GRID_TEMPLATE,
     WING_WEIGHT_GAIN,
+    day_count as _day_count, calendar as _calendar,
 )
 # Model-agnostic helpers shared with calibrate_bates.py (factored out so the two engines can't drift).
 from _engine_common import _on_boundary, _seed_var, _wing_weight, _iv_rmse
@@ -82,7 +83,7 @@ def _calibrate_once(start, surface, s, r_ts, g_ts, S_handle, constraint, error_t
             if not pd.isna(vol):
                 helper = ql.HestonModelHelper(
                     ql.Period(int(t), ql.Days),
-                    ql.UnitedStates(ql.UnitedStates.NYSE),
+                    _calendar(),
                     float(s), float(k),
                     ql.QuoteHandle(ql.SimpleQuote(float(vol))),
                     r_ts, g_ts, error_type,
@@ -115,7 +116,7 @@ def calibrate_heston(vol_matrix, s, r, g, objective=DEFAULT_OBJECTIVE) -> dict:
     error_type = _ERR[objective]
     calculation_date = ql.Date.todaysDate()
     ql.Settings.instance().evaluationDate = calculation_date
-    day_count = ql.Actual365Fixed()
+    day_count = _day_count()
     r_ts = ql.YieldTermStructureHandle(ql.FlatForward(calculation_date, float(r), day_count))
     g_ts = ql.YieldTermStructureHandle(ql.FlatForward(calculation_date, float(g), day_count))
     S_handle = ql.QuoteHandle(ql.SimpleQuote(float(s)))

@@ -8,67 +8,35 @@ import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 from matplotlib.lines import Line2D
 
-plt.rcParams.update({
-    'font.family': 'serif',
-    'font.serif': ['cmr10', 'Computer Modern Roman', 'DejaVu Serif'],
-    'mathtext.fontset': 'cm',
-    'axes.formatter.use_mathtext': True,   # tick labels in Computer Modern too
-    'axes.unicode_minus': False,           # cmr10 lacks U+2212; avoids missing-glyph warnings
-    'font.size': 8,
-})
-
 # This script now lives under src/results/smiles/, but reads raw trades from data/ and writes
 # figures into the repo-level results/ tree. SMILES is the moved code dir; RESULTS/REPO route I/O.
+# RESULTS_CODE (src/results) holds results_config.py, the central knob file for the figure scripts.
 SMILES = Path(__file__).parent.resolve()        # src/results/smiles
 SRC = SMILES.parents[1]                           # src/ (shared utils.py, config.py)
+RESULTS_CODE = SMILES.parent                      # src/results (results_config.py)
 REPO = SMILES.parents[2]                          # repo root (smiles->results->src->repo)
 RESULTS = REPO / "results"                        # real results data/figure dir
 CODE_SURFACES = SMILES.parent / "surfaces"        # src/results/surfaces (moved example_surface)
 RAW = REPO / "data" / "options" / "raw"
 
-for _p in (str(SRC), str(CODE_SURFACES)):
+for _p in (str(SRC), str(CODE_SURFACES), str(RESULTS_CODE)):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from example_surface import make_surface, OBJECTIVE # type: ignore --> Intentional Pylance ingore
-from utils import build_heston_engine, heston_implied_vol # type: ignore
+# All tunable parameters live in results_config.py (the central knob file).
+from results_config import (  # type: ignore
+    MODEL, OBJECTIVE, PLOT_RCPARAMS, INVERSION_PLACEHOLDER_VOL, TMIN, TMAX, NT, USE_LEGEND,
+    ENRICH_MARKET, XLO, XHI, MARKET_M_MIN, MARKET_M_MAX, MARKET_IV_MAX, MKTMONSTEP,
+    SMILE_M_STEP, SMILE_FIGSIZE, SMILE_CMAP)
+from example_surface import make_surface # type: ignore --> Intentional Pylance ingore
+from utils import build_model_engine, heston_implied_vol # type: ignore
 
-FIGURES = RESULTS / "smiles" / "figures"
+plt.rcParams.update(PLOT_RCPARAMS)
+
+MODEL_LABEL = MODEL.capitalize()   # 'Heston' / 'Bates' for figure legends and captions
+
+FIGURES = RESULTS / MODEL / "smiles" / "figures"
 FIGURES.mkdir(parents=True,exist_ok=True)
-
-TMIN, TMAX = 100, 730
-
-# Number of maturities to draw per figure. The plotted set always includes the lowest and highest
-# available maturity (within TMIN..TMAX); the remaining NT-2 are spaced as equally as possible
-# across the rest. Set NT >= the number of available maturities to draw them all.
-NT = 5
-
-# Knob for the per-row maturity key: True draws a legend, False (default) draws a colorbar.
-USE_LEGEND = True
-
-# Knob: overlay real market implied vols (trade_iv) from data/options/raw/ as a scatter.
-# The raw CBOE trade files are git-ignored, so this is a no-op (with a printed warning) on a
-# fresh clone that has not been bootstrapped.
-ENRICH_MARKET = True
-
-# Fallback moneyness window for the model lines / x-axis, used only when a day has no market data to
-# frame on (S/K calls, K/S puts). When market data is present each wing is instead framed to the full
-# range of that day's available market moneyness (see `_save_day_figure`).
-XLO, XHI = 0.8, 1.15
-
-# Market-scatter window. OTM market moneyness (S/K for calls, K/S for puts) is always in (0, 1];
-# we drop the deep wing below MARKET_M_MIN and clip the IV outliers the deep-OTM corner throws.
-# Reparameterising each strike onto both wings maps that floor to a reciprocal ceiling MARKET_M_MAX,
-# so the kept points span [MARKET_M_MIN, MARKET_M_MAX] on each wing.
-MARKET_M_MIN = 0.75
-MARKET_M_MAX = 1.0 / MARKET_M_MIN
-MARKET_IV_MAX = 2.0
-
-# Market-scatter thinning. Dense days throw far too many market points to read. We keep a sparse
-# subset whose moneyness (S/K calls, K/S puts) is spaced as close as possible to MKTMONSTEP in
-# percentage terms: from each maturity's min moneyness we step by MKTMONSTEP and keep the point
-# nearest each step. 0.05 => ~5% moneyness gaps. Set to 0 to disable thinning (draw every point).
-MKTMONSTEP = 0.05
 
 def _normalize_dates(dates):
     """Accept a single %Y-%m-%d date string or a list of them; return a list of strings.
@@ -92,7 +60,7 @@ def main(dates, OUT=None, use_legend=USE_LEGEND, enrich=ENRICH_MARKET):
                      'spot': day_results['spot'], 'params': day_results['params'],
                      'market': day_results['market'], 'fit': day_results['fit']})
 
-    cmap = cm.jet
+    cmap = plt.get_cmap(SMILE_CMAP)
     for day in days:
         _save_day_figure(day, cmap, use_legend, enrich)
 
@@ -111,11 +79,12 @@ def _day_engine(day):
     }
     d = pd.Timestamp(day['date'])
     calc_date = ql.Date(d.day, d.month, d.year)
-    engine, s_handle, r_ts, g_ts, day_count = build_heston_engine(row, calc_date)
+    engine, s_handle, r_ts, g_ts, day_count = build_model_engine(row, calc_date, MODEL)
     bsm = ql.BlackScholesMertonProcess(
         s_handle, g_ts, r_ts,
         ql.BlackVolTermStructureHandle(ql.BlackConstantVol(
-            calc_date, ql.UnitedStates(ql.UnitedStates.NYSE), 0.20, day_count)))
+            calc_date, ql.UnitedStates(ql.UnitedStates.NYSE),
+            INVERSION_PLACEHOLDER_VOL, day_count)))
     return engine, bsm, calc_date
 
 
@@ -239,7 +208,7 @@ def _save_day_figure(day, cmap, use_legend, enrich):
 
     norm = mcolors.Normalize(vmin=min(T), vmax=max(T))
     fig, (ax_put, ax_call) = plt.subplots(1, 2, sharey=True,
-                                           figsize=(8, 2.7),
+                                           figsize=SMILE_FIGSIZE,
                                            layout='constrained')
     
     engine, bsm, calc_date = _day_engine(day)
@@ -255,8 +224,8 @@ def _save_day_figure(day, cmap, use_legend, enrich):
 
     put_lo, put_hi = _wing_bounds('put')
     call_lo, call_hi = _wing_bounds('call')
-    put_grid = np.round(np.arange(put_lo, put_hi + 1e-9, 0.005), 4)
-    call_grid = np.round(np.arange(call_lo, call_hi + 1e-9, 0.005), 4)
+    put_grid = np.round(np.arange(put_lo, put_hi + 1e-9, SMILE_M_STEP), 4)
+    call_grid = np.round(np.arange(call_lo, call_hi + 1e-9, SMILE_M_STEP), 4)
 
     vols = []
     for t in T:
@@ -314,7 +283,7 @@ def _save_day_figure(day, cmap, use_legend, enrich):
     # encode maturity via the key above).
     if drew_market:
         series = [
-            Line2D([], [], color='0.25', label='Heston'),
+            Line2D([], [], color='0.25', label=MODEL_LABEL),
             Line2D([], [], color='0.5', marker='o', linestyle='None', markeredgecolor='0.25',
                    markersize=5, label='Market (vol-weighted)'),
         ]
@@ -330,12 +299,18 @@ def _row_caption(day):
     p, f = day['params'], day['fit']
     phi = (f"({p['theta']:.4f},\\,{p['kappa']:.4f},\\,{p['eta']:.4f},"
            f"\\,{p['rho']:.4f},\\,{p['v0']:.4f})")
+    # Bates carries the jump triple in params; show it after Phi so the caption documents the full fit.
+    jumps = ""
+    if 'lambda_' in p:
+        jumps = (f"$, (\\lambda,\\nu,\\delta)=({p['lambda_']:.4f},\\,"
+                 f"{p['nu']:.4f},\\,{p['delta']:.4f})$")
     return (f"{day['tag']}:  "
             f"$S_{{\\mathrm{{ref}}}}={day['spot']:.2f}$,  "
-            r"$\Phi^{\star}=$"f"${phi}$,  "
             f"$\\mathcal{{F}}={f['feller']:.4f}$,  "
             f"IV-RMSE$={f['iv_rmse']:.4f}$,  "
-            f"RMSE$={f['rmse']:.4f}$")
+            f"RMSE$={f['rmse']:.4f}$"
+            "\n"
+            r"$\Phi^{\star}=$"f"${phi}${jumps}")
 
 
 def write_smiles_TeX(days):
@@ -345,7 +320,7 @@ def write_smiles_TeX(days):
     blocks = []
     for day in days:
         date_pretty = day['date'].strftime(r"%B %d, %Y")
-        caption = (f"Heston implied-volatility smiles for {date_pretty}: "
+        caption = (f"{MODEL_LABEL} implied-volatility smiles for {date_pretty}: "
                    r"put wing (left, $K/S$) and call wing (right, $S/K$), "
                    r"with market trades scattered.")
         label = f"Fig:smiles_{day['tag']}"
@@ -353,7 +328,7 @@ def write_smiles_TeX(days):
             r"\begin{figure}[H]" "\n"
             r"    \begin{center}" "\n"
             f"        \\includegraphics[width=\\linewidth,keepaspectratio=false]"
-            f"{{results/smiles/figures/smiles_{day['tag']}.eps}}\n"
+            f"{{results/{MODEL}/smiles/figures/smiles_{day['tag']}.eps}}\n"
             # f"        \\caption{{{caption}}}\n"
             f"        \\label{{{label}}}\n"
             r"    \end{center}" "\n"
@@ -369,8 +344,9 @@ def make_surfaces_for(dates):
 
 
 if __name__ == "__main__":
-    CALIBRATIONS_FILE = RESULTS / "calibrations" / OBJECTIVE / "calibrations.csv"
+    from config import calib_paths  # type: ignore
+    CALIBRATIONS_FILE = calib_paths(MODEL, OBJECTIVE)[0]
     cal = pd.read_csv(CALIBRATIONS_FILE)
-    cal = cal.sort_values(by='iv_rmse',ascending=True).reset_index(drop=True)[:24].copy()
+    cal = cal.sort_values(by='iv_rmse',ascending=True).reset_index(drop=True)[:4].copy()
     dates = cal['date']
     make_surfaces_for(dates=dates)

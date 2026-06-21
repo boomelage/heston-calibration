@@ -1,0 +1,27 @@
+
+\section{Example option prices} Produced by the market\!\,\footnote{
+The fit uses 1427 calibration cells across 20 maturities and 242 strikes,
+backed by 300,595 contracts of traded volume.
+The reference spot was $S_{\mathrm{ref}} = 5353.717$,
+priced under a risk-free rate of 5.08\% and a dividend rate of 1.34\%.
+The intraday spot range was 1.05\%.
+Fit quality is 0.23 vol points of implied-volatility RMSE,
+with a relative-price RMSE of 0.0578.
+The Feller condition violates at this calibration,
+with $2\kappa\theta - \eta^2 = -0.0628$.
+} 
+calibrated pricing operator $C_{\mathrm{H}}(\Phi^{\star})$~\eqref{eq:heston-price}~\eqref{eq:accept}.
+\begin{figure}[H]
+    \begin{center}
+        \includegraphics[width=6.25cm,keepaspectratio=true]{results/bates/surfaces/plots/tex/price_surface_puts.eps}
+        \includegraphics[width=6.25cm,keepaspectratio=true]{results/bates/surfaces/plots/tex/price_surface_calls.eps}
+        \caption{Bates OTM option prices for $S_{\mathrm{ref}}$ 5353.717 on June 07, 2024 with $\Phi^{\star} = (0.0316,\ 0.839,\ 0.3405,\ -0.587,\ 0.0099)$: puts wing (left) and calls wing (right).}
+        \label{Fig:wings}
+    \end{center}
+    \begin{center}
+        \includegraphics[width=6.25cm,keepaspectratio=true]{results/bates/surfaces/plots/tex/put_smile.eps}
+        \includegraphics[width=6.25cm,keepaspectratio=true]{results/bates/surfaces/plots/tex/call_smile.eps}
+        \caption{All put (left) and call (right) options from Figure~\ref{Fig:wings}}
+    \end{center}
+\end{figure}
+

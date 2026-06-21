@@ -96,7 +96,7 @@
 
 
 \author[R. Briciu]{Radu Briciu}
-\title[On stochastic volatility model parameter calibration]{A note on the stochastic volatility model parameter calibration routine}
+\title[Automated skew parameter calibration]{An automated skew model parameter calibration routine}
 
 \begin{document}
 	\pagenumbering{gobble}
@@ -115,6 +115,10 @@
 			grid-snapped strike $K^\star$, the surface-coverage requirements, the configurable
 			in-engine objective (defaulting to implied-volatility ``IV-space'' residuals), the
 			IV-space restart selection and acceptance gate, and the boundary-pegging rejection rule.
+			The same routine optionally fits the \citet{bates1996} extension, which adds Merton lognormal
+			jumps to the Heston dynamics, selected by a run-time flag and calibrated over the identical
+			surface and gate. We keep Heston as the default throughout and present Bates as the
+			eight-parameter generalisation it specialises from.
 		\end{abstract}
 		\vfill
 		{\small \tableofcontents}
@@ -124,28 +128,55 @@
 	\pagenumbering{arabic}
 	
 	\section{The model}\label{sec:model}
-	Under the risk-neutral measure, with constant risk-free rate $r$ and continuous
-	dividend yield $g$, the log-price $X_t=\ln S_t$ and instantaneous variance $v_t$ of the
-	SPX follow the \citet{heston1993} dynamics
-	\begin{align}
-		dX_t &= \left( r - g - \tfrac{1}{2} v_t \right) dt
-		        + \sqrt{v_t}\,\bigl( \rho\, dW_t + \sqrt{1 - \rho^2}\, dB_t \bigr), \label{eq:level} \\
-		dv_t &= \kappa(\theta - v_t)\, dt + \eta \sqrt{v_t}\, dW_t, \label{eq:variance}
-	\end{align}
-	where $W,B$ are independent Brownian motions, so $\mathrm{corr}(dX_t,dv_t)=\rho\,dt$.
-	The parameter vector is
-	\begin{equation}
-		\Phi = (\theta,\ \kappa,\ \eta,\ \rho,\ v_0) \in \Real^5,
-	\end{equation}
-	with $\theta>0$ the long-run variance, $\kappa>0$ the mean-reversion speed, $\eta>0$ the
-	volatility of variance (QuantLib's \texttt{sigma}), $\rho\in[-1,1]$ the leverage
-	correlation, and $v_0>0$ the initial variance. The Feller quantity \citep{feller1951}
-	\begin{equation}\label{eq:feller}
-		\mathcal{F}(\Phi) \;=\; 2\kappa\theta - \eta^2
-	\end{equation}
-	is reported per fit; $\mathcal{F}(\Phi)\ge 0$ guarantees $v_t>0$ almost surely. It is not
-	imposed as a constraint (short-tenor SPX fits routinely violate it without being
-	otherwise unreasonable; see \S\ref{sec:gate}).
+		\subsection{Basis}
+			Under the risk-neutral measure, with constant risk-free rate $r$ and continuous
+			dividend yield $g$, the log-price $X_t=\ln S_t$ and instantaneous variance $v_t$ of the
+			SPX follow the \citet{heston1993} dynamics
+			\begin{align}
+				dX_t &= \left( r - g - \tfrac{1}{2} v_t \right) dt
+       			       	+ \sqrt{v_t}\,\bigl( \rho\, dW_t + \sqrt{1 - \rho^2}\, dB_t \bigr), \label{eq:level} \\
+				dv_t &= \kappa(\theta - v_t)\, dt + \eta \sqrt{v_t}\, dW_t, \label{eq:variance}
+			\end{align}
+			where $W,B$ are independent Brownian motions, so $\mathrm{corr}(dX_t,dv_t)=\rho\,dt$.
+			The parameter vector is
+			\begin{equation}\label{eq:heston-params}
+				\Phi = (\theta,\ \kappa,\ \eta,\ \rho,\ v_0) \in \Real^5,
+			\end{equation}
+			with $\theta>0$ the long-run variance, $\kappa>0$ the mean-reversion speed, $\eta>0$ the
+			volatility of variance (QuantLib's \texttt{sigma}), $\rho\in[-1,1]$ the leverage
+			correlation, and $v_0>0$ the initial variance. The Feller quantity \citep{feller1951}
+			\begin{equation}\label{eq:feller}
+				\mathcal{F}(\Phi) \;=\; 2\kappa\theta - \eta^2
+			\end{equation}
+			is reported per fit; $\mathcal{F}(\Phi)\ge 0$ guarantees $v_t>0$ almost surely. It is not
+			imposed as a constraint (short-tenor SPX fits routinely violate it without being
+			otherwise unreasonable; see \S\ref{sec:gate}).
+	
+		\subsection{Jumps}\label{sec:jumps}
+			The \citet{bates1996} model extends Heston with \citet{merton1976} lognormal jumps in the
+			log-price. The variance dynamics \eqref{eq:variance} are unchanged. The level equation
+			\eqref{eq:level} gains a compound-Poisson jump term:
+			\begin{equation}\label{eq:bates-level}
+				dX_t = \left( r - g - \tfrac{1}{2} v_t - \lambda\,\xi \right) dt
+				       + \sqrt{v_t}\,\bigl( \rho\, dW_t + \sqrt{1 - \rho^2}\, dB_t \bigr) + dJ_t .
+			\end{equation}
+			Here $J_t = \sum_{n=1}^{N_t} Y_n$ is a compound-Poisson process: $N_t$ is a Poisson process
+			of intensity $\lambda\ge 0$ (expected jumps per year), independent of $W$ and $B$, and the
+			log-jump sizes $Y_n \sim \mathcal{N}(\nu,\delta^2)$ are i.i.d. The compensator
+			\begin{equation}\label{eq:bates-compensator}
+				\xi = \mathbb{E}\bigl[ e^{Y} - 1 \bigr] = e^{\nu + \delta^2/2} - 1
+			\end{equation}
+			offsets the jump drift so the discounted price stays a martingale, leaving the level drift
+			$r-g$ in expectation. The augmented parameter vector is
+			\begin{equation}\label{eq:bates-params}
+				\Theta = (\theta,\ \kappa,\ \eta,\ \rho,\ v_0,\ \lambda,\ \nu,\ \delta) \in \Real^8,
+			\end{equation}
+			the five Heston parameters of \eqref{eq:level}--\eqref{eq:variance} plus jump intensity
+			$\lambda\ge 0$, mean log-jump $\nu$, and log-jump volatility $\delta>0$. At $\lambda=0$ the
+			jump term vanishes and \eqref{eq:bates-level} collapses to the Heston level \eqref{eq:level},
+			so Heston is the $\lambda=0$ face of the Bates parameter space. The model is selected at run
+			time by a flag; the Heston fit is the default. The Feller quantity \eqref{eq:feller} is built
+			from the diffusive parameters alone, so jumps do not enter it; it is reported under both models.
 
 	\subsection{Pricing operators}\label{sec:pricing}
 	Fix a valuation with maturity $\tau>0$ (in years), strike $K$, and type
@@ -193,6 +224,20 @@
 	integral is evaluated by the QuantLib \citep{quantlib} \texttt{AnalyticHestonEngine} (which uses a
 	branch-stable formulation of \eqref{eq:heston-prob}); equations
 	\eqref{eq:heston-price}--\eqref{eq:heston-prob} define the operator it realises.
+
+	\textbf{Bates price.} The Bates price $C_{\mathrm{Bates}}(\Theta; S,K,\tau,w)$ has the same form
+	as the Heston price \eqref{eq:heston-price}--\eqref{eq:heston-prob}, with each characteristic
+	function $f_j$ multiplied by the Merton lognormal jump factor of \S\ref{sec:jumps}:
+	\begin{equation}\label{eq:bates-cf}
+		f_j^{\mathrm{B}}(u) = f_j(u)\,e^{\tau\,\psi_j(u)}, \qquad
+		\psi_j(u) = \lambda\Bigl( e^{\,i u_j \nu - \frac12 \delta^2 u_j^2} - 1 \Bigr) - i u_j\,\lambda\xi,
+	\end{equation}
+	with $u_2 = u$, $u_1 = u - i$ (the same measure shift that distinguishes $f_1$ from $f_2$), and
+	$\xi = e^{\nu + \delta^2/2} - 1$ the compensator \eqref{eq:bates-compensator}. The exponent $\psi_j$
+	is the Merton log-jump cumulant, compensated by $-i u_j \lambda\xi$ so the drift correction of
+	\eqref{eq:bates-level} carries through. At $\lambda=0$ the factor is $1$ and $C_{\mathrm{Bates}}$
+	reduces to $C_{\mathrm{H}}$. In code the integral is evaluated by the QuantLib \texttt{BatesEngine},
+	the jump-augmented counterpart of the \texttt{AnalyticHestonEngine}.
 
 	\textbf{Implied volatility.} The Black-implied volatility of a price $C$ is the inverse
 	of \eqref{eq:black} in its first argument,
@@ -269,7 +314,7 @@
 	executed at different $S_i$ but the \emph{same} moneyness share a common surface column.
 	The grid snap collapses the continuum of $K^\star_i$ values (one per trade) back onto a
 	clean strike lattice. Pricing diagnostics (\S\ref{sec:output}) nonetheless use each
-	contract's \emph{original} $(S_i,K_i)$, since the calibrated $\Phi$ is spot-independent.
+	contract's \emph{original} $(S_i,K_i)$, since the calibrated parameters are spot-independent.
 
 	\section{Surface construction}\label{sec:surface}
 	From the normalised trades we build a partial $K^\star \times \tau$ implied-volatility
@@ -318,13 +363,26 @@
 	contributes no calibration and clears its stale diagnostics.
 
 	\section{The optimization problem}\label{sec:objective}
+	The routine calibrates one parameter vector per day. Under the default Heston model this is $\Phi$
+	of \eqref{eq:heston-params} with $\dim\Phi=5$; under Bates it is $\Theta$ of \eqref{eq:bates-params} with
+	$\dim\Theta=8$. The two are nested. They share their first $\dim\Phi$ coordinates, the diffusive
+	parameters $(\theta,\kappa,\eta,\rho,v_0)$, and $\Theta$ appends the jump triple
+	$(\lambda,\nu,\delta)$. Setting $\lambda=0$ collapses the jump term \eqref{eq:bates-level} and
+	recovers $\Phi$, so Heston is the $\lambda=0$ face of Bates. We write $\Psi$ for the active vector,
+	either $\Phi$ or $\Theta$, and $C^{\mathrm{mod}}(\Psi;\cdot)$ for the active model price: the Heston
+	price $C_{\mathrm{H}}$ \eqref{eq:heston-price} when $\Psi=\Phi$, and the Bates price
+	$C_{\mathrm{Bates}}$ \eqref{eq:bates-cf} when $\Psi=\Theta$. Everything below is written in $\Psi$
+	and holds for either model. The only place the model enters is the box dimension $\dim\Psi$
+	\eqref{eq:box} and, through it, the bounds tables.
+
 	Let $\mathcal{N}$ index the targets with market data $\{(\hat\sigma_n, K^\star_n, T_n, w_n)\}_{n\in\mathcal{N}}$,
 	all priced at the single spot $S_{\mathrm{ref}}$. Define the feasible box
 	\begin{equation}\label{eq:box}
-		\mathcal{B} = \prod_{j=1}^{5} [\ell_j, h_j]
-		\subset \Real^5,
-		\qquad (\ell,h)\ \text{in the } (\theta,\kappa,\eta,\rho,v_0)\ \text{order of Table~\ref{tab:bounds}.}
+		\mathcal{B} = \prod_{j=1}^{\dim\Psi} [\ell_j, h_j] \subset \Real^{\dim\Psi},
 	\end{equation}
+	with $(\ell,h)$ in the \texttt{model.params()} order of Table~\ref{tab:bounds}: the five Heston
+	coordinates, extended by the three jump bounds when $\Psi=\Theta$. The $\lambda$ floor is exactly
+	$0$, so the Bates box contains the Heston model on its $\lambda=0$ face.
 
 	\subsection{Residuals}
 	Two residual systems are defined: an IV-space system and a price-space system. The in-engine
@@ -338,34 +396,34 @@
 	Black price at the quoted vol, $C^{\mathrm{mkt}}_n = C_{\mathrm{B}}(\hat\sigma_n; S_{\mathrm{ref}}, K^\star_n, T_n, w_n)$,
 	and the relative-price residual is
 	\begin{equation}\label{eq:resid-price}
-		\varepsilon^{\mathrm{px}}_n(\Phi)
-		= \frac{C_{\mathrm{H}}(\Phi; S_{\mathrm{ref}}, K^\star_n, T_n, w_n) - C^{\mathrm{mkt}}_n}{C^{\mathrm{mkt}}_n}.
+		\varepsilon^{\mathrm{px}}_n(\Psi)
+		= \frac{C^{\mathrm{mod}}(\Psi; S_{\mathrm{ref}}, K^\star_n, T_n, w_n) - C^{\mathrm{mkt}}_n}{C^{\mathrm{mkt}}_n}.
 	\end{equation}
 	The associated objective is the root-mean-square
 	\begin{equation}\label{eq:obj-price}
-		J_{\mathrm{px}}(\Phi)
-		= \left( \frac{1}{|\mathcal{N}|} \sum_{n\in\mathcal{N}} \varepsilon^{\mathrm{px}}_n(\Phi)^2 \right)^{1/2}.
+		J_{\mathrm{px}}(\Psi)
+		= \left( \frac{1}{|\mathcal{N}|} \sum_{n\in\mathcal{N}} \varepsilon^{\mathrm{px}}_n(\Psi)^2 \right)^{1/2}.
 	\end{equation}
 	The per-target residual $\varepsilon^{\mathrm{px}}_n$ is the (relative-price) error each
 		QuantLib helper exposes. Levenberg--Marquardt \citep{marquardt1963} is a sum-of-squares
 		method, so it drives the squared residual norm
-		$\sum_{n}(\varepsilon^{\mathrm{px}}_n)^2 = |\mathcal{N}|\,J_{\mathrm{px}}(\Phi)^2$ to a local
+		$\sum_{n}(\varepsilon^{\mathrm{px}}_n)^2 = |\mathcal{N}|\,J_{\mathrm{px}}(\Psi)^2$ to a local
 		minimum (equivalently $J_{\mathrm{px}}$, with which it shares a minimiser).
 
-	\textbf{IV-space (default in-engine objective; selection and gate).} Invert each Heston price back to a Black vol via
+	\textbf{IV-space (default in-engine objective; selection and gate).} Invert each model price back to a Black vol via
 	\eqref{eq:ivinv} and compare to the market vol:
 	\begin{equation}\label{eq:resid-iv}
 	\begin{gathered}
-		\sigma^{\mathrm{mod}}_n(\Phi) = \mathcal{I}\!\bigl( C_{\mathrm{H}}(\Phi; S_{\mathrm{ref}}, K^\star_n, T_n, w_n);
+		\sigma^{\mathrm{mod}}_n(\Psi) = \mathcal{I}\bigl( C^{\mathrm{mod}}(\Psi; S_{\mathrm{ref}}, K^\star_n, T_n, w_n);
 		    S_{\mathrm{ref}}, K^\star_n, T_n, w_n \bigr), \\
-		\varepsilon^{\mathrm{iv}}_n(\Phi) = \sigma^{\mathrm{mod}}_n(\Phi) - \hat\sigma_n,
+		\varepsilon^{\mathrm{iv}}_n(\Psi) = \sigma^{\mathrm{mod}}_n(\Psi) - \hat\sigma_n,
 	\end{gathered}
 	\end{equation}
 	with objective
 	\begin{equation}\label{eq:obj-iv}
-		J_{\mathrm{iv}}(\Phi)
-		= \left( \frac{1}{|\mathcal{N}'|} \sum_{n\in\mathcal{N}'} \varepsilon^{\mathrm{iv}}_n(\Phi)^2 \right)^{1/2},
-		\qquad \mathcal{N}' = \{ n : \sigma^{\mathrm{mod}}_n(\Phi)\ \text{inverts finitely} \}.
+		J_{\mathrm{iv}}(\Psi)
+		= \left( \frac{1}{|\mathcal{N}'|} \sum_{n\in\mathcal{N}'} \varepsilon^{\mathrm{iv}}_n(\Psi)^2 \right)^{1/2},
+		\qquad \mathcal{N}' = \{ n : \sigma^{\mathrm{mod}}_n(\Psi)\ \text{inverts finitely} \}.
 	\end{equation}
 	$J_{\mathrm{iv}}$ is measured in volatility points; it is the natural surface-fit metric and,
 	unlike $J_{\mathrm{px}}$, is not inflated by cheap deep-OTM wings (a unit price error on a
@@ -390,34 +448,43 @@
 			(\hat v,\ 8.0,\ \hat v,\ 1.20,\ -0.40).
 		\end{cases}
 	\end{equation}
+	Under Bates each seed is extended by one fixed jump triple
+	$(\lambda,\nu,\delta)=(0.1,-0.1,0.1)$, so every restart starts from
+	almost no jumps and grows them only if they tighten the fit; the restart count is unchanged.
 	For each seed $s\in\mathcal{S}$ we solve the box-constrained nonlinear least-squares problem
 	\begin{equation}\label{eq:localproblem}
-		\widehat\Phi_s \;=\; \argmin_{\Phi \in \mathcal{B}}\ \sum_{n\in\mathcal{N}} \varepsilon^{\mathrm{obj}}_n(\Phi)^2
-		\qquad \text{(LM, started at } \Phi^{(0)}=s\text{)},
+		\widehat\Psi_s \;=\; \argmin_{\Psi \in \mathcal{B}}\ \sum_{n\in\mathcal{N}} \varepsilon^{\mathrm{obj}}_n(\Psi)^2
+		\qquad \text{(LM, started at } \Psi^{(0)}=s\text{)},
 	\end{equation}
 	using Levenberg--Marquardt under the box constraint $\mathcal{B}$ (QuantLib \texttt{\seqsplit{NonhomogeneousBoundaryConstraint}}). The per-target residual $\varepsilon^{\mathrm{obj}}_n$ is the configured in-engine objective: by default the IV-space residual $\varepsilon^{\mathrm{iv}}_n$ \eqref{eq:resid-iv}, optionally the price-space residual $\varepsilon^{\mathrm{px}}_n$ \eqref{eq:resid-price}. The fit retained for the day is the restart with the smallest \emph{IV-space} error,
 	\begin{equation}\label{eq:select}
-		\Phi^\star \;=\; \argmin_{s\in\mathcal{S}}\ J_{\mathrm{iv}}\!\bigl(\widehat\Phi_s\bigr).
+		\Psi^\star \;=\; \argmin_{s\in\mathcal{S}}\ J_{\mathrm{iv}}\!\bigl(\widehat\Psi_s\bigr).
 	\end{equation}
 	Ranking by $J_{\mathrm{iv}}$ (not $J_{\mathrm{px}}$) removes the dependence on any single
 	arbitrary guess and selects the economically best surface fit.
 
 	\section{Acceptance gate}\label{sec:gate}
-	$\Phi^\star$ is accepted only if it fits the surface tightly \emph{and} lies in the interior
+	$\Psi^\star$ is accepted only if it fits the surface tightly \emph{and} lies in the interior
 	of the box. Let the boundary-pegging predicate, with tolerance fraction $\delta$, be
 	\begin{equation}\label{eq:pegged}
-		\textsc{pegged}(\Phi)
-		= \bigvee_{j=1}^{5}
-		\Bigl[\ (\Phi_j - \ell_j) < \delta\,(h_j-\ell_j)
+		\textsc{pegged}(\Psi)
+		= \bigvee_{j=1}^{\dim\Phi}
+		\Bigl[\ (\Psi_j - \ell_j) < \delta\,(h_j-\ell_j)
 		\ \ \vee\ \
-		(h_j - \Phi_j) < \delta\,(h_j-\ell_j) \ \Bigr].
+		(h_j - \Psi_j) < \delta\,(h_j-\ell_j) \ \Bigr].
 	\end{equation}
+	The disjunction runs over the $\dim\Phi$ diffusive coordinates for both models. Under Bates the three jump
+	coordinates $(\nu,\delta,\lambda)$ are exempt from the predicate: $\lambda\to0$ is a legitimate
+	collapse to Heston rather than the optimizer hitting a wall, and when $\lambda\approx0$ the jump
+	shape $(\nu,\delta)$ is unidentified and may rest on a bound without meaning. The jump triple is
+	still reported. The Feller quantity \eqref{eq:feller} likewise stays the diffusive quantity under
+	Bates and never gates.
 	The day is accepted iff
 	\begin{equation}\label{eq:accept}
 		\boxed{\;
-		J_{\mathrm{iv}}(\Phi^\star) \le \varepsilon_{\mathrm{iv}}
+		J_{\mathrm{iv}}(\Psi^\star) \le \varepsilon_{\mathrm{iv}}
 		\quad\text{and}\quad
-		\lnot\,\textsc{pegged}(\Phi^\star).
+		\lnot\,\textsc{pegged}(\Psi^\star).
 		\;}
 	\end{equation}
 	The first clause is the IV-space gate ($\varepsilon_{\mathrm{iv}}\approx 2$ vol points). The
@@ -439,12 +506,15 @@
 	An accepted day yields one parameter row keyed by date,
 	\begin{equation}
 		\bigl(d,\ S_{\mathrm{ref}},\ r,\ g,\ \theta^\star,\kappa^\star,\rho^\star,\eta^\star,v_0^\star,\
-		\mathcal{F}(\Phi^\star),\ J_{\mathrm{iv}},\ J_{\mathrm{px}},\ \dots,\ R,\ \textsc{high\_move}\bigr),
+		\mathcal{F}(\Psi^\star),\ J_{\mathrm{iv}},\ J_{\mathrm{px}},\ \dots,\ R,\ \textsc{high\_move}\bigr),
 	\end{equation}
 	together with coverage counts $(|\mathcal{T}|, \#\text{strikes}, |\mathcal{N}|)$ and total
-	volume. Because the calibration is once-daily, these rows accumulate into a single file,
-	regenerated each run from the accepted days. For repricing diagnostics each retained contract
-	is valued under $\Phi^\star$ at its \emph{original} $(S_i,K_i)$, not $(S_{\mathrm{ref}},K^\star)$,
+	volume. Under Bates the row appends the three jump parameters $(\lambda^\star,\nu^\star,\delta^\star)$
+	after $v_0^\star$, and the repriced diagnostics carry a Bates price column in place of the Heston
+	one; everything else is identical. Outputs are routed per model and objective, so the Heston and
+	Bates rows never share a file. Because the calibration is once-daily, these rows accumulate into a
+	single file, regenerated each run from the accepted days. For repricing diagnostics each retained contract
+	is valued under $\Psi^\star$ at its \emph{original} $(S_i,K_i)$, not $(S_{\mathrm{ref}},K^\star)$,
 	since the structural parameters are spot-independent; this gives an honest comparison against
 	the actual trade price $P_i$.
 
@@ -486,15 +556,28 @@
 		upper $h$    & $1.0$     & $20.0$    & $2.0$     & $\phantom{-}0.5$ & $1.0$ \\
 		\bottomrule
 	\end{tabular}
+	\qquad
+	\begin{tabular}{lccc}
+		\toprule
+		& $\lambda$ & $\nu$ & $\delta$ \\
+		\midrule
+		lower $\ell$ & $0.0$ & $-0.5$ & $10^{-3}$ \\
+		upper $h$    & $5.0$ & $\phantom{-}0.2$ & $0.5$ \\
+		\bottomrule
+	\end{tabular}
 	\vspace*{-0.75em}
-	\caption{Box bounds $\mathcal{B}$, in the \texttt{model.params()} order
-	$(\theta,\kappa,\eta,\rho,v_0)$. The $\rho$ upper bound is kept slightly positive (equity
-	leverage implies $\rho<0$) and $\eta$ is capped at $2.0$ (SPX vol-of-vol $\sim 0.3$--$1.2$).}
-	\label{tab:bounds}
+	\caption{Box bounds $\mathcal{B}$ \eqref{eq:box}, in the \texttt{model.params()} order. Left: the
+	five Heston coordinates $(\theta,\kappa,\eta,\rho,v_0)$; the $\rho$ upper bound is kept slightly
+	positive (equity leverage implies $\rho<0$) and $\eta$ is capped at $2.0$ (SPX vol-of-vol
+	$\sim 0.3$--$1.2$). Right: the Bates jump bounds $(\lambda,\nu,\delta)$ appended when $\Psi=\Theta$;
+	the $\lambda$ floor is exactly $0$ (the fit may collapse to pure Heston) and $\nu$ allows more
+	negative room since equity jumps skew down.}
+	\label{tab:bounds}\label{tab:bates-bounds}
 	\end{table}
-	
+
 	\section{Empirical findings}\label{sec:empirical}
-	We ran the routine over the full CBOE SPX trade history available to us,
+	All findings in this section are for the Heston model; a full-sample Bates run is left to later work
+	(\S\ref{sec:improvements}). We ran the routine over the full CBOE SPX trade history available to us,
 	$3{,}217$ trading days from 3~January~2012 to 15~October~2024. The figures below are for
 	the default IV-space objective \eqref{eq:obj-iv}. The price-space objective
 	\eqref{eq:obj-price} is the configurable alternative, discussed at the end of the section.
@@ -505,7 +588,7 @@
 	($J_{\mathrm{iv}}>\varepsilon_{\mathrm{iv}}$), and $3$ for having no usable trades.
 	Pegging (almost always $\kappa\!\to\!20$ or $\rho\!\to\!-0.999$ hitting the box wall)
 	is therefore the binding constraint on the accept rate, not surface quality.
-	\\ 
+	\\
 	\textbf{Fit quality.} On the accepted set the surface fit is excellent. The IV-space
 	error \eqref{eq:obj-iv} has a median of $0.80$ vol points (mean $0.84$, $90$th percentile
 	$1.15$, maximum $1.99$), so $J_{\mathrm{iv}}$ sits inside the $2$-vol-point gate on every
@@ -554,7 +637,7 @@
 	calibration was extrapolating, not capturing an in-sample bias. The same widening raises $\eta$
 	and pushes Feller violation to every accepted day. The accept rate is little changed
 	($50.7\%$ against $53.3\%$), and pegging stays the dominant rejection cause under either setup.
-
+	\\
 	\textbf{Price-space as the alternative objective.} Switching the in-engine objective back to
 	price-space \eqref{eq:obj-price} changes only what each restart minimises, not how a day is
 	selected or gated (\S\ref{sec:objective}). The IV-space default weights the deep-OTM wings evenly
@@ -564,8 +647,6 @@
 	$0.2$). Those days are tight in vol points yet far off in relative price on a near-worthless wing
 	cell, which is why the gate runs in IV space.
 	
-	\input{results/surfaces/plots/tex/otm.tex}
-	
 	\subsection{Partial conclusions} The objective is not the binding choice. Pegging is a structural
 	degeneracy in the $(\kappa,\rho,\eta)$ skew subspace, and it survives a change of residual. The
 	pooled SPX surface demands more skew than single-factor Heston can supply without driving one of
@@ -574,7 +655,7 @@
 	that would move it are the identification fixes: anchoring $\kappa$, a soft Feller penalty, and
 	liquidity weighting.
 	
-	\subsection{Avenues for improvement} Acceptance is near one half of attempted days, and Feller
+	\subsection{Avenues for improvement}\label{sec:improvements} Acceptance is near one half of attempted days, and Feller
 	violation is now universal on the accepted set. The maturity floor has already been raised to
 	$\tau_{\min}=14$ days and an objective wing-weighting has been wired but tested null; neither
 	moved acceptance. The remaining levers attack the $(\kappa,\rho,\eta)$ degeneracy at its source.
@@ -584,7 +665,27 @@
 	from the previous day's accepted parameters would stabilise the search. The Levenberg--Marquardt
 	end criteria have not been tuned and are a further candidate.
 	
-	
+	A full-sample Bates calibration is the other open item. The engine, bounds, and routing are in
+	place (\S\ref{sec:jumps}, Table~\ref{tab:bates-bounds}), and the jumps give the model a direct way
+	to carry the tail the single-factor vol-of-vol now overfits. Whether that relieves the
+	$(\kappa,\rho,\eta)$ degeneracy and the $\eta$-driven Feller violation across the full 2012--2024
+	sample is the question a full Bates run would settle.
+
+	Rough volatility is the natural next paradigm, but a separate one. Empirical realised variance is
+	well described by a fractional process with Hurst exponent $H\approx 0.1$ \citep{gatheral2018}, far
+	from the $H=\tfrac12$ that the diffusive Heston and Bates dynamics assume. A rough model fits the
+	steep short-maturity skew that single-factor Heston cannot reach without driving $\eta$ to its cap,
+	so it speaks directly to the degeneracy and Feller findings above. It does not, however, fit the
+	routine of this paper. The dynamics are non-Markovian, so the finite-dimensional box, the seed grid,
+	and the Feller quantity have no direct analogue. There is no QuantLib engine for it. The fastest
+	tractable variant, rough Heston, prices through a fractional Riccati equation
+	\citep{eleuch2019} that is far heavier per evaluation than the closed-form Heston integral, and
+	rough Bergomi \citep{bayer2016} prices by Monte Carlo. Multi-start calibration over thousands of
+	days is then out of reach without a surrogate pricer. There is also a tension with the present
+	surface: the rough skew is sharpest at the shortest maturities, exactly the tenors the pre-filter
+	drops at $\tau_{\min}=14$ days \eqref{eq:prefilter}. A fair test would re-admit the short end, build
+	a rough-Heston pricer or a learned surrogate, and run on a pilot window rather than the full sample.
+	We leave it to separate work.
 	
 	\vfill
 	\nocite{ballotta2025,eberlein2010}
@@ -593,56 +694,61 @@
 		\bibliography{refs-heston-calibration}
 	}
 	\vfill
-	
 	\newpage
+	
 	\appendix
 	
-	\section{Algorithm}\label{sec:algorithm}
-	
-	\algsetup{linenosize=\scriptsize}
-	Algorithm~\ref{alg:perday} states the per-day routine; the driver applies it to every trading
-	day and accumulates accepted rows into a single file (\S\ref{sec:output}).
-	\begin{algorithm}[H]
-		\captionsetup{font=scriptsize}
-		\caption{Per-day Heston calibration}\label{alg:perday}
-		\begin{algorithmic}[1]
-			\REQUIRE day $d$ of OTM trades; rates $r(d),g(d)$; constants of Table~\ref{tab:const}
-			\STATE $\mathcal{D} \leftarrow \{ i : \sigma_i>0,\ \tau_i\ge\tau_{\min}\}$ \hfill (pre-filter \eqref{eq:prefilter})
-			\IF{$r(d)$ or $g(d)$ undefined on/before $d$}
-			\STATE \textbf{return} $\varnothing$ \hfill (no rate)
-			\ENDIF
-			\STATE $S_{\mathrm{ref}} \leftarrow (\sum q_i S_i)/(\sum q_i)$; \\
-			$R \leftarrow \max_i S_i / \min_i S_i - 1$; \\
-			$\textsc{high\_move}\leftarrow \mathbf{1}\{R>R_{\max}\}$
-			\STATE $K^\star_i \leftarrow \Delta\,\round(m_i S_{\mathrm{ref}}/\Delta)$ with $m_i=K_i/S_i$ \hfill (re-strike \eqref{eq:kstar})
-			\STATE $\mathcal{T}\leftarrow$ top-$N_t$ maturities by volume;\ \ build $\mathcal{K}_\tau$ ($n_k$ per wing); \\ pivot to $\{\hat\sigma_{k,\tau}\}$, cells $\mathcal{N}$
-			\IF{coverage \eqref{eq:coverage} fails}
-			\STATE clear stale diagnostics;\ \textbf{return} $\varnothing$
-			\ENDIF
-			\STATE $\hat v \leftarrow \clip(\med(\hat\sigma)^2,[10^{-3},0.25])$;\ \ build seeds $\mathcal{S}$ \eqref{eq:seeds}
-			\FOR{$s \in \mathcal{S}$}
-			\STATE $\widehat\Phi_s \leftarrow$ LM minimiser of $\sum_n(\varepsilon^{\mathrm{obj}}_n)^2$ on $\mathcal{B}$ from $s$ \hfill \eqref{eq:localproblem}
-			\STATE compute $J_{\mathrm{iv}}(\widehat\Phi_s)$ \hfill \eqref{eq:obj-iv}
-			\ENDFOR
-			\STATE $\Phi^\star \leftarrow \argmin_{s} J_{\mathrm{iv}}(\widehat\Phi_s)$ \hfill (select \eqref{eq:select})
-			\IF{$J_{\mathrm{iv}}(\Phi^\star) \le \varepsilon_{\mathrm{iv}}$ \AND $\lnot\,\textsc{pegged}(\Phi^\star)$}
-			\STATE write repriced diagnostics;\ \textbf{return} row$(d,S_{\mathrm{ref}},r,g,\Phi^\star,\mathcal{F},J_{\mathrm{iv}},J_{\mathrm{px}},\dots)$
-			\ELSE
-			\STATE clear stale diagnostics;\ \textbf{return} $\varnothing$ \hfill (rejected)
-			\ENDIF
-		\end{algorithmic}
-	\end{algorithm}
-	
+	\input{results/heston/surfaces/plots/tex/otm.tex}
 	\newpage
+	
+	\section{Algorithm}\label{sec:algorithm}
+		\algsetup{linenosize=\small}
+		Algorithm~\ref{alg:perday} states the per-day routine in the active vector $\Psi$; the driver
+		applies it to every trading day and accumulates accepted rows into a single file
+		(\S\ref{sec:output}). Heston is the default ($\Psi=\Phi$). The Bates fit is the same algorithm with
+		$\Psi=\Theta$: the engine is the \texttt{BatesEngine} and the box $\mathcal{B}$ is the
+		$\dim\Theta$-dimensional one, while the pegging test \eqref{eq:pegged} still ranges over the
+		$\dim\Phi$ diffusive coordinates only.
+		\begin{algorithm}[H]
+			\captionsetup{font=normal}
+			\caption{Per-day calibration}\label{alg:perday}
+			\begin{algorithmic}[1]
+				\REQUIRE day $d$ of OTM trades; rates $r(d),g(d)$; constants of Table~\ref{tab:const}
+				\STATE $\mathcal{D} \leftarrow \{ i : \sigma_i>0,\ \tau_i\ge\tau_{\min}\}$ \hfill (pre-filter \eqref{eq:prefilter})
+				\IF{$r(d)$ or $g(d)$ undefined on/before $d$}
+				\STATE \textbf{return} $\varnothing$ \hfill (no rate)
+				\ENDIF
+				\STATE $S_{\mathrm{ref}} \leftarrow (\sum q_i S_i)/(\sum q_i)$; \\
+				$R \leftarrow \max_i S_i / \min_i S_i - 1$; \\
+				$\textsc{high\_move}\leftarrow \mathbf{1}\{R>R_{\max}\}$
+				\STATE $K^\star_i \leftarrow \Delta\,\round(m_i S_{\mathrm{ref}}/\Delta)$ with $m_i=K_i/S_i$ \hfill (re-strike \eqref{eq:kstar})
+				\STATE $\mathcal{T}\leftarrow$ top-$N_t$ maturities by volume;\ \ build $\mathcal{K}_\tau$ ($n_k$ per wing); \\ pivot to $\{\hat\sigma_{k,\tau}\}$, cells $\mathcal{N}$
+				\IF{coverage \eqref{eq:coverage} fails}
+				\STATE clear stale diagnostics;\ \textbf{return} $\varnothing$
+				\ENDIF
+				\STATE $\hat v \leftarrow \clip(\med(\hat\sigma)^2,[10^{-3},0.25])$;\ \ build seeds $\mathcal{S}$ \eqref{eq:seeds}
+				\FOR{$s \in \mathcal{S}$}
+				\STATE $\widehat\Psi_s \leftarrow$ LM minimiser of $\sum_n(\varepsilon^{\mathrm{obj}}_n)^2$ on $\mathcal{B}$ from $s$ \hfill \eqref{eq:localproblem}
+				\STATE compute $J_{\mathrm{iv}}(\widehat\Psi_s)$ \hfill \eqref{eq:obj-iv}
+				\ENDFOR
+				\STATE $\Psi^\star \leftarrow \argmin_{s} J_{\mathrm{iv}}(\widehat\Psi_s)$ \hfill (select \eqref{eq:select})
+				\IF{$J_{\mathrm{iv}}(\Psi^\star) \le \varepsilon_{\mathrm{iv}}$ \AND $\lnot\,\textsc{pegged}(\Psi^\star)$}
+				\STATE write repriced diagnostics;\ \textbf{return} row$(d,S_{\mathrm{ref}},r,g,\Psi^\star,\mathcal{F},J_{\mathrm{iv}},J_{\mathrm{px}},\dots)$
+				\ELSE
+				\STATE clear stale diagnostics;\ \textbf{return} $\varnothing$ \hfill (rejected)
+				\ENDIF
+			\end{algorithmic}
+		\end{algorithm}
+		\newpage
 	\begingroup
 	\raggedbottom
-	\section{Best fits}
 	
-	\setlength{\floatsep}{1pt plus 1pt minus 1pt}
-	\setlength{\textfloatsep}{1pt plus 1pt minus 1pt}
-	\setlength{\intextsep}{1pt plus 1pt minus 1pt}
-	\input{results/smiles/figures/smiles.tex}
-	\endgroup
+	\section{Best fits}
+		\setlength{\floatsep}{1pt plus 1pt minus 1pt}
+		\setlength{\textfloatsep}{1pt plus 1pt minus 1pt}
+		\setlength{\intextsep}{1pt plus 1pt minus 1pt}
+		\input{results/heston/smiles/figures/smiles.tex}
+		\endgroup
 	
 	
 \end{document}

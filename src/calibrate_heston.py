@@ -30,11 +30,12 @@ import pandas as pd
 import QuantLib as ql
 
 from config import (
-    LOW, HIGH, IV_RMSE_ACCEPT, BOUND_TOL,
-    IV_ACC, IV_MAXEVAL, IV_LO, IV_HI,
-    DEFAULT_OBJECTIVE, SEED_GRID_TEMPLATE, SEED_VAR_FALLBACK, SEED_VAR_LO, SEED_VAR_HI,
-    WING_WEIGHT_GAIN, WING_WEIGHT_POWER, WING_WEIGHT_SCALE,
+    LOW, HIGH, IV_RMSE_ACCEPT,
+    DEFAULT_OBJECTIVE, SEED_GRID_TEMPLATE,
+    WING_WEIGHT_GAIN,
 )
+# Model-agnostic helpers shared with calibrate_bates.py (factored out so the two engines can't drift).
+from _engine_common import _on_boundary, _seed_var, _wing_weight, _iv_rmse
 
 # String->QuantLib-enum objective map. Kept next to the engine (live ql objects, not serialisable);
 # the string names/default live in config. Selection and the gate always run off IV-space RMSE, so
@@ -51,54 +52,12 @@ _ERR = {
 _FAIL = {k: None for k in ("theta", "kappa", "eta", "rho", "v0", "feller", "rmse", "iv_rmse")}
 
 
-def _on_boundary(params):
-    """True if any param sits within BOUND_TOL*span of its bound -> the fit hit the wall."""
-    for p, lo, hi in zip(params, LOW, HIGH):
-        span = hi - lo
-        if (p - lo) < BOUND_TOL * span or (hi - p) < BOUND_TOL * span:
-            return True
-    return False
-
-
 def _seed_grid(vol_matrix):
     """A small, deterministic set of starting points, seeded from the surface's own level."""
-    vols = vol_matrix.to_numpy(dtype=float)
-    vols = vols[np.isfinite(vols)]
-    var = float(np.median(vols)) ** 2 if vols.size else SEED_VAR_FALLBACK
-    var = min(max(var, SEED_VAR_LO), SEED_VAR_HI)
+    var = _seed_var(vol_matrix)
     # expand each template row into (v0, kappa, theta, eta, rho) -- HestonProcess constructor order
     return [(var * v0_mult, kappa, var * theta_mult, eta, rho)
             for v0_mult, kappa, theta_mult, eta, rho in SEED_GRID_TEMPLATE]
-
-
-def _wing_weight(k, s):
-    """LM weight for a cell at strike k against reference spot s: 1 at ATM, rising into the wings by
-    |log(k/s)|. GAIN=0 => 1.0 everywhere (uniform). QuantLib normalises these, so only ratios matter."""
-    x = abs(np.log(float(k) / float(s)))
-    return 1.0 + WING_WEIGHT_GAIN * (x / WING_WEIGHT_SCALE) ** WING_WEIGHT_POWER
-
-
-def _iv_rmse(helpers, mkt_vols, weights=None):
-    """RMSE between each helper's model-implied Black vol and its market vol, in vol points.
-
-    With `weights` (aligned to `helpers`) it returns the weight-normalised RMSE
-    sqrt(sum(w*r^2)/sum(w)) -- used for restart *ranking* so a wing-weighted LM fit is ranked on the
-    same objective it minimised. Unweighted (weights=None) it is the plain RMSE the acceptance gate
-    and the reported `iv_rmse` use, so the gate keeps its "~2 vol points everywhere" meaning."""
-    resid, wts = [], []
-    for i, (h, mkt) in enumerate(zip(helpers, mkt_vols)):
-        try:
-            model_iv = h.impliedVolatility(h.modelValue(), IV_ACC, IV_MAXEVAL, IV_LO, IV_HI)
-        except RuntimeError:
-            continue
-        if np.isfinite(model_iv):
-            resid.append(model_iv - mkt)
-            wts.append(1.0 if weights is None else weights[i])
-    resid = np.asarray(resid)
-    if not resid.size:
-        return np.nan
-    wts = np.asarray(wts)
-    return float(np.sqrt(np.sum(wts * resid ** 2) / np.sum(wts)))
 
 
 def _calibrate_once(start, surface, s, r_ts, g_ts, S_handle, constraint, error_type, objective):
@@ -181,7 +140,7 @@ def calibrate_heston(vol_matrix, s, r, g, objective=DEFAULT_OBJECTIVE) -> dict:
 
     params, iv_rmse_sel, iv_rmse, price_rmse, n_helpers = best
     theta, kappa, eta, rho, v0 = params
-    accepted = (iv_rmse <= IV_RMSE_ACCEPT) and not _on_boundary(params)
+    accepted = (iv_rmse <= IV_RMSE_ACCEPT) and not _on_boundary(params, LOW, HIGH)
     if not accepted:
         # Reject: null the parameters (the pipeline drops null rows) but keep the diagnostics.
         return {**_FAIL, "iv_rmse": iv_rmse, "rmse": price_rmse,

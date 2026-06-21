@@ -28,29 +28,32 @@ from pathlib import Path
 
 # This script now lives under src/results/surfaces/, but reads/writes the repo-level results/ tree.
 # HERE is the script dir; SRC holds the shared utils/config; RESULTS routes data I/O to repo/results/.
+# RESULTS_CODE (src/results) holds results_config.py, the central knob file for the figure scripts.
 HERE = Path(__file__).parent.resolve()                 # src/results/surfaces
 SRC = HERE.parents[1]                                   # src/ (shared utils.py, config.py)
+RESULTS_CODE = HERE.parent                              # src/results (results_config.py)
 REPO = HERE.parents[2]                                  # repo root (surfaces->results->src->repo)
-if str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
+for _p in (str(SRC), str(RESULTS_CODE)):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 RESULTS = REPO / "results"
-SURFACES = RESULTS / "surfaces"                         # real data dir at repo/results/surfaces
-OBJECTIVE = "vol" # input("Validate `vol` or `price` calibrations? ").strip().lower()
+# All tunable parameters live in results_config.py. MODEL also picks the QuantLib engine
+# (Heston vs Bates) and the data output tree (results/<model>/surfaces/).
+from results_config import (  # type: ignore
+    MODEL, OBJECTIVE, MONEYNESS, MATURITIES_DAYS, INVERSION_PLACEHOLDER_VOL)
+SURFACES = RESULTS / MODEL / "surfaces"                 # data dir at repo/results/<model>/surfaces
 DATA = SURFACES / "data"
-DATA.mkdir(parents=True, exist_ok=True)
-CALIBRATIONS_FILE = RESULTS / "calibrations" / OBJECTIVE / "calibrations.csv"
 
-# Grid the surface is sampled on. Moneyness K/S around the money; maturities in calendar days
-# spanning the range the calibration actually sees (>= MIN_DTM=7 up to ~1y).
-MONEYNESS = np.round(np.arange(0.75, 1.25, 0.005), 4).tolist()   # 0.80 .. 1.20
 
-MATURITIES_DAYS = np.arange(start=30,stop=730,step=30).tolist()
+from config import calib_paths  # type: ignore
+CALIBRATIONS_FILE = calib_paths(MODEL, OBJECTIVE)[0]
 
-from utils import heston_implied_vol, build_heston_engine, heston_price
+from utils import heston_implied_vol, heston_price, build_model_engine
 
 def make_surface(target_date=None, OUT=DATA, SAVE=False):
     if SAVE:
         OUT.mkdir(parents=True, exist_ok=True)
+        DATA.mkdir(parents=True, exist_ok=True)
     calibrations = pd.read_csv(CALIBRATIONS_FILE, parse_dates=['date'])
     calibrations = calibrations.set_index('date').sort_index()
     if target_date is not None:
@@ -65,19 +68,24 @@ def make_surface(target_date=None, OUT=DATA, SAVE=False):
     date = pd.Timestamp(row['date'])
     calculation_date = ql.Date(date.day, date.month, date.year)
 
-    heston_engine, s_handle, r_ts, g_ts, day_count = build_heston_engine(row, calculation_date)
+    engine, s_handle, r_ts, g_ts, day_count = build_model_engine(row, calculation_date, MODEL)
     # A Black process for the inversion. Its vol quote is a placeholder -- impliedVolatility solves
-    # for the vol that reprices the Heston NPV, ignoring whatever sits here.
+    # for the vol that reprices the model NPV (Heston or Bates), ignoring whatever sits here.
     bsm_process = ql.BlackScholesMertonProcess(
         s_handle, g_ts, r_ts,
         ql.BlackVolTermStructureHandle(ql.BlackConstantVol(
-            calculation_date, ql.UnitedStates(ql.UnitedStates.NYSE), 0.20, day_count)))
+            calculation_date, ql.UnitedStates(ql.UnitedStates.NYSE),
+            INVERSION_PLACEHOLDER_VOL, day_count)))
     kappa, theta, rho, eta, v0 = row['kappa'], row['theta'], row['rho'], row['eta'], row['v0']
-    print(f"Option surface for {row['date']}  (spot={spot:.2f}, "
+    print(f"Option surface for {row['date']}  (model={MODEL}, spot={spot:.2f}, "
           f"r={row['risk_free_rate']:.4f}, q={row['dividend_rate']:.4f})")
     print(f"  v0={v0:.4f}  kappa={kappa:.4f}  theta={theta:.4f}  "
           f"eta={eta:.4f}  rho={rho:.4f}  feller={row['feller']:.4f}  "
-          f"rmse={row['rmse']:.4f}  iv_rmse={row['iv_rmse']:.8f}\n")
+          f"rmse={row['rmse']:.4f}  iv_rmse={row['iv_rmse']:.8f}")
+    if MODEL == "bates":
+        print(f"  lambda={float(row['lambda_']):.4f}  nu={float(row['nu']):.4f}  "
+              f"delta={float(row['delta']):.4f}")
+    print()
 
     records = []
     for days in MATURITIES_DAYS:
@@ -85,8 +93,8 @@ def make_surface(target_date=None, OUT=DATA, SAVE=False):
         for m in MONEYNESS:
             strike = m * spot
             for w in ('call', 'put'):
-                iv = heston_implied_vol(strike, maturity_date, spot, heston_engine, bsm_process, w=w)
-                price = heston_price(strike, maturity_date, spot, w, heston_engine)
+                iv = heston_implied_vol(strike, maturity_date, spot, engine, bsm_process, w=w)
+                price = heston_price(strike, maturity_date, spot, w, engine)
                 records.append({
                     's_ref':spot,
                     'strike': round(strike, 4),
@@ -104,10 +112,13 @@ def make_surface(target_date=None, OUT=DATA, SAVE=False):
     high_move = row['high_move']
     if not isinstance(high_move, (bool, np.bool_)):
         high_move = str(high_move).strip().lower() == 'true'
+    params = {"kappa": kappa, "theta": theta, "rho": rho, "eta": eta, "v0": v0}
+    if MODEL == "bates":
+        # Carry the jump triple so smiles.py can rebuild a Bates engine from day_results['params'].
+        params.update(lambda_=float(row['lambda_']), nu=float(row['nu']), delta=float(row['delta']))
     day_results = {
-        "params": {
-            "kappa": kappa, "theta": theta, "rho": rho, "eta": eta, "v0": v0,
-        },
+        "params": params,
+        "model": MODEL,
         "spot": spot,
         "date": date,
         "market": {

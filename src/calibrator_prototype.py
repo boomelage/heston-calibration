@@ -52,11 +52,20 @@ if str(SRC) not in sys.path:
 
 from utils import _prepare_options
 from calibrate_heston import calibrate_heston
+from calibrate_bates import calibrate_bates
 from config import (
     MAX_NT, MAX_NK, STRIKE_GRID, MIN_DTM, MAX_DTM,
     MIN_MATS, MIN_STRIKES, MIN_CELLS, MAX_MOVE_PCT,
-    IV_RMSE_ACCEPT, OBJECTIVE_NAMES,
+    IV_RMSE_ACCEPT, OBJECTIVE_NAMES, MODEL_NAMES, calib_paths,
+    DEFAULT_MODEL, DEFAULT_OBJECTIVE
 )
+
+# Per-model engine, the extra Bates parameter columns, and the repriced model-price column name.
+# Heston keeps its 5 params and the `heston` price column; Bates appends (lambda_, nu, delta) and writes
+# a `bates` column priced by the Bates wrapper. Everything else in the day routine is model-agnostic.
+_ENGINES = {"heston": calibrate_heston, "bates": calibrate_bates}
+_EXTRA_PARAMS = {"heston": [], "bates": ["lambda_", "nu", "delta"]}
+_PRICE_COL = {"heston": "heston", "bates": "bates"}
 
 if str(DATA) not in sys.path:
     sys.path.insert(0, str(DATA))
@@ -73,19 +82,15 @@ rg_asc = rg.sort_index()
 # MIN_CELLS/MAX_MOVE_PCT and IV_RMSE_ACCEPT are imported above.
 
 
-def _objective_paths(objective):
-    """Resolve the (calibrations.csv, rejections.csv, tests-dir) outputs for an objective.
+def _objective_paths(model, objective):
+    """Resolve the (calibrations.csv, rejections.csv, tests-dir) outputs for a (model, objective) pair.
 
-    Each objective gets its own directory under results/calibrations/<objective>/, holding
-    calibrations.csv, rejections.csv and the per-day calibration_tests/ files (basename
-    `cboe_spx_calibration_tests_<date>.csv` for either objective). validate_calibrations.py rebuilds
-    the same directory from its own OBJECTIVE, so the two stay in lock-step.
+    Thin wrapper over config.calib_paths, the single source of truth for output routing. Uniform
+    layout results/<model>/calibrations/<objective>/, holding calibrations.csv, rejections.csv and the
+    per-day calibration_tests/ files (basename `cboe_spx_calibration_tests_<date>.csv`).
+    validate_calibrations.py rebuilds the same directory from the same rule, so the two stay in lock-step.
     """
-    base = RESULTS / "calibrations" / objective
-    base.mkdir(parents=True, exist_ok=True)
-    return (base / "calibrations.csv",
-            base / "rejections.csv",
-            base / "calibration_tests")
+    return calib_paths(model, objective)
 
 
 def _skip_day(test_path, reason, detail, iv_rmse=np.nan,
@@ -135,12 +140,13 @@ def _select_surface(df):
     return pd.concat(selected, ignore_index=True)
 
 
-def calibrate_by_day(filepath, OBJECTIVE):
-    # Per-day tests file: the directory depends on OBJECTIVE (results/calibrations/<objective>/
-    # calibration_tests/); validate_calibrations.py rebuilds the identical name from its own OBJECTIVE.
-    # Derive the date from the trailing _<date> token of the raw trades filename (the date is always
-    # the last underscore-separated field before .csv), independent of the file's prefix.
-    tests_dir = _objective_paths(OBJECTIVE)[2]
+def calibrate_by_day(filepath, OBJECTIVE, MODEL):
+    # Per-day tests file: the directory depends on (MODEL, OBJECTIVE) (results/<model>/calibrations/
+    # <objective>/calibration_tests/, or the legacy results/calibrations/<objective>/ for heston);
+    # validate_calibrations.py rebuilds the identical name from the same rule. Derive the date from the
+    # trailing _<date> token of the raw trades filename (the date is always the last underscore-separated
+    # field before .csv), independent of the file's prefix.
+    tests_dir = _objective_paths(MODEL, OBJECTIVE)[2]
     filename = os.path.basename(filepath)
     date_str = filename[filename.rfind('_')+1:filename.rfind('.csv')]
     test_path = str(tests_dir / f"cboe_spx_calibration_tests_{date_str}.csv")
@@ -189,7 +195,7 @@ def calibrate_by_day(filepath, OBJECTIVE):
             n_maturities=n_mats, n_strikes=n_strikes, n_cells=n_cells,
         )
 
-    res = calibrate_heston(surf, S_ref, r, g, objective=OBJECTIVE)   # ONE calibration for the whole day (hardened engine)
+    res = _ENGINES[MODEL](surf, S_ref, r, g, objective=OBJECTIVE)   # ONE calibration for the whole day (hardened engine)
     print(f"{pd.Timestamp(date).date()}  S_ref={S_ref:.1f}  cells={n_cells}  "
           f"iv_rmse={res['iv_rmse']}  price_rmse={res['rmse']}  accepted={res['accepted']}")
 
@@ -209,7 +215,8 @@ def calibrate_by_day(filepath, OBJECTIVE):
                          n_maturities=n_mats, n_strikes=n_strikes, n_cells=n_cells)
 
     # ---- one calibration row, keyed by date ----
-    params = ['theta', 'kappa', 'rho', 'eta', 'v0']
+    # Heston's 5 params, plus the Bates jump triple when MODEL=='bates' (appended via _EXTRA_PARAMS).
+    params = ['theta', 'kappa', 'rho', 'eta', 'v0'] + _EXTRA_PARAMS[MODEL]
     row = {
         'date': pd.Timestamp(date).date(),
         'spot_price': round(S_ref, 4),
@@ -244,23 +251,31 @@ def calibrate_by_day(filepath, OBJECTIVE):
         repriced['black_scholes'] = vanp.df_numpy_black_scholes(repriced)
     except Exception:
         repriced['black_scholes'] = np.nan
+    # Model price column: `heston` (df_heston_price) or `bates` (df_bates_price, which reads the
+    # lambda_/nu/delta columns copied in above). The tests file mirrors the calibrated surface either way.
+    price_col = _PRICE_COL[MODEL]
+    price_fn = vanp.df_bates_price if MODEL == 'bates' else vanp.df_heston_price
     try:
-        repriced['heston'] = vanp.df_heston_price(repriced)
+        repriced[price_col] = price_fn(repriced)
     except Exception:
-        repriced['heston'] = np.nan
+        repriced[price_col] = np.nan
 
     tests_dir.mkdir(parents=True, exist_ok=True)
-    repriced.dropna(subset=['heston']).to_csv(test_path, index=False)
+    repriced.dropna(subset=[price_col]).to_csv(test_path, index=False)
     return row
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Attempt per-day calibration of Heston paramaters off option trades data")
-    parser.add_argument("--OBJECTIVE", type=str, default="vol", choices=list(OBJECTIVE_NAMES),
+    parser = argparse.ArgumentParser(description="Attempt per-day calibration of Heston/Bates paramaters off option trades data")
+    parser.add_argument("--OBJECTIVE", type=str, default=DEFAULT_OBJECTIVE, choices=list(OBJECTIVE_NAMES),
                         help="Decide whether to minimize residuals of `price` or `vol`")
+    parser.add_argument("--MODEL", type=str, default=DEFAULT_MODEL, choices=list(MODEL_NAMES),
+                        help="Model to calibrate: `heston` (5 params) or `bates` (Heston + jumps, 8 params)")
+    parser.add_argument("--LIMIT", type=int, default=0,
+                        help="If >0, calibrate only the LIMIT most recent trading days (by date). 0 = all.")
     args = parser.parse_args()
 
-    CALIBRATIONS_FILE, REJECTIONS_FILE, TESTS = _objective_paths(args.OBJECTIVE)
+    CALIBRATIONS_FILE, REJECTIONS_FILE, TESTS = _objective_paths(args.MODEL, args.OBJECTIVE)
     TESTS.mkdir(parents=True, exist_ok=True)
 
     # joblib's default loky backend spawns processes; on Windows the children re-import this module,
@@ -270,14 +285,19 @@ def main():
     max_jobs = max(1, os.cpu_count() // 4)
     
     TRADES = Path(__file__).parent.parent / "data" / "options" / "raw"
-    files = [f for f in os.listdir(TRADES) if f.endswith('.csv')]
-    files = pd.Series([os.path.join(TRADES, f) for f in files]).sort_values(ascending=True).reset_index(drop=True)
+    files = [os.path.join(TRADES, f) for f in os.listdir(TRADES) if f.endswith('.csv')]
+    # Sort chronologically by the trailing _<date> token (robust to mixed filename prefixes), so --LIMIT
+    # selects the most recent trading days. For a full run the order is immaterial.
+    files = sorted(files, key=lambda p: os.path.basename(p)[os.path.basename(p).rfind('_') + 1:-4])
+    if args.LIMIT and args.LIMIT > 0:
+        files = files[-args.LIMIT:]
+    files = pd.Series(files).reset_index(drop=True)
 
     # Every attempted day returns exactly one row: an accepted calibration (no 'reason' key) or a
     # rejection (carries 'reason'). Split them into the two complementary files. The loop covers all
     # raw trades files, so both files are fully regenerated each run (no stale rows survive); an empty
     # set removes its file rather than leaving it stale.
-    results = [r for r in Parallel(n_jobs=max_jobs)(delayed(calibrate_by_day)(f, args.OBJECTIVE) for f in files)
+    results = [r for r in Parallel(n_jobs=max_jobs)(delayed(calibrate_by_day)(f, args.OBJECTIVE, args.MODEL) for f in files)
                if r is not None]
     accepted = [r for r in results if 'reason' not in r]
     rejected = [r for r in results if 'reason' in r]

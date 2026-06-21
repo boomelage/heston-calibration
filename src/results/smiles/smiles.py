@@ -28,7 +28,8 @@ for _p in (str(SRC), str(RESULTS_CODE)):
 # All tunable parameters live in results_config.py (the central knob file).
 from results_config import (  # type: ignore
     MODEL, OBJECTIVE, PLOT_RCPARAMS, INVERSION_PLACEHOLDER_VOL, NT, USE_LEGEND,
-    XLO, XHI, MKTMONSTEP, SMILE_M_STEP, SMILE_FIGSIZE, SMILE_CMAP, MATURITIES_DAYS)
+    XLO, XHI, MKTMONSTEP, SMILE_M_STEP, SMILE_FIGSIZE, SMILE_CMAP, MATURITIES_DAYS,
+    TMIN, TMAX)
 from utils import build_model_engine, heston_implied_vol # type: ignore
 from config import calendar as ql_calendar, calib_paths # type: ignore
 
@@ -171,6 +172,16 @@ def _maturity_colors(T, cmap_name=SMILE_CMAP):
     return dict(zip(T, colors))
 
 
+def _clip_maturities(T, tmin=TMIN, tmax=TMAX):
+    """Keep only maturities (in days) within the [tmin, tmax] window before sparse selection.
+    Either bound is optional: `tmin=None` removes the lower bound, `tmax=None` the upper, and
+    both `None` keeps every maturity. Applied to the candidate maturities (calibrated or the
+    MATURITIES_DAYS fallback) so the displayed smiles are restricted to the chosen tenor band."""
+    lo = -np.inf if tmin is None else tmin
+    hi = np.inf if tmax is None else tmax
+    return [t for t in sorted(T) if lo <= t <= hi]
+
+
 def _sparse_maturities(T, nt=NT):
     """Sparsely pick at most `nt` maturities from the sorted list `T`. Always keeps the lowest and
     highest; the remaining nt-2 are spaced as equally as possible across the interior by indexing
@@ -210,10 +221,11 @@ def _save_day_figure(day, use_legend):
     # only, over a default maturity grid and the XLO/XHI fallback window.
     mkt = _load_test_scatter(day['tag'])
     if mkt is not None and len(mkt):
-        # The displayed maturities are the calibrated ones; sparsely pick NT of them (NT=None => all).
-        T = _sparse_maturities(sorted(mkt['days_to_maturity'].unique().tolist()))
+        # The displayed maturities are the calibrated ones, clipped to [TMIN, TMAX]; then sparsely
+        # pick NT of them (NT=None => all).
+        T = _sparse_maturities(_clip_maturities(mkt['days_to_maturity'].unique().tolist()))
     else:
-        T = _sparse_maturities(sorted(MATURITIES_DAYS))
+        T = _sparse_maturities(_clip_maturities(MATURITIES_DAYS))
     if not T:
         print(f"  [{day['tag']}] no maturities to draw; skipping")
         return
@@ -355,7 +367,8 @@ def write_smiles_TeX(days):
             r"    \begin{center}" "\n"
             f"        \\includegraphics[width=\\linewidth,keepaspectratio=false]"
             f"{{results/{MODEL}/smiles/figures/smiles_{day['tag']}.eps}}\n"
-            # f"        \\caption{{{caption}}}\n"
+            r"        \captionsetup{font=tiny,skip=-2pt,belowskip=-2pt}" "\n"
+            f"        \\caption{{{caption}}}\n"
             f"        \\label{{{label}}}\n"
             r"    \end{center}" "\n"
             r"\end{figure}"

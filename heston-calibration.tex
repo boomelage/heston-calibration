@@ -456,7 +456,11 @@
 		\widehat\Psi_s \;=\; \argmin_{\Psi \in \mathcal{B}}\ \sum_{n\in\mathcal{N}} \varepsilon^{\mathrm{obj}}_n(\Psi)^2
 		\qquad \text{(LM, started at } \Psi^{(0)}=s\text{)},
 	\end{equation}
-	using Levenberg--Marquardt under the box constraint $\mathcal{B}$ (QuantLib \texttt{\seqsplit{NonhomogeneousBoundaryConstraint}}). The per-target residual $\varepsilon^{\mathrm{obj}}_n$ is the configured in-engine objective: by default the IV-space residual $\varepsilon^{\mathrm{iv}}_n$ \eqref{eq:resid-iv}, optionally the price-space residual $\varepsilon^{\mathrm{px}}_n$ \eqref{eq:resid-price}. The fit retained for the day is the restart with the smallest \emph{IV-space} error,
+	using Levenberg--Marquardt under the box constraint $\mathcal{B}$ (QuantLib \texttt{\seqsplit{NonhomogeneousBoundaryConstraint}}). 
+	The per-target residual $\varepsilon^{\mathrm{obj}}_n$ is the configured in-engine objective: 
+	by default the IV-space residual $\varepsilon^{\mathrm{iv}}_n$ \eqref{eq:resid-iv}, optionally 
+	the price-space residual $\varepsilon^{\mathrm{px}}_n$ \eqref{eq:resid-price}. The fit retained 
+	for the day is the restart with the smallest \emph{IV-space} error,
 	\begin{equation}\label{eq:select}
 		\Psi^\star \;=\; \argmin_{s\in\mathcal{S}}\ J_{\mathrm{iv}}\!\bigl(\widehat\Psi_s\bigr).
 	\end{equation}
@@ -698,8 +702,26 @@
 	
 	\appendix
 	
-	\input{results/heston/surfaces/plots/tex/otm.tex}
+	\input{results/bates/surfaces/plots/tex/otm.tex}
 	\newpage
+	
+	\begingroup
+	\raggedbottom
+	
+	\section{Example fits for the Heston model}
+		\setlength{\floatsep}{1pt plus 1pt minus 1pt}
+		\setlength{\textfloatsep}{1pt plus 1pt minus 1pt}
+		\setlength{\intextsep}{1pt plus 1pt minus 1pt}
+		\input{results/heston/smiles/figures/smiles.tex}
+		\newpage
+		
+	\section{Example fits for the Bates model}
+		\setlength{\floatsep}{1pt plus 1pt minus 1pt}
+		\setlength{\textfloatsep}{1pt plus 1pt minus 1pt}
+		\setlength{\intextsep}{1pt plus 1pt minus 1pt}
+		\input{results/bates/smiles/figures/smiles.tex}
+		
+	\endgroup
 	
 	\section{Algorithm}\label{sec:algorithm}
 		\algsetup{linenosize=\small}
@@ -739,16 +761,5 @@
 				\ENDIF
 			\end{algorithmic}
 		\end{algorithm}
-		\newpage
-	\begingroup
-	\raggedbottom
-	
-	\section{Best fits}
-		\setlength{\floatsep}{1pt plus 1pt minus 1pt}
-		\setlength{\textfloatsep}{1pt plus 1pt minus 1pt}
-		\setlength{\intextsep}{1pt plus 1pt minus 1pt}
-		\input{results/heston/smiles/figures/smiles.tex}
-		\endgroup
-	
 	
 \end{document}

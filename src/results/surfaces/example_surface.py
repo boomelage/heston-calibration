@@ -114,7 +114,8 @@ def make_surface(target_date=None, OUT=DATA, SAVE=False):
         high_move = str(high_move).strip().lower() == 'true'
     params = {"kappa": kappa, "theta": theta, "rho": rho, "eta": eta, "v0": v0}
     if MODEL == "bates":
-        # Carry the jump triple so smiles.py can rebuild a Bates engine from day_results['params'].
+        # Carry the jump triple so a consumer (e.g. make_eps) can rebuild a Bates engine from
+        # day_results['params']. (smiles.py rebuilds its engine straight from calibrations.csv now.)
         params.update(lambda_=float(row['lambda_']), nu=float(row['nu']), delta=float(row['delta']))
     day_results = {
         "params": params,

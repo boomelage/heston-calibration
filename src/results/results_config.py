@@ -48,46 +48,44 @@ MATURITIES_DAYS = np.arange(start=30, stop=730, step=30).tolist()
 
 
 # ------- `smiles/smiles.py` parameters
-
-# Plotted maturity window (calendar days). Market trades and model lines are both restricted to it,
-# so the scatter, the x-axis framing and the maturity colour key all line up.
-TMIN, TMAX = 100, 730
+#
+# smiles.py reads the calibrated params from results/<model>/calibrations/<objective>/calibrations.csv
+# (the model smile lines) and the market scatter from that day's calibration_tests/ file (the exact
+# contracts the day was fit on, with their market IV). It does not read the raw CBOE trades. The full
+# calibrated contract set is plotted; the two knobs below only thin it for readability.
 
 # Number of maturities drawn per figure. The plotted set always includes the lowest and highest
-# available maturity; the remaining NT-2 are spaced as equally as possible. Set NT >= the number
-# of available maturities to draw them all.
+# available maturity; the remaining NT-2 are spaced as equally as possible. Set NT >= the number of
+# available maturities, or NT = None, to draw them all.
 NT = 5
+
+# Maturity window (calendar days) the displayed smiles are clipped to before the NT sparse pick.
+# Either bound may be None to disable it: TMIN=None drops the lower bound, TMAX=None the upper,
+# both None draws every available maturity.
+TMIN, TMAX = 100, 750
 
 # Per-row maturity key: True draws a legend, False draws a colorbar.
 USE_LEGEND = True
 
-# Overlay real market implied vols (trade_iv) from data/options/raw/ as a scatter. The raw CBOE
-# trade files are git-ignored, so this is a no-op (with a printed warning) on a fresh clone.
-ENRICH_MARKET = True
-
-# Fallback moneyness window for the model lines / x-axis, used only when a day has no market data
-# to frame on (S/K calls, K/S puts). With market data present each wing is framed to that day's
-# available market moneyness instead.
+# Fallback moneyness window for the model lines / x-axis (S/K calls, K/S puts), used only when a day
+# has no calibration_tests file to frame on. With the scatter present each wing is framed to that
+# day's calibrated moneyness span instead.
 XLO, XHI = 0.8, 1.15
 
-# Market-scatter window. OTM market moneyness (S/K calls, K/S puts) is always in (0, 1]; we drop the
-# deep wing below MARKET_M_MIN and clip IV outliers from the deep-OTM corner at MARKET_IV_MAX.
-# Reparameterising each strike onto both wings maps the floor to the reciprocal ceiling MARKET_M_MAX,
-# so kept points span [MARKET_M_MIN, MARKET_M_MAX] on each wing.
-MARKET_M_MIN = 0.75
-MARKET_M_MAX = 1.0 / MARKET_M_MIN
-MARKET_IV_MAX = 2.0
-
 # Market-scatter thinning. Keep a sparse subset spaced ~MKTMONSTEP apart in moneyness (percentage
-# terms). 0.05 => ~5% gaps. Set to 0 to disable thinning (draw every point).
+# terms). 0.05 => ~5% gaps. Set to 0 or None to disable thinning (draw every calibrated point).
 MKTMONSTEP = 0.05
 
 # Moneyness step for the model smile lines (put_grid/call_grid resolution).
 SMILE_M_STEP = 0.005
 
-# Figure size (inches) for the two-panel smile figure, and the maturity colormap name.
+# Figure size (inches) for the two-panel smile figure, and the maturity colormap name. Each displayed
+# maturity is colored by its RANK (not its day-count value), so a qualitative colormap with distinct
+# categorical hues -- e.g. "tab10" (10 colors), "tab20" (20), "Set1", "Dark2" -- keeps adjacent
+# maturities easy to tell apart. A continuous map ("jet", "viridis") still works: it is sampled at
+# evenly spaced points by rank, but its neighboring hues are inherently closer.
 SMILE_FIGSIZE = (8, 2.7)
-SMILE_CMAP = "jet"
+SMILE_CMAP = "tab10"
 
 
 # ------- `surfaces/make_eps.py` parameters

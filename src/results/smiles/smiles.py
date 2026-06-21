@@ -241,9 +241,12 @@ def _save_day_figure(day, use_legend):
     spot = day['spot']
 
     def _wing_bounds(wing):
-        """Full moneyness span of the day's calibrated data on one wing, or the fallback window."""
+        """Moneyness span of the day's *displayed* calibrated data on one wing, or the fallback
+        window. Restricted to the displayed maturities `T` (clipped to [TMIN, TMAX] and sparsely
+        sampled) so the x-axis covers only where plotted market vols actually exist, not the wider
+        span of the maturities that were dropped from the figure."""
         if mkt is not None and len(mkt):
-            sub = mkt[mkt['w'] == wing]
+            sub = mkt[(mkt['w'] == wing) & (mkt['days_to_maturity'].isin(T))]
             if not sub.empty:
                 return float(sub['moneyness'].min()), float(sub['moneyness'].max())
         return XLO, XHI

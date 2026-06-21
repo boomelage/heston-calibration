@@ -74,9 +74,13 @@ MKTMONSTEP = 0.05
 # Moneyness step for the model smile lines (put_grid/call_grid resolution).
 SMILE_M_STEP = 0.005
 
-# Figure size (inches) for the two-panel smile figure, and the maturity colormap name.
+# Figure size (inches) for the two-panel smile figure, and the maturity colormap name. Each displayed
+# maturity is colored by its RANK (not its day-count value), so a qualitative colormap with distinct
+# categorical hues -- e.g. "tab10" (10 colors), "tab20" (20), "Set1", "Dark2" -- keeps adjacent
+# maturities easy to tell apart. A continuous map ("jet", "viridis") still works: it is sampled at
+# evenly spaced points by rank, but its neighboring hues are inherently closer.
 SMILE_FIGSIZE = (8, 2.7)
-SMILE_CMAP = "jet"
+SMILE_CMAP = "tab10"
 
 
 # ------- `surfaces/make_eps.py` parameters

@@ -76,7 +76,6 @@ def main(dates, use_legend=USE_LEGEND):
     dates = _normalize_dates(dates)
     cal = pd.read_csv(CALIBRATIONS_FILE, parse_dates=['date']).set_index('date').sort_index()
 
-    cmap = plt.get_cmap(SMILE_CMAP)
     days = []
     for date in dates:
         ts = pd.Timestamp(pd.to_datetime(date, format=r"%Y-%m-%d"))
@@ -87,7 +86,7 @@ def main(dates, use_legend=USE_LEGEND):
                 f"smiles: no calibration row on/before {date} in {CALIBRATIONS_FILE}")
         day = _day_from_row(row)
         days.append(day)
-        _save_day_figure(day, cmap, use_legend)
+        _save_day_figure(day, use_legend)
 
     write_smiles_TeX(days)
 
@@ -155,6 +154,23 @@ def _load_test_scatter(tag):
     return out[['w', 'days_to_maturity', 'strike', 'moneyness', 'trade_iv', 'volume']]
 
 
+def _maturity_colors(T, cmap_name=SMILE_CMAP):
+    """Map each displayed maturity to a distinct color by its RANK in the sorted list `T`, not by its
+    day-count value. Spacing by rank spreads the colors across the full palette even when day counts
+    cluster, and a qualitative colormap (tab10/tab20/Set1/...) gives categorical hues so adjacent
+    maturities stay easy to tell apart. A listed/qualitative map uses its own discrete entries (cycled
+    if there are more maturities than colors); a continuous map is sampled at evenly spaced points."""
+    T = sorted(T)
+    n = len(T)
+    cmap = plt.get_cmap(cmap_name)
+    base = getattr(cmap, 'colors', None)
+    if base is not None:
+        colors = [base[i % len(base)] for i in range(n)]
+    else:
+        colors = [cmap(i / max(n - 1, 1)) for i in range(n)]
+    return dict(zip(T, colors))
+
+
 def _sparse_maturities(T, nt=NT):
     """Sparsely pick at most `nt` maturities from the sorted list `T`. Always keeps the lowest and
     highest; the remaining nt-2 are spaced as equally as possible across the interior by indexing
@@ -188,7 +204,7 @@ def _sparse_market_strikes(sub, step=MKTMONSTEP):
     return pd.concat(keep, ignore_index=True)
 
 
-def _save_day_figure(day, cmap, use_legend):
+def _save_day_figure(day, use_legend):
     # Load the calibrated-contract scatter first so each wing's x-axis (and the model line grid) can
     # be framed to that day's calibrated moneyness span. When no tests file exists we draw model lines
     # only, over a default maturity grid and the XLO/XHI fallback window.
@@ -202,7 +218,9 @@ def _save_day_figure(day, cmap, use_legend):
         print(f"  [{day['tag']}] no maturities to draw; skipping")
         return
 
-    norm = mcolors.Normalize(vmin=min(T), vmax=max(T))
+    # One distinct color per displayed maturity, keyed by rank (see _maturity_colors). The same map
+    # colors the model lines and the market scatter so each mark sits on its matching line's color.
+    mat_colors = _maturity_colors(T)
     fig, (ax_put, ax_call) = plt.subplots(1, 2, sharey=True,
                                            figsize=SMILE_FIGSIZE,
                                            layout='constrained')
@@ -227,9 +245,9 @@ def _save_day_figure(day, cmap, use_legend):
     for t in T:
         maturity_date = calc_date + ql.Period(int(t), ql.Days)
         ivp = _model_wing_iv(engine, bsm, spot, maturity_date, put_grid, 'put')
-        ax_put.plot(put_grid, ivp, color=cmap(norm(t)), zorder=2)
+        ax_put.plot(put_grid, ivp, color=mat_colors[t], zorder=2)
         ivc = _model_wing_iv(engine, bsm, spot, maturity_date, call_grid, 'call')
-        ax_call.plot(call_grid, ivc, color=cmap(norm(t)), label=str(t), zorder=2)
+        ax_call.plot(call_grid, ivc, color=mat_colors[t], label=str(t), zorder=2)
         vols.extend([ivp, ivc])
 
     drew_market = False
@@ -248,7 +266,7 @@ def _save_day_figure(day, cmap, use_legend):
             if sub.empty:
                 continue
             ax.scatter(sub['moneyness'], sub['trade_iv'],
-                       color=cmap(norm(sub['cmat'].to_numpy())),
+                       color=[mat_colors[m] for m in sub['cmat']],
                        s=14, edgecolors='0.25', linewidths=0.3, zorder=3)
             drew_market = True
 
@@ -264,7 +282,10 @@ def _save_day_figure(day, cmap, use_legend):
     ax_put.set_xlim(put_lo - xpad, put_hi + xpad)
     ax_call.set_xlim(call_lo - xpad, call_hi + xpad)
 
-    ax_put.set_ylabel(r'Black implied vol $\widehat{\sigma}(\Phi^{\star})$')
+    if MODEL == "heston":
+        ax_put.set_ylabel(r'Black implied vol $\widehat{\sigma}(\Phi^{\star})$')
+    else:
+        ax_put.set_ylabel(r'Black implied vol $\widehat{\sigma}(\Theta^{\star})$')
     ax_put.set_xlabel(r'Moneyness $K/S$ (put wing)')
     ax_call.set_xlabel(r'Moneyness $S/K$ (call wing)')
     # Caption left-aligned to the left edge of the plot area (over the put wing), not centred.
@@ -275,8 +296,13 @@ def _save_day_figure(day, cmap, use_legend):
         fig.legend(handles, labels, loc='outside center right',
                    title='Days to maturity', fontsize=7, title_fontsize=8)
     else:
-        sm = cm.ScalarMappable(cmap=cmap, norm=norm)
-        fig.colorbar(sm, ax=(ax_put, ax_call), label='Days to maturity')
+        # Discrete colorbar: one band per displayed maturity, labeled with its day count.
+        listed = mcolors.ListedColormap([mat_colors[t] for t in T])
+        bnorm = mcolors.BoundaryNorm(np.arange(len(T) + 1) - 0.5, len(T))
+        sm = cm.ScalarMappable(cmap=listed, norm=bnorm)
+        cbar = fig.colorbar(sm, ax=(ax_put, ax_call), label='Days to maturity',
+                            ticks=np.arange(len(T)))
+        cbar.ax.set_yticklabels([str(t) for t in T])
 
     # When market vols are overlaid, label what the lines vs. the markers are (colors already
     # encode maturity via the key above).
@@ -296,20 +322,21 @@ def _save_day_figure(day, cmap, use_legend):
 def _row_caption(day):
     """The per-row caption drawn in the figure: only date, S_ref, Phi, Feller, IV-RMSE, RMSE."""
     p, f = day['params'], day['fit']
-    phi = (f"({p['theta']:.4f},\\,{p['kappa']:.4f},\\,{p['eta']:.4f},"
-           f"\\,{p['rho']:.4f},\\,{p['v0']:.4f})")
-    # Bates carries the jump triple in params; show it after Phi so the caption documents the full fit.
-    jumps = ""
+    phi = (f"{p['theta']:.4f},\\,{p['kappa']:.4f},\\,{p['eta']:.4f},"
+           f"\\,{p['rho']:.4f},\\,{p['v0']:.4f}")
     if 'lambda_' in p:
-        jumps = (f"$, (\\lambda,\\nu,\\delta)=({p['lambda_']:.4f},\\,"
-                 f"{p['nu']:.4f},\\,{p['delta']:.4f})$")
+        params = (
+            r"$\Theta^{\star}=$"f"$ ({phi}, {p['lambda_']:.4f},\\,"
+            f"{p['nu']:.4f},\\,{p['delta']:.4f})$"
+        )
+    else:
+        params = r"$\Phi^{\star}=$"f"$({phi})$"
     return (f"{day['tag']}:  "
             f"$S_{{\\mathrm{{ref}}}}={day['spot']:.2f}$,  "
             f"$\\mathcal{{F}}={f['feller']:.4f}$,  "
             f"IV-RMSE$={f['iv_rmse']:.4f}$,  "
             f"RMSE$={f['rmse']:.4f}$"
-            "\n"
-            r"$\Phi^{\star}=$"f"${phi}${jumps}")
+            "\n"+params)
 
 
 def write_smiles_TeX(days):

@@ -125,7 +125,11 @@ relative-price); the orchestrator passes its `OBJECTIVE` constant through.
 `surfaces/example_surface.py` (rebuilds a model IV/price surface from one calibration row),
 `surfaces/make_eps.py` (writes the OTM surface/smile EPS + `otm.tex`), `smiles/smiles.py` (per-day
 market-vs-model smile EPS + `smiles.tex`), and `tables/objective_comparison.py` (price-vs-vol metrics
-table). They resolve `REPO = Path(__file__).parents[2]` and read calibrations from / write figures into
+table). `smiles.py` does **not** read the raw CBOE trades: it draws the model smile lines from the
+calibrated params in `calibrations.csv` and overlays the market scatter straight from that day's
+`calibration_tests/` file (the exact contracts the day was fit on, market IV in the `volatility`
+column). A missing tests file drops the scatter (model lines only over `MATURITIES_DAYS`); a missing
+`calibrations.csv` row is a hard error. They resolve `REPO = Path(__file__).parents[2]` and read calibrations from / write figures into
 the **repo-level** `results/<model>/` tree, and share the QuantLib helpers (`build_model_engine` ->
 `build_heston_engine`/`build_bates_engine`, plus the engine-agnostic `heston_price`,
 `heston_implied_vol`) in `src/utils.py`. They are **model-aware**: `MODEL`/`OBJECTIVE` plus every
@@ -133,7 +137,8 @@ plotting/grid knob for `example_surface.py`, `make_eps.py` and `smiles.py` live 
 `src/results/results_config.py` (each of the three adds `src/results` to `sys.path` and imports from
 it). Set `MODEL` to `heston` or `bates` there and it picks the engine, the `results/<model>/...`
 source/output tree, and the figure labels for all three at once; the grids (`MONEYNESS`,
-`MATURITIES_DAYS`), the smile knobs (`TMIN/TMAX`, `NT`, `MARKET_*`, `MKTMONSTEP`, ...) and the surface
+`MATURITIES_DAYS`), the smile knobs (`NT`, `MKTMONSTEP` — each accepts `None` to draw every
+maturity/strike; `XLO/XHI` fallback window) and the surface
 view (`SURFACE_ELEV/AZIM`, figsizes) are tuned in the same place. (`objective_comparison.py` is **not**
 wired to `results_config.py`; it keeps its own `MODEL` constant.) `example_surface.py` carries the
 Bates jump triple in `day_results['params']`, and `smiles.py` shows it in the per-figure caption.

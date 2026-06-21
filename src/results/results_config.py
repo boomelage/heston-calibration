@@ -18,7 +18,7 @@ import numpy as np
 # MODEL picks the QuantLib engine (Heston vs Bates) AND the results/<model>/ output tree.
 # OBJECTIVE picks which calibration run to read (results/<model>/calibrations/<objective>/).
 # This module is the single source for both -- the other scripts import them from here.
-MODEL = "bates"      # 'heston' or 'bates'
+MODEL = "heston"      # 'heston' or 'bates'
 OBJECTIVE = "vol"     # 'vol' or 'price'
 
 # Matplotlib styling shared by smiles.py and make_eps.py. Computer Modern serif to match the

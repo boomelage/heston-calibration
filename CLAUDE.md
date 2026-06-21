@@ -39,20 +39,26 @@ through the same orchestrator. See `PLAN-Bates.md` for the design and the Bates 
 
 ## Environment & dependencies
 
-- **Python 3.12**, **QuantLib 1.35**. Also: `pandas`, `numpy`, `scipy`.
-- **Two proprietary packages by the repo author** provide the QuantLib convenience wrappers:
-  - `model_settings` — exports a ready instance `ms` (used as `ms.df_moneyness(df)`).
-  - `quantlib_pricers` — exports the class `vanilla_pricer` (used as `vanp = vanilla_pricer()`).
-  - These are **not** on PyPI; they live at `github.com/boomelage/{model_settings,quantlib_pricers}`
-    and are currently installed under `E:\Python\Lib\site-packages`. There is no `requirements.txt`,
-    `setup.py`, lockfile, or test suite in this repo.
+- **Python 3.12**, **QuantLib 1.35**. Also: `pandas`, `numpy`, `scipy`, `joblib`.
+- The QuantLib pricing wrapper is **vendored in-repo** at `src/pricing/` (formerly the author's
+  external `quantlib_pricers` package, now copied in so the repo is self-contained). It is a plain
+  directory with no `__init__.py`, so `pricing` is a namespace package: the single module
+  `vanilla_pricer.py` holds the class `vanilla_pricer` (used as `vanp = vanilla_pricer()`). The
+  upstream package's `asian_option_pricer` / `barrier_option_pricer` were dropped (this pipeline does
+  not price asians or barriers). The class is imported as `from pricing.vanilla_pricer import
+  vanilla_pricer` **after** `src` is added to `sys.path`. There is no `requirements.txt`, `setup.py`,
+  lockfile, or test suite in this repo.
 
 ## How to run
 
 The pipeline is three stages. There is no build/lint/test tooling — you run scripts directly. All
 model/calibration constants (surface coverage knobs, box bounds, the acceptance gate, the OTM
 filter floor/cutoff, the wing-weight knobs, the seed grid, the Bates bounds/seed) live in one place:
-`src/config.py`. Tune there, not in the individual modules. The driver calibrates **every** raw file in
+`src/config.py`. Tune there, not in the individual modules. The QuantLib **date conventions** (the
+`Actual365Fixed` day count and `UnitedStates.NYSE` calendar) are centralized there too, as
+`config.day_count(name=None)` / `config.calendar(name=None)` (the named choices are `DAY_COUNT_NAME`
+/ `CALENDAR_NAME`); both engines, both `utils` engine builders, the vendored `pricing.vanilla_pricer`,
+and the figure scripts call these instead of rebuilding the literals. The driver calibrates **every** raw file in
 `data/options/raw/` by default; `--LIMIT N` restricts to the `N` most recent trading days (by date).
 The full multi-year sample is ~3,217 trading days and one Heston `vol` run takes a few hours on this
 machine (multi-start LM, ~1,500 cells/day, 8 parallel jobs). A Bates run is ~4.5x slower per day (the
@@ -225,8 +231,9 @@ by `--MODEL {heston,bates}` (default `heston`) and the objective by `--OBJECTIVE
 **Stage 3 — calibration engine (`src/calibrate_heston.py`).** Pure function
 `calibrate_heston(vol_matrix, s, r, g) -> dict`, **hardened** (PLAN Work items 2 & 3). Builds a QuantLib
 `HestonProcess` / `HestonModel` with an `AnalyticHestonEngine` and one `HestonModelHelper` per
-non-NaN surface cell (maturity as `Period(days, Days)`, NYSE calendar, `Date.todaysDate()` as eval
-date — immaterial under the flat-forward curves used here). It then:
+non-NaN surface cell (maturity as `Period(days, Days)`, `config.calendar()` = NYSE, `Date.todaysDate()`
+as eval date — immaterial under the flat-forward curves used here; the flat curves use
+`config.day_count()` = `Actual365Fixed`). It then:
 
 1. **Multiple restarts:** for each of a small data-seeded grid of starting points (`_seed_grid`),
    calibrates with Levenberg–Marquardt under **box bounds**
@@ -289,7 +296,7 @@ Heston dict — the same keys plus `lambda_, nu, delta` — so the orchestrator 
 `[theta, kappa, eta, rho, v0, nu, delta, lambda]` — Heston's order, then `(nu, delta, lambda)`; this
 drives `BATES_PARAM_ORDER`/`BATES_LOW`/`BATES_HIGH` and the unpack. (2) The `BatesProcess(...)`
 constructor takes `(..., v0, kappa, theta, eta, rho, lambda, nu, delta)`, driving the seed expansion.
-(3) `vanp.bates_price(...)`/`df_bates_price` arg order (handled in `quantlib_pricers`). `feller` stays
+(3) `vanp.bates_price(...)`/`df_bates_price` arg order (handled in `src/pricing`). `feller` stays
 the Heston-diffusion quantity (jumps do not enter it; reported, never gates). **Acceptance gate:** IV-RMSE
 ≤ `IV_RMSE_ACCEPT` and no **Heston** param pegged — the pegging check runs on `params[:5]` only; the
 jump triple is **exempt** (`lambda≈0` is a legitimate Heston collapse, and `nu`/`delta` are unidentified
@@ -319,7 +326,7 @@ breaks a downstream stage:
   (note: `trade_iv` is renamed to `volatility` before this call).
 - `vanp.df_heston_price(df)` needs `spot_price, strike_price, days_to_maturity, risk_free_rate, dividend_rate, w, kappa, theta, rho, eta, v0`.
 - `vanp.df_bates_price(df)` needs the `df_heston_price` columns plus `lambda_, nu, delta` (added to
-  `quantlib_pricers` for the Bates model price column).
+  `src/pricing` for the Bates model price column).
 
 ## Known issues & fragility (verify before trusting outputs)
 
@@ -371,7 +378,7 @@ breaks a downstream stage:
   higher than the old near-money `price` baseline (`eta` median ≈0.89, `eta>1.5` ~8.5%, Feller<0 on 99.3%).
   This is PLAN.md Lever D (soft Feller penalty + revisit the `eta` cap).
 - **Bates is wired and pilot-verified, not yet a full baseline.** `--MODEL bates` runs end-to-end
-  (engine `src/calibrate_bates.py`, `df_bates_price` in `quantlib_pricers`, routing to
+  (engine `src/calibrate_bates.py`, `df_bates_price` in `src/pricing`, routing to
   `results/bates/calibrations/<objective>/`). On a **100-day pilot** (`--LIMIT 100`, the 2024-05..10
   window) Bates accepted **94/100** vs Heston **63/100** on the same days, fit **35% tighter** in
   IV-RMSE on the shared days, and roughly **halved `eta`** (1.17 -> 0.52: jumps absorb the tail the

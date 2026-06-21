@@ -39,8 +39,6 @@ import argparse
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from quantlib_pricers import vanilla_pricer
-vanp = vanilla_pricer()
 pd.options.display.float_format = '{:.5f}'.format
 
 SRC = Path(__file__).parent.resolve()
@@ -50,6 +48,8 @@ RESULTS = SRC.parent / "results"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+from pricing.vanilla_pricer import vanilla_pricer
+vanp = vanilla_pricer()
 from utils import _prepare_options
 from calibrate_heston import calibrate_heston
 from calibrate_bates import calibrate_bates

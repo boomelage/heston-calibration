@@ -10,8 +10,15 @@ code. The box bounds are only correct in `model.params()` order [theta, kappa, e
 objective map points at live QuantLib enum objects (kept next to the engine); the seed grid is a
 template a function expands. Expressing the bounds as a named dict (`BOUNDS`) with `PARAM_ORDER`
 turns the positional-order footgun into a single declared mapping.
+
+The date conventions (`day_count`, `calendar`) are the one place QuantLib objects are built in this
+module. They are pure market conventions (not engine-coupled like the `_ERR` objective enums), and
+were previously duplicated as literals across the engines, repricing wrappers and figure scripts, so
+they belong in one place. The serialisable choice is the *name* (`DAY_COUNT_NAME`/`CALENDAR_NAME`);
+the factories just map a name to a fresh QuantLib instance.
 """
 from pathlib import Path
+import QuantLib as ql
 
 # ---- Surface selection / coverage (calibrator_prototype._select_surface / calibrate_by_day) ----
 # Pooling the whole day (one fit) lets us take more maturities than the old per-spot path.
@@ -35,6 +42,43 @@ MAX_MOVE_PCT = 0.03  # intraday spot range above this flags the day (sticky-mone
 # (95% of fitted cells sit inside |lm| 0.22, and the smile plots only reach ~0.22).
 OTM_MONEYNESS_CUTOFF = 0.98
 OTM_MONEYNESS_FLOOR = 0.6
+
+# ---- QuantLib date conventions (single source of truth) ----
+# The day count for all flat-forward curves and the calendar for the calibration helpers. These were
+# hardcoded as `ql.Actual365Fixed()` / `ql.UnitedStates(ql.UnitedStates.NYSE)` in five places (both
+# engines, both utils engine builders, the vanilla pricer, and the figure scripts); they now live here.
+# Under the flat-forward curves used throughout, the helper calendar is immaterial to the fit, but it
+# is kept consistent so a future non-flat curve does not silently disagree between modules.
+# `day_count(name=None)` / `calendar(name=None)` return a FRESH instance (QuantLib value types are cheap
+# and safe to rebuild); `name=None` resolves to the canonical choice below.
+DAY_COUNT_NAME = "Actual365Fixed"
+CALENDAR_NAME = "UnitedStates.NYSE"
+_DAY_COUNTS = {
+    "Actual365Fixed": lambda: ql.Actual365Fixed(),
+    "Thirty360.USA": lambda: ql.Thirty360(ql.Thirty360.USA),
+}
+_CALENDARS = {
+    "UnitedStates.NYSE": lambda: ql.UnitedStates(ql.UnitedStates.NYSE),
+}
+
+
+def day_count(name=None):
+    """Fresh day-count instance for `name` (defaults to DAY_COUNT_NAME)."""
+    name = name or DAY_COUNT_NAME
+    try:
+        return _DAY_COUNTS[name]()
+    except KeyError:
+        raise ValueError(f"unsupported day count {name!r}; known: {sorted(_DAY_COUNTS)}")
+
+
+def calendar(name=None):
+    """Fresh calendar instance for `name` (defaults to CALENDAR_NAME)."""
+    name = name or CALENDAR_NAME
+    try:
+        return _CALENDARS[name]()
+    except KeyError:
+        raise ValueError(f"unsupported calendar {name!r}; known: {sorted(_CALENDARS)}")
+
 
 # ---- Engine: box bounds (calibrate_heston) ----
 # PARAM_ORDER is QuantLib's model.params() order; LOW/HIGH are derived from it so the order is

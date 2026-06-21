@@ -182,7 +182,7 @@ def calibrate_by_day(filepath, OBJECTIVE, MODEL):
     sel = _select_surface(df)
     if sel is None:
         return _skip_day(test_path, "thin", "no usable maturities")
-    sel = sel.sort_values('trade_size')
+    sel = sel.sort_values('trade_size', ascending=True)
     surf = sel.pivot_table(index='Kstar', columns='days_to_maturity',
                            values='trade_iv', aggfunc='last')
 

@@ -695,7 +695,7 @@
 		
 	\vfill
 	{\small
-		\bibliographystyle{chicago}
+		\bibliographystyle{plainnat}
 		\bibliography{refs-heston-calibration}
 	}
 	\vfill
@@ -703,8 +703,11 @@
 	
 	\appendix
 	
-	\input{results/heston/surfaces/plots/tex/surfaces.tex}
-	\newpage
+	\section{Example option prices}
+		\input{results/heston/surfaces/plots/tex/surfaces.tex}
+		\newpage
+		\input{results/bates/surfaces/plots/tex/surfaces.tex}
+		\newpage
 	
 	\begingroup
 	\raggedbottom

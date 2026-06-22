@@ -52,7 +52,7 @@ plt.rcParams.update(PLOT_RCPARAMS)
 ELEV, AZIM = SURFACE_ELEV, SURFACE_AZIM
 
 
-def plot_surface(grid, out_path, title=None, invert_K=False, AZIM_ADJUST=0.0):
+def plot_surface(grid, out_path, title=None, invert_K=False, invert_T=False, AZIM_ADJUST=0.0):
     """Draw one strike x maturity x price surface (grid: index=strike, columns=maturity_days)."""
 
     strikes = grid.index.to_numpy(dtype=float)
@@ -78,6 +78,8 @@ def plot_surface(grid, out_path, title=None, invert_K=False, AZIM_ADJUST=0.0):
     ax.set_xlabel(r'strike ($K$)')
     if invert_K:
         ax.invert_xaxis()
+    if invert_T:
+        ax.invert_yaxis()
     ax.set_ylabel(r'maturity in years ($T$)')
     ax.set_zlabel(r'price')
     ax.set_zlim(np.nanmin(Z), np.nanmax(Z))
@@ -117,7 +119,7 @@ calibrated pricing operator:
         \label{Fig:wings}
     \end{center}
     \begin{center}
-        \includegraphics[width=9cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/call_smile.eps}
+        \includegraphics[width=9cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/smile_surface.eps}
         \caption{\emph{Out of the money} implied volatilites from Figure~\ref{Fig:wings}}
     \end{center}
 \end{figure}
@@ -199,7 +201,7 @@ def main():
 
     plot_surface(otm_grid(df, 'call'), TEXDIR / "price_surface_calls.eps")
     plot_surface(otm_grid(df, 'put'), TEXDIR / "price_surface_puts.eps", invert_K=True)
-    plot_surface(smile_for(df), TEXDIR / "call_smile.eps",AZIM_ADJUST=-10)
+    plot_surface(smile_for(df), TEXDIR / "smile_surface.eps",AZIM_ADJUST=-10, invert_T=True)
     write_otm_TeX(spot, date, params, market, fit)
     
 if __name__ == "__main__":

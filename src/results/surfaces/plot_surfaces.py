@@ -115,18 +115,18 @@ calibrated pricing operator <operator>~\eqref{eq:accept}.
     \begin{center}
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/price_surface_puts.eps}
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/price_surface_calls.eps}
-        \caption{<MODEL_LABEL> OTM option prices for $S_{\mathrm{ref}}$ <spot> on <date> with <parameters>: puts wing (left) and calls wing (right).}
+        \caption{<MODEL_LABEL> option prices for $S_{\mathrm{ref}}$ <spot> on <date> with <parameters>: puts wing (left) and calls wing (right).}
         \label{Fig:wings}
     \end{center}
     \begin{center}
-        \includegraphics[width=6.25cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/put_smile.eps}
-        \includegraphics[width=6.25cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/call_smile.eps}
-        \caption{All put (left) and call (right) options from Figure~\ref{Fig:wings}}
+        \includegraphics[width=10cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/call_smile.eps}
+        \caption{Out-of-the-money implied volatilites from Figure~\ref{Fig:wings}}
     \end{center}
 \end{figure}
 
 """
-    
+#        \includegraphics[width=6.25cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/put_smile.eps}
+
     hestonparams = r'$\Phi^{\star} = (<theta>,\ <kappa>,\ <eta>,\ <rho>,\ <v0>)$'
     batesparams = r'$\Theta^{\star} = (<theta>,\ <kappa>,\ <eta>,\ <rho>,\ <v0>, \ <lambda>, \ <nu>, \ <delta>)$'
     paramstr = hestonparams if MODEL == 'heston' else batesparams
@@ -166,22 +166,28 @@ calibrated pricing operator <operator>~\eqref{eq:accept}.
     tex_path = TEXDIR / r"surfaces.tex"
     tex_path.write_text(TeX)
 
-def grid_for(df, side):
+def otm_grid(df, side):
     surface = df[df['w'] == side].copy()
     surface['moneyness'] = np.where(
         surface['w'] == 'call',
         surface['s_ref'] / surface['strike'],
         surface['strike'] / surface['s_ref']
     )
-    surface = surface[surface['moneyness']<=1]
+    surface = surface[surface['moneyness']<=1.15]
     return surface.pivot(index='strike', columns='maturity_days', values='price')
 
-def smile_for(df, side):
-    surface = df[df['w'] == side].copy()
-    return surface.pivot(index='strike', columns='maturity_days', values='price')
+def smile_for(df):
+    surface = df[df['w'] == 'call'].copy()
+    df['moneyness'] = np.where(
+        df['w'] == 'call',
+        df['s_ref'] / df['strike'],
+        df['strike'] / df['s_ref']
+    )
+    surface = df[df['moneyness']<1].copy().reset_index(drop=True)
+    return surface.pivot(index='strike', columns='maturity_days', values='implied_vol')
     
 def main():
-    from example_surface import make_surface  # type: ignore (MODEL/OBJECTIVE imported at module top)
+    from make_surface import make_surface  # type: ignore (MODEL/OBJECTIVE imported at module top)
     CALIBRATIONS_FILE = calib_paths(MODEL, OBJECTIVE)[0]
     cal = pd.read_csv(CALIBRATIONS_FILE)
     cal = cal.sort_values(by='iv_rmse',ascending=True).reset_index(drop=True)
@@ -194,10 +200,10 @@ def main():
     market = day_results['market']
     fit = day_results['fit']
 
-    plot_surface(grid_for(df, 'call'), TEXDIR / "price_surface_calls.eps")
-    plot_surface(grid_for(df, 'put'), TEXDIR / "price_surface_puts.eps", invert_K=True)
-    plot_surface(smile_for(df, 'call'), TEXDIR / "call_smile.eps")
-    plot_surface(smile_for(df, 'put'), TEXDIR / "put_smile.eps", invert_K=True)
+    plot_surface(otm_grid(df, 'call'), TEXDIR / "price_surface_calls.eps")
+    plot_surface(otm_grid(df, 'put'), TEXDIR / "price_surface_puts.eps", invert_K=True)
+    plot_surface(smile_for(df), TEXDIR / "call_smile.eps")
+    # plot_surface(smile_for(df), TEXDIR / "put_smile.eps", invert_K=True)
     write_otm_TeX(spot, date, params, market, fit)
     
 if __name__ == "__main__":

@@ -52,7 +52,7 @@ plt.rcParams.update(PLOT_RCPARAMS)
 ELEV, AZIM = SURFACE_ELEV, SURFACE_AZIM
 
 
-def plot_surface(grid, out_path, title=None, invert_K=False):
+def plot_surface(grid, out_path, title=None, invert_K=False, AZIM_ADJUST=0.0):
     """Draw one strike x maturity x price surface (grid: index=strike, columns=maturity_days)."""
 
     strikes = grid.index.to_numpy(dtype=float)
@@ -74,7 +74,7 @@ def plot_surface(grid, out_path, title=None, invert_K=False):
  
     ax.grid(False)
     ax.tick_params(labelsize=9, colors="black")
-    ax.view_init(elev=ELEV, azim=AZIM)
+    ax.view_init(elev=ELEV, azim=AZIM+AZIM_ADJUST)
     ax.set_xlabel(r'strike ($K$)')
     if invert_K:
         ax.invert_xaxis()
@@ -196,7 +196,7 @@ def main():
 
     plot_surface(otm_grid(df, 'call'), TEXDIR / "price_surface_calls.eps")
     plot_surface(otm_grid(df, 'put'), TEXDIR / "price_surface_puts.eps", invert_K=True)
-    plot_surface(smile_for(df), TEXDIR / "call_smile.eps")
+    plot_surface(smile_for(df), TEXDIR / "call_smile.eps",AZIM_ADJUST=-10)
     write_otm_TeX(spot, date, params, market, fit)
     
 if __name__ == "__main__":

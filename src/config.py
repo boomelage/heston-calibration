@@ -100,6 +100,15 @@ BOUND_TOL = 1e-3        # fraction of a bound's span within which a param counts
 # For BlackCalibrationHelper.impliedVolatility(price, accuracy, maxEval, lo, hi).
 IV_ACC, IV_MAXEVAL, IV_LO, IV_HI = 1e-6, 500, 1e-4, 5.0
 
+# ---- Engine: optimizer (Levenberg-Marquardt + EndCriteria) ----
+# Both calibration engines (calibrate_heston / calibrate_bates) build their LM optimizer and stopping
+# criteria from these. Plain numeric args (not live ql objects), so they live here; the engines
+# construct ql.LevenbergMarquardt(*LM_ARGS) and ql.EndCriteria(*END_CRITERIA_ARGS).
+#   LevenbergMarquardt(epsfcn, xtol, gtol)
+LM_ARGS = (1e-8, 1e-8, 1e-8)
+#   EndCriteria(maxIterations, maxStationaryStateIterations, rootEpsilon, functionEpsilon, gradientNormEpsilon)
+END_CRITERIA_ARGS = (1000, 100, 1e-8, 1e-8, 1e-8)
+
 # ---- Engine: wing weighting (PLAN.md Phase 3 Lever B) ----
 # Up-weight OTM wing cells in the LM objective by |log(Kstar/S_ref)| so the fit stops trading the
 # wings away for the body. weight = 1 + GAIN * (|log(K/S)| / SCALE) ** POWER  (1 at ATM, rising into

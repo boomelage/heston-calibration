@@ -304,8 +304,9 @@ Returns `{theta, kappa, eta, rho, v0, feller, iv_rmse, rmse, n_helpers, accepted
 `config.py` as the named `BOUNDS` dict; `LOW`/`HIGH` are derived as `[BOUNDS[p][L/H] for p in
 PARAM_ORDER]`, with `PARAM_ORDER = ("theta","kappa","eta","rho","v0")` declaring that order in exactly
 one place (get `PARAM_ORDER` wrong and bounds land on the wrong params). The engine imports `LOW`/`HIGH`
-/`IV_RMSE_ACCEPT`/the seed-grid template/the `WING_WEIGHT_GAIN` flag from `config.py`; only the `_ERR`
-string→QuantLib-enum map (live `ql` objects) stays in `calibrate_heston.py`.
+/`IV_RMSE_ACCEPT`/the seed-grid template/the `WING_WEIGHT_GAIN` flag/the optimizer args
+(`LM_ARGS`, `END_CRITERIA_ARGS`, fed to `ql.LevenbergMarquardt`/`ql.EndCriteria`) from `config.py`; only
+the `_ERR` string→QuantLib-enum map (live `ql` objects) stays in `calibrate_heston.py`.
 
 **Shared engine helpers (`src/_engine_common.py`).** The model-agnostic helpers `_on_boundary(params,
 low, high)`, `_seed_var`, `_wing_weight`, `_iv_rmse` were factored out of `calibrate_heston.py` so the

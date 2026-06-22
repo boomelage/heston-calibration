@@ -247,15 +247,24 @@ pooled, moneyness-normalised surface — not the old per-0.5-spot-bucket fits:
    `calibration_tests/cboe_spx_calibration_tests_<date>.csv`. Repricing uses each contract's
    **original** `spot_price`/`strike_price` (Heston params are spot-independent), not `S_ref`/`Kstar`.
    A rejected or too-thin day returns `None` and **removes** any stale per-day tests file.
-8. The module-level driver collects the returned rows across the OTM files (all, or the `--LIMIT N`
-   most recent) and **splits** them: accepted rows (no `reason` key) go to the single
+8. The module-level driver consumes the returned rows across the OTM files (all, or the `--LIMIT N`
+   most recent) as each worker finishes (joblib `return_as="generator_unordered"`) and **splits** them:
+   accepted rows (no `reason` key) go to the single
    `results/<model>/calibrations/<objective>/calibrations.csv`, rejected rows (each carries a `reason`)
-   go to the complementary `results/<model>/calibrations/<objective>/rejections.csv` — both sorted by date and fully
-   **regenerated** each run (no stale rows survive), and an empty set **removes** its file. Accepted +
+   go to the complementary `results/<model>/calibrations/<objective>/rejections.csv`. **`calibrations.csv`
+   is appended incrementally** — the file is truncated up front, then each accepted row is appended from
+   the single main process the moment its day completes, so the file is **readable mid-run** (in
+   worker-completion order); once the run finishes it is **rewritten sorted by date**. All appends happen
+   in the one main process (workers never touch the file, they only return the row dict), so the serial
+   write needs no locking and rows cannot interleave; a partial-but-valid file survives an interrupted run.
+   `rejections.csv` is still written **once at the end** (sorted by date). Both are fully **regenerated**
+   each run (no stale rows survive), and an empty set **removes** its file. Accepted +
    rejected together cover every attempted day, so the accept rate and the pegged-vs-thin-vs-IV
    rejection split are auditable directly (the driver also prints them). Because an accepted row is
    returned exactly when a tests file is written, `calibrations.csv` and the per-day tests files always
-   describe the same accepted set (no desync).
+   describe the same accepted set (no desync); mid-run, a row appears only after its tests file is on
+   disk (the worker writes the tests file before returning the row), so any row present points at an
+   existing tests file.
 
 The per-day **tests** path is built from `_objective_paths(MODEL, OBJECTIVE)` (a thin wrapper over
 `config.calib_paths`): the tests directory `results/<model>/calibrations/<objective>/calibration_tests/`

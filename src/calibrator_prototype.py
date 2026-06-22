@@ -19,7 +19,11 @@ below use each trade's *original* spot/strike, not the normalised K*.
 
 Output: the parameters accumulate into a SINGLE `results/calibrations/<objective>/calibrations.csv`
 (one row per trading day, keyed by date, recording S_ref, r, g, the five params, feller, rmse,
-coverage counts and the intraday spot range) -- fully regenerated each run from the accepted days.
+coverage counts and the intraday spot range). It is APPENDED INCREMENTALLY as each day completes
+(streamed back via joblib's `return_as="generator_unordered"` and written from the single main
+process, so the file is readable mid-run in worker-completion order), then REWRITTEN SORTED BY DATE
+once the run finishes -- so the finished artefact still holds the accepted days, date-sorted, exactly
+as before. Truncated up front, so an interrupted run leaves a partial (but valid) file.
 The bulky per-day repricing diagnostics stay one-file-per-day under
 `results/calibrations/<objective>/calibration_tests/`. A day is
 written to calibration_tests exactly when it contributes a row, so the two outputs always describe
@@ -297,13 +301,35 @@ def main():
     # rejection (carries 'reason'). Split them into the two complementary files. The loop covers all
     # raw trades files, so both files are fully regenerated each run (no stale rows survive); an empty
     # set removes its file rather than leaving it stale.
-    results = [r for r in Parallel(n_jobs=max_jobs)(delayed(calibrate_by_day)(f, args.OBJECTIVE, args.MODEL) for f in files)
-               if r is not None]
-    accepted = [r for r in results if 'reason' not in r]
-    rejected = [r for r in results if 'reason' in r]
+    #
+    # calibrations.csv is streamed: results come back via `return_as="generator_unordered"` as each
+    # worker finishes, and the main process appends each accepted row immediately so the file is
+    # readable mid-run. All writes happen here in the single main process (the workers never touch
+    # calibrations.csv -- they only return the row dict), so the serial append loop needs no locking
+    # and rows cannot interleave. Mid-run the rows land in worker-completion order; the final block
+    # below rewrites the file sorted by date, so the finished artefact matches the old contract.
+    # rejections.csv is still written once at the end (see below).
+    if CALIBRATIONS_FILE.exists():
+        CALIBRATIONS_FILE.unlink()   # truncate up front; a partial file on interrupt is intended
+    accepted, rejected = [], []
+    header_written = False
+    for r in Parallel(n_jobs=max_jobs, return_as="generator_unordered")(
+            delayed(calibrate_by_day)(f, args.OBJECTIVE, args.MODEL) for f in files):
+        if r is None:
+            continue
+        if 'reason' in r:
+            rejected.append(r)
+        else:
+            accepted.append(r)
+            # Append this day's row now (columns are identical across a (MODEL, OBJECTIVE) run, so a
+            # header written from the first row stays valid for the rest).
+            pd.DataFrame([r]).set_index('date').to_csv(
+                CALIBRATIONS_FILE, mode='a', header=not header_written)
+            header_written = True
 
     SPEC_FILE = spec_path(args.MODEL, args.OBJECTIVE)
     if accepted:
+        # Overwrite the append-order file with the date-sorted final version (matches the prior contract).
         out = pd.DataFrame(accepted).set_index('date').sort_index()
         out.to_csv(CALIBRATIONS_FILE)
         print(f"\nwrote {len(accepted)} accepted day(s) -> {CALIBRATIONS_FILE}")

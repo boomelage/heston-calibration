@@ -456,7 +456,7 @@ comparison**, which needs both result sets on disk at once — hence routing is 
   `results/calibrations/...` to `results/heston/...`; Bates writes under `results/bates/...`.
   `config.calib_paths(model, objective)` is the single source of truth.
 - **Downstream consumers made model-aware** (a module-level `MODEL` constant each, routing through
-  `config.calib_paths` / `utils.build_model_engine`): `validate_calibrations.py`, `example_surface.py`,
+  `config.calib_paths` / `utils.build_model_engine`): `validate_calibrations.py`, `make_surface.py`,
   `smiles.py`, `plot_surfaces.py`, `objective_comparison.py`. `utils.py` gained `build_bates_engine` + the
   `build_model_engine(row, calc_date, model)` dispatcher; the pricing/inversion helpers were already
   engine-agnostic.

@@ -157,7 +157,7 @@ DataFrame. `objective` selects the in-engine LM objective ("vol" IV-space, the d
 relative-price); the orchestrator passes its `OBJECTIVE` constant through.
 
 **Downstream figure/table scripts** live under `src/results/` (moved there from `results/`):
-`surfaces/example_surface.py` (rebuilds a model IV/price surface from one calibration row),
+`surfaces/make_surface.py` (rebuilds a model IV/price surface from one calibration row),
 `surfaces/plot_surfaces.py` (writes the OTM surface/smile EPS + `otm.tex`), `smiles/smiles.py` (per-day
 market-vs-model smile EPS + `smiles.tex`), and `tables/objective_comparison.py` (price-vs-vol metrics
 table). `smiles.py` does **not** read the raw CBOE trades: it draws the model smile lines from the
@@ -168,14 +168,14 @@ column). A missing tests file drops the scatter (model lines only over `MATURITI
 the **repo-level** `results/<model>/` tree, and share the QuantLib helpers (`build_model_engine` ->
 `build_heston_engine`/`build_bates_engine`, plus the engine-agnostic `model_price`,
 `model_implied_vol`) in `src/utils.py`. They are **model-aware**: `MODEL`/`OBJECTIVE` plus every
-plotting/grid knob for `example_surface.py`, `plot_surfaces.py` and `smiles.py` live in **one** file,
+plotting/grid knob for `make_surface.py`, `plot_surfaces.py` and `smiles.py` live in **one** file,
 `src/results/results_config.py` (each of the three adds `src/results` to `sys.path` and imports from
 it). Set `MODEL` to `heston` or `bates` there and it picks the engine, the `results/<model>/...`
 source/output tree, and the figure labels for all three at once; the grids (`MONEYNESS`,
 `MATURITIES_DAYS`), the smile knobs (`NT`, `MKTMONSTEP` — each accepts `None` to draw every
 maturity/strike; `XLO/XHI` fallback window) and the surface
 view (`SURFACE_ELEV/AZIM`, figsizes) are tuned in the same place. (`objective_comparison.py` is **not**
-wired to `results_config.py`; it keeps its own `MODEL` constant.) `example_surface.py` carries the
+wired to `results_config.py`; it keeps its own `MODEL` constant.) `make_surface.py` carries the
 Bates jump triple in `day_results['params']`, and `smiles.py` shows it in the per-figure caption.
 (`objective_comparison.py` needs *both* a price and a vol run for the chosen model on disk.) Run e.g.
 `python src/results/surfaces/plot_surfaces.py` then `python src/results/smiles/smiles.py` after a
@@ -426,7 +426,7 @@ breaks a downstream stage:
   IV-RMSE on the shared days, and roughly **halved `eta`** (1.17 -> 0.52: jumps absorb the tail the
   Heston vol-of-vol was overfitting); Feller stays violated. The weakly-identified `nu`/`delta` park on
   their bounds (gate-exempt), a sign those two bounds are tight. The downstream consumers are now
-  **model-aware** (a `MODEL` constant each; `validate_calibrations.py`, `example_surface.py`,
+  **model-aware** (a `MODEL` constant each; `validate_calibrations.py`, `make_surface.py`,
   `smiles.py`, `plot_surfaces.py`, `objective_comparison.py`). **Not yet done:** a full multi-year Bates run,
   and an optional `nu`/`delta` bound widening. See `PLAN.md`'s `Completed tasks` (Bates extension, PR #12).
 - The `data/__pycache__/` holds bytecode for deleted modules (`get_data`, `get_options`, ...) — ignore it.

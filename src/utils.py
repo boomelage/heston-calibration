@@ -78,7 +78,7 @@ def implied_vol(price, w, S, K, r, g, T):
         return np.nan
 
 
-# ---- Model-engine helpers (used by the results/ figure scripts: example_surface, plot_surfaces, smiles).
+# ---- Model-engine helpers (used by the results/ figure scripts: make_surface, plot_surfaces, smiles).
 # Moved here from the former src/results/surfaces/utils.py so there is one shared utils module. These
 # evaluate whatever QuantLib pricing engine they are handed -- Heston OR Bates, built by
 # build_model_engine -- so they are model-agnostic (the engine carries the params). Distinct from the
@@ -136,7 +136,7 @@ def build_bates_engine(row, calculation_date):
 
 def build_model_engine(row, calculation_date, model):
     """Dispatch to the Heston or Bates engine builder by model name. Same return shape either way, so
-    the figure scripts (example_surface, smiles) stay model-agnostic. The downstream pricing/inversion
+    the figure scripts (make_surface, smiles) stay model-agnostic. The downstream pricing/inversion
     helpers (`model_price`, `model_implied_vol`) take the engine and work with either."""
     if model == "bates":
         return build_bates_engine(row, calculation_date)

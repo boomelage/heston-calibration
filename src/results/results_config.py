@@ -7,7 +7,7 @@ switches are ``MODEL`` (picks the QuantLib engine -- Heston vs Bates -- AND the
 read, ``results/<model>/calibrations/<objective>/``). Everything else is per-script
 grid/plot parameters, grouped by the script that consumes it.
 
-Imported by ``surfaces/example_surface.py``, ``smiles/smiles.py`` and
+Imported by ``surfaces/make_surface.py``, ``smiles/smiles.py`` and
 ``surfaces/plot_surfaces.py`` (each adds ``src/results`` to ``sys.path`` then
 ``import results_config``).
 """
@@ -34,11 +34,11 @@ PLOT_RCPARAMS = {
 
 # Placeholder Black vol seeded into BlackConstantVol for the price->IV inversion. impliedVolatility
 # solves for the vol that reprices the model NPV, so this value is ignored; it only initialises the
-# term structure. Used by example_surface.make_surface and smiles._day_engine.
+# term structure. Used by make_surface.make_surface and smiles._day_engine.
 INVERSION_PLACEHOLDER_VOL = 0.20
 
 
-# ------- `surfaces/example_surface.py` parameters
+# ------- `surfaces/make_surface.py` parameters
 
 # Moneyness grid (strike = m * spot) the model surface is sampled on. K/S around the money.
 MONEYNESS = np.round(np.arange(0.75, 1.25, 0.005), 4).tolist()   # 0.75 .. 1.245

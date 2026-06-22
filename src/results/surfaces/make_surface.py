@@ -15,7 +15,7 @@ inversion returns spurious roots in the short-dated far-OTM corner (prices ~0), 
 We sample on a moneyness grid (strikes = m * spot) and a maturity grid (in days), and write the
 result both long-form (one row per grid point) and as a strike x maturity pivot for inspection.
 
-Run:  python src/results/surfaces/example_surface.py
+Run:  python src/results/surfaces/make_surface.py
 Out:  results/example_surface.csv        (long: strike, maturity_days, moneyness, implied_vol)
       results/example_surface_grid.csv   (pivot: index=strike, columns=maturity_days)
 """

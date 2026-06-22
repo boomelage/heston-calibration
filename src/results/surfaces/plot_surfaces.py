@@ -23,7 +23,7 @@ from mpl_toolkits.mplot3d import Axes3D  # registers the '3d' projection; also t
 from pathlib import Path
 
 # This script now lives under src/results/surfaces/, but reads/writes the repo-level results/ tree.
-# `from example_surface import ...` resolves from this dir; SURFACES routes figure I/O to repo/results/.
+# `from make_surface import ...` resolves from this dir; SURFACES routes figure I/O to repo/results/.
 # RESULTS_CODE (src/results) holds results_config.py, the central knob file for the figure scripts.
 import sys
 HERE = Path(__file__).parent.resolve()                 # src/results/surfaces
@@ -89,11 +89,6 @@ def plot_surface(grid, out_path, title=None, invert_K=False):
     plt.close(fig)
     print(f"wrote {out_path.name}")
 
-# def _load_data():
-#     df = pd.read_csv(SURFACE_CSV)
-#     with open(DAY_RESULTS, 'rb') as file:
-#         day_results = pickle.load(file)
-#     return (df, day_results)
 
 def write_otm_TeX(spot, date, params, market, fit):
 
@@ -120,12 +115,11 @@ calibrated pricing operator <operator>~\eqref{eq:accept}.
     \end{center}
     \begin{center}
         \includegraphics[width=10cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/call_smile.eps}
-        \caption{Out-of-the-money implied volatilites from Figure~\ref{Fig:wings}}
+        \caption{\emph{Out of the money} implied volatilites from Figure~\ref{Fig:wings}}
     \end{center}
 \end{figure}
 
 """
-#        \includegraphics[width=6.25cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/put_smile.eps}
 
     hestonparams = r'$\Phi^{\star} = (<theta>,\ <kappa>,\ <eta>,\ <rho>,\ <v0>)$'
     batesparams = r'$\Theta^{\star} = (<theta>,\ <kappa>,\ <eta>,\ <rho>,\ <v0>, \ <lambda>, \ <nu>, \ <delta>)$'
@@ -203,7 +197,6 @@ def main():
     plot_surface(otm_grid(df, 'call'), TEXDIR / "price_surface_calls.eps")
     plot_surface(otm_grid(df, 'put'), TEXDIR / "price_surface_puts.eps", invert_K=True)
     plot_surface(smile_for(df), TEXDIR / "call_smile.eps")
-    # plot_surface(smile_for(df), TEXDIR / "put_smile.eps", invert_K=True)
     write_otm_TeX(spot, date, params, market, fit)
     
 if __name__ == "__main__":

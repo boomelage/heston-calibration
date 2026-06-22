@@ -258,7 +258,14 @@ pooled, moneyness-normalised surface — not the old per-0.5-spot-bucket fits:
    in the one main process (workers never touch the file, they only return the row dict), so the serial
    write needs no locking and rows cannot interleave; a partial-but-valid file survives an interrupted run.
    `rejections.csv` is still written **once at the end** (sorted by date). Both are fully **regenerated**
-   each run (no stale rows survive), and an empty set **removes** its file. Accepted +
+   each run (no stale rows survive), and an empty set **removes** its file. **Ctrl-C does not abort**:
+   a `KeyboardInterrupt` stops the loop and falls through to the end-of-run block, so the authoritative
+   date-sorted `calibrations.csv` + `config_spec.json` are still written from the days completed so far.
+   The end-of-run writes (and the start truncate) go through `_write_blocking`: if the target file is
+   **locked** (e.g. open in Excel) the write raises `PermissionError`, and instead of crashing the run
+   prompts with `input()` ("press Enter to retry") and retries until it succeeds. The mid-run
+   incremental flush is best-effort by contrast: a momentary lock there is warned and skipped (the row
+   is still written by the end-of-run rewrite), never blocking the worker loop. Accepted +
    rejected together cover every attempted day, so the accept rate and the pegged-vs-thin-vs-IV
    rejection split are auditable directly (the driver also prints them). Because an accepted row is
    returned exactly when a tests file is written, `calibrations.csv` and the per-day tests files always

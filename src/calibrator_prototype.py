@@ -23,7 +23,10 @@ coverage counts and the intraday spot range). It is APPENDED INCREMENTALLY as ea
 (streamed back via joblib's `return_as="generator_unordered"` and written from the single main
 process, so the file is readable mid-run in worker-completion order), then REWRITTEN SORTED BY DATE
 once the run finishes -- so the finished artefact still holds the accepted days, date-sorted, exactly
-as before. Truncated up front, so an interrupted run leaves a partial (but valid) file.
+as before. Truncated up front, so an interrupted run leaves a partial (but valid) file. Ctrl-C
+(KeyboardInterrupt) does not abort: it stops the loop and still writes the authoritative
+calibrations.csv + config_spec.json from the days completed so far. The end-of-run writes wait-and-retry
+if the target file is locked (e.g. open in Excel), prompting for Enter rather than crashing.
 The bulky per-day repricing diagnostics stay one-file-per-day under
 `results/calibrations/<objective>/calibration_tests/`. A day is
 written to calibration_tests exactly when it contributes a row, so the two outputs always describe
@@ -95,6 +98,17 @@ def _objective_paths(model, objective):
     validate_calibrations.py rebuilds the same directory from the same rule, so the two stay in lock-step.
     """
     return calib_paths(model, objective)
+
+
+def _write_blocking(action, target):
+    """Run write `action`; if `target` is locked (PermissionError), wait for the user to free it and
+    retry. Loops until it succeeds. KeyboardInterrupt still propagates so the user can abort the wait."""
+    while True:
+        try:
+            return action()
+        except PermissionError:
+            input(f"\n{target} is locked (close it in any program holding it open, e.g. Excel), "
+                  f"then press Enter to retry... ")
 
 
 def _skip_day(test_path, reason, detail, iv_rmse=np.nan,
@@ -310,50 +324,67 @@ def main():
     # below rewrites the file sorted by date, so the finished artefact matches the old contract.
     # rejections.csv is still written once at the end (see below).
     if CALIBRATIONS_FILE.exists():
-        CALIBRATIONS_FILE.unlink()   # truncate up front; a partial file on interrupt is intended
+        # truncate up front; a partial file on interrupt is intended
+        _write_blocking(CALIBRATIONS_FILE.unlink, CALIBRATIONS_FILE)
     accepted, rejected = [], []
     header_written = False
-    for r in Parallel(n_jobs=max_jobs, return_as="generator_unordered")(
-            delayed(calibrate_by_day)(f, args.OBJECTIVE, args.MODEL) for f in files):
-        if r is None:
-            continue
-        if 'reason' in r:
-            rejected.append(r)
-        else:
-            accepted.append(r)
-            # Append this day's row now (columns are identical across a (MODEL, OBJECTIVE) run, so a
-            # header written from the first row stays valid for the rest).
-            pd.DataFrame([r]).set_index('date').to_csv(
-                CALIBRATIONS_FILE, mode='a', header=not header_written)
-            header_written = True
+    # Ctrl-C stops the loop but does NOT abort: we fall through to the end-of-run block and still
+    # write the authoritative calibrations.csv + config_spec.json from the days completed so far.
+    try:
+        for r in Parallel(n_jobs=max_jobs, return_as="generator_unordered")(
+                delayed(calibrate_by_day)(f, args.OBJECTIVE, args.MODEL) for f in files):
+            if r is None:
+                continue
+            if 'reason' in r:
+                rejected.append(r)
+            else:
+                accepted.append(r)
+                # Append this day's row now (columns are identical across a (MODEL, OBJECTIVE) run, so a
+                # header written from the first row stays valid for the rest). The mid-run flush is
+                # best-effort: if the file is momentarily locked we skip it (the row is already in
+                # `accepted`, so the end-of-run sorted rewrite still includes it) rather than stall the
+                # worker loop. Leaving header_written unset re-emits the header on the next good flush.
+                try:
+                    pd.DataFrame([r]).set_index('date').to_csv(
+                        CALIBRATIONS_FILE, mode='a', header=not header_written)
+                    header_written = True
+                except PermissionError:
+                    print(f"WARNING: {CALIBRATIONS_FILE} is locked; skipping mid-run flush "
+                          f"(row kept, written at end)")
+    except KeyboardInterrupt:
+        print(f"\nKeyboardInterrupt: stopping after {len(accepted)} accepted / {len(rejected)} "
+              f"rejected day(s); finishing writes...")
 
     SPEC_FILE = spec_path(args.MODEL, args.OBJECTIVE)
     if accepted:
         # Overwrite the append-order file with the date-sorted final version (matches the prior contract).
+        # The final writes block-and-retry on a file lock (see _write_blocking) instead of crashing.
         out = pd.DataFrame(accepted).set_index('date').sort_index()
-        out.to_csv(CALIBRATIONS_FILE)
+        _write_blocking(lambda: out.to_csv(CALIBRATIONS_FILE), CALIBRATIONS_FILE)
         print(f"\nwrote {len(accepted)} accepted day(s) -> {CALIBRATIONS_FILE}")
         # Snapshot the exact config this run used next to calibrations.csv (Python-readable for the
         # downstream LaTeX-fragment scripts). Written iff calibrations.csv is, removed alongside it.
-        write_config_spec(args.MODEL, args.OBJECTIVE, args.LIMIT, len(accepted), len(rejected))
+        _write_blocking(
+            lambda: write_config_spec(args.MODEL, args.OBJECTIVE, args.LIMIT, len(accepted), len(rejected)),
+            SPEC_FILE)
         print(f"wrote config snapshot -> {SPEC_FILE}")
     else:
         if CALIBRATIONS_FILE.exists():
-            CALIBRATIONS_FILE.unlink()
+            _write_blocking(CALIBRATIONS_FILE.unlink, CALIBRATIONS_FILE)
         if SPEC_FILE.exists():
-            SPEC_FILE.unlink()
+            _write_blocking(SPEC_FILE.unlink, SPEC_FILE)
         print(f"\nno accepted days; removed {CALIBRATIONS_FILE}")
 
     if rejected:
         rej = pd.DataFrame(rejected).set_index('date').sort_index()
-        rej.to_csv(REJECTIONS_FILE)
+        _write_blocking(lambda: rej.to_csv(REJECTIONS_FILE), REJECTIONS_FILE)
         attempted = len(accepted) + len(rejected)
         print(f"wrote {len(rejected)} rejected day(s) -> {REJECTIONS_FILE}")
         print(f"accept rate {len(accepted)}/{attempted} = {len(accepted) / attempted:.1%}; "
               f"rejections by reason: {rej['reason'].value_counts().to_dict()}")
     else:
         if REJECTIONS_FILE.exists():
-            REJECTIONS_FILE.unlink()
+            _write_blocking(REJECTIONS_FILE.unlink, REJECTIONS_FILE)
         print("no rejected days; removed", REJECTIONS_FILE)
 
 

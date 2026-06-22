@@ -94,7 +94,7 @@ def write_otm_TeX(spot, date, params, market, fit):
 
     TeX = \
 r"""
-\section{Example option prices} Produced by the market\!\,\footnote{
+\textbf{<MODEL_LABEL> model prices} produced by the market\!\,\footnote{
 The fit uses <nhelpers> calibration cells across <nmats> maturities and <nstrikes> strikes,
 backed by <volume> contracts of traded volume.
 The reference spot was $S_{\mathrm{ref}} = <spot>$,
@@ -105,7 +105,10 @@ with a relative-price RMSE of <rmse>.
 The Feller condition <fellersign> at this calibration,
 with $2\kappa\theta - \eta^2 = <feller>$.
 } 
-calibrated pricing operator <operator>~\eqref{eq:accept}.
+calibrated pricing operator:
+\begin{center}
+    <operator>~\eqref{eq:accept}.
+\end{center}
 \begin{figure}[H]
     \begin{center}
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/price_surface_puts.eps}
@@ -114,7 +117,7 @@ calibrated pricing operator <operator>~\eqref{eq:accept}.
         \label{Fig:wings}
     \end{center}
     \begin{center}
-        \includegraphics[width=10cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/call_smile.eps}
+        \includegraphics[width=9cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/call_smile.eps}
         \caption{\emph{Out of the money} implied volatilites from Figure~\ref{Fig:wings}}
     \end{center}
 \end{figure}

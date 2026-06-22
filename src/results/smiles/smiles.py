@@ -30,7 +30,7 @@ from results_config import (  # type: ignore
     MODEL, OBJECTIVE, PLOT_RCPARAMS, INVERSION_PLACEHOLDER_VOL, NT, USE_LEGEND,
     XLO, XHI, MKTMONSTEP, SMILE_M_STEP, SMILE_FIGSIZE, SMILE_CMAP, MATURITIES_DAYS,
     TMIN, TMAX)
-from utils import build_model_engine, heston_implied_vol # type: ignore
+from utils import build_model_engine, model_implied_vol # type: ignore
 from config import calendar as ql_calendar, calib_paths # type: ignore
 
 plt.rcParams.update(PLOT_RCPARAMS)
@@ -119,7 +119,7 @@ def _model_wing_iv(engine, bsm, spot, maturity_date, m_grid, wing):
     off the OTM option at each strike (w=None), so it stays stable across the whole window and is
     a pure function of strike, independent of the wing it is drawn on."""
     strikes = (spot / m_grid) if wing == 'call' else (m_grid * spot)
-    return np.array([heston_implied_vol(float(k), maturity_date, spot, engine, bsm) for k in strikes])
+    return np.array([model_implied_vol(float(k), maturity_date, spot, engine, bsm) for k in strikes])
 
 
 def _load_test_scatter(tag):

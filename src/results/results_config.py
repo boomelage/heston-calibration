@@ -8,7 +8,7 @@ read, ``results/<model>/calibrations/<objective>/``). Everything else is per-scr
 grid/plot parameters, grouped by the script that consumes it.
 
 Imported by ``surfaces/example_surface.py``, ``smiles/smiles.py`` and
-``surfaces/make_eps.py`` (each adds ``src/results`` to ``sys.path`` then
+``surfaces/plot_surfaces.py`` (each adds ``src/results`` to ``sys.path`` then
 ``import results_config``).
 """
 import numpy as np
@@ -21,7 +21,7 @@ import numpy as np
 MODEL = "heston"      # 'heston' or 'bates'
 OBJECTIVE = "vol"     # 'vol' or 'price'
 
-# Matplotlib styling shared by smiles.py and make_eps.py. Computer Modern serif to match the
+# Matplotlib styling shared by smiles.py and plot_surfaces.py. Computer Modern serif to match the
 # LaTeX document; cmr10 lacks U+2212 so unicode_minus is disabled to avoid missing-glyph warnings.
 PLOT_RCPARAMS = {
     'font.family': 'serif',
@@ -88,7 +88,7 @@ SMILE_FIGSIZE = (8, 2.7)
 SMILE_CMAP = "tab10"
 
 
-# ------- `surfaces/make_eps.py` parameters
+# ------- `surfaces/plot_surfaces.py` parameters
 
 # 3D view angle (elevation, azimuth) for the price-surface renders.
 SURFACE_ELEV, SURFACE_AZIM = 25, -60

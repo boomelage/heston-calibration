@@ -78,23 +78,24 @@ def implied_vol(price, w, S, K, r, g, T):
         return np.nan
 
 
-# ---- Heston-engine helpers (used by the results/ figure scripts: example_surface, make_eps, smiles).
+# ---- Model-engine helpers (used by the results/ figure scripts: example_surface, plot_surfaces, smiles).
 # Moved here from the former src/results/surfaces/utils.py so there is one shared utils module. These
-# build/evaluate a QuantLib Heston engine, distinct from the price-inversion `implied_vol` above:
-# `heston_implied_vol` PRICES a strike under the engine and then inverts that model price to a Black
-# vol, whereas `implied_vol` inverts a price you already have. The names are kept separate because the
-# signatures differ.
+# evaluate whatever QuantLib pricing engine they are handed -- Heston OR Bates, built by
+# build_model_engine -- so they are model-agnostic (the engine carries the params). Distinct from the
+# price-inversion `implied_vol` above: `model_implied_vol` PRICES a strike under the engine and then
+# inverts that model price to a Black vol, whereas `implied_vol` inverts a price you already have. The
+# names are kept separate because the signatures differ.
 
-def heston_implied_vol(strike, maturity_date, spot, heston_engine, bsm_process, w=None):
-    """Price a European option under Heston, invert to a Black vol. NaN if it can't converge.
-    If w is None, picks the OTM side (call above spot, put below)."""
+def model_implied_vol(strike, maturity_date, spot, model_engine, bsm_process, w=None):
+    """Price a European option under the given engine (Heston or Bates), invert to a Black vol.
+    NaN if it can't converge. If w is None, picks the OTM side (call above spot, put below)."""
     if w is not None:
         payoff_type = ql.Option.Call if w == 'call' else ql.Option.Put
     else:
         payoff_type = ql.Option.Call if strike >= spot else ql.Option.Put
     option = ql.EuropeanOption(ql.PlainVanillaPayoff(payoff_type, strike),
                                ql.EuropeanExercise(maturity_date))
-    option.setPricingEngine(heston_engine)
+    option.setPricingEngine(model_engine)
     price = option.NPV()
     try:
         return option.impliedVolatility(price, bsm_process, 1e-6, 500, 1e-4, 5.0)
@@ -112,12 +113,12 @@ def build_heston_engine(row, calculation_date):
         calculation_date=calculation_date)
 
 
-def heston_price(strike, maturity_date, spot, w, heston_engine):
-    """Price the European option under Heston. Returns (NPV)."""
+def model_price(strike, maturity_date, spot, w, model_engine):
+    """Price the European option under the given engine (Heston or Bates). Returns (NPV)."""
     payoff_type = ql.Option.Call if w == 'call' else ql.Option.Put
     option = ql.EuropeanOption(ql.PlainVanillaPayoff(payoff_type, strike),
                                ql.EuropeanExercise(maturity_date))
-    option.setPricingEngine(heston_engine)
+    option.setPricingEngine(model_engine)
     return option.NPV()
 
 
@@ -136,7 +137,7 @@ def build_bates_engine(row, calculation_date):
 def build_model_engine(row, calculation_date, model):
     """Dispatch to the Heston or Bates engine builder by model name. Same return shape either way, so
     the figure scripts (example_surface, smiles) stay model-agnostic. The downstream pricing/inversion
-    helpers (`heston_price`, `heston_implied_vol`) take the engine and work with either."""
+    helpers (`model_price`, `model_implied_vol`) take the engine and work with either."""
     if model == "bates":
         return build_bates_engine(row, calculation_date)
     return build_heston_engine(row, calculation_date)

@@ -10,7 +10,7 @@ that includes them like the example's `analysis_090924.tex`. EPS embeds in LaTeX
 `\\includegraphics`; with pdflatex, convert first (`epstopdf *.eps`) or compile the provided .tex
 with `latex price_surface.tex` (the classic dvips route) -- or just `pdflatex` after epstopdf.
 
-Run:  python src/results/surfaces/make_eps.py
+Run:  python src/results/surfaces/plot_surfaces.py
 Out:  results/price_surface_calls.eps, price_surface_puts.eps, price_surface_both.eps
       results/price_surface.tex
 """

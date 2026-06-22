@@ -10,7 +10,7 @@ that includes them like the example's `analysis_090924.tex`. EPS embeds in LaTeX
 `\\includegraphics`; with pdflatex, convert first (`epstopdf *.eps`) or compile the provided .tex
 with `latex price_surface.tex` (the classic dvips route) -- or just `pdflatex` after epstopdf.
 
-Run:  python src/results/surfaces/make_eps.py
+Run:  python src/results/surfaces/plot_surfaces.py
 Out:  results/price_surface_calls.eps, price_surface_puts.eps, price_surface_both.eps
       results/price_surface.tex
 """
@@ -23,7 +23,7 @@ from mpl_toolkits.mplot3d import Axes3D  # registers the '3d' projection; also t
 from pathlib import Path
 
 # This script now lives under src/results/surfaces/, but reads/writes the repo-level results/ tree.
-# `from example_surface import ...` resolves from this dir; SURFACES routes figure I/O to repo/results/.
+# `from make_surface import ...` resolves from this dir; SURFACES routes figure I/O to repo/results/.
 # RESULTS_CODE (src/results) holds results_config.py, the central knob file for the figure scripts.
 import sys
 HERE = Path(__file__).parent.resolve()                 # src/results/surfaces
@@ -80,7 +80,7 @@ def plot_surface(grid, out_path, title=None, invert_K=False):
         ax.invert_xaxis()
     ax.set_ylabel(r'maturity in years ($T$)')
     ax.set_zlabel(r'price')
-    ax.set_zlim(bottom=0)
+    ax.set_zlim(np.nanmin(Z), np.nanmax(Z))
     if title:
         ax.set_title(title)
     # fig.colorbar(surf, shrink=0.5, aspect=5)
@@ -89,11 +89,6 @@ def plot_surface(grid, out_path, title=None, invert_K=False):
     plt.close(fig)
     print(f"wrote {out_path.name}")
 
-# def _load_data():
-#     df = pd.read_csv(SURFACE_CSV)
-#     with open(DAY_RESULTS, 'rb') as file:
-#         day_results = pickle.load(file)
-#     return (df, day_results)
 
 def write_otm_TeX(spot, date, params, market, fit):
 
@@ -110,29 +105,40 @@ with a relative-price RMSE of <rmse>.
 The Feller condition <fellersign> at this calibration,
 with $2\kappa\theta - \eta^2 = <feller>$.
 } 
-calibrated pricing operator $C_{\mathrm{H}}(\Phi^{\star})$~\eqref{eq:heston-price}~\eqref{eq:accept}.
+calibrated pricing operator <operator>~\eqref{eq:accept}.
 \begin{figure}[H]
     \begin{center}
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/price_surface_puts.eps}
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/price_surface_calls.eps}
-        \caption{<MODEL_LABEL> OTM option prices for $S_{\mathrm{ref}}$ <spot> on <date> with $\Phi^{\star} = (<theta>,\ <kappa>,\ <eta>,\ <rho>,\ <v0>)$: puts wing (left) and calls wing (right).}
+        \caption{<MODEL_LABEL> option prices for $S_{\mathrm{ref}}$ <spot> on <date> with <parameters>: puts wing (left) and calls wing (right).}
         \label{Fig:wings}
     \end{center}
     \begin{center}
-        \includegraphics[width=6.25cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/put_smile.eps}
-        \includegraphics[width=6.25cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/call_smile.eps}
-        \caption{All put (left) and call (right) options from Figure~\ref{Fig:wings}}
+        \includegraphics[width=10cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/call_smile.eps}
+        \caption{\emph{Out of the money} implied volatilites from Figure~\ref{Fig:wings}}
     \end{center}
 \end{figure}
 
 """
+
+    hestonparams = r'$\Phi^{\star} = (<theta>,\ <kappa>,\ <eta>,\ <rho>,\ <v0>)$'
+    batesparams = r'$\Theta^{\star} = (<theta>,\ <kappa>,\ <eta>,\ <rho>,\ <v0>, \ <lambda>, \ <nu>, \ <delta>)$'
+    paramstr = hestonparams if MODEL == 'heston' else batesparams
+    paramstr = paramstr.replace('<theta>', str(round(params['theta'], 4)))
+    paramstr = paramstr.replace('<kappa>', str(round(params['kappa'], 4)))
+    paramstr = paramstr.replace('<eta>', str(round(params['eta'], 4)))
+    paramstr = paramstr.replace('<rho>', str(round(params['rho'], 4)))
+    paramstr = paramstr.replace('<v0>', str(round(params['v0'], 4)))
+    if MODEL == 'bates':
+        paramstr = paramstr.replace('<lambda>', str(round(params['lambda_'], 4)))
+        paramstr = paramstr.replace('<nu>', str(round(params['nu'], 4)))
+        paramstr = paramstr.replace('<delta>', str(round(params['delta'], 4)))
+    hestoneq = r'$C_{\mathrm{H}}(\Phi^{\star}; S,K,\tau,w)$~\eqref{eq:heston-price}'
+    bateseq = r'$C_{\mathrm{Bates}}(\Theta^{\star}; S,K,\tau,w)$~\eqref{eq:bates-cf}'
+    TeX = TeX.replace('<parameters>', paramstr)
+    TeX = TeX.replace('<operator>', hestoneq if MODEL == 'heston' else bateseq)
     TeX = TeX.replace('<spot>', str(spot))
     TeX = TeX.replace('<date>', str(date.strftime(r"%B %d, %Y")))
-    TeX = TeX.replace('<theta>', str(round(params['theta'], 4)))
-    TeX = TeX.replace('<kappa>', str(round(params['kappa'], 4)))
-    TeX = TeX.replace('<eta>', str(round(params['eta'], 4)))
-    TeX = TeX.replace('<rho>', str(round(params['rho'], 4)))
-    TeX = TeX.replace('<v0>', str(round(params['v0'], 4)))
     TeX = TeX.replace('<r>', f"{market['risk_free_rate']*100:.2f}")
     TeX = TeX.replace('<q>', f"{market['dividend_rate']*100:.2f}")
     TeX = TeX.replace('<ivrmse>', f"{fit['iv_rmse']*100:.2f}")
@@ -151,25 +157,31 @@ calibrated pricing operator $C_{\mathrm{H}}(\Phi^{\star})$~\eqref{eq:heston-pric
     TeX = TeX.replace('<MODEL>', str(MODEL))
     TeX = TeX.replace('<MODEL_LABEL>', str(MODEL_LABEL))
 
-    tex_path = TEXDIR / r"otm.tex"
+    tex_path = TEXDIR / r"surfaces.tex"
     tex_path.write_text(TeX)
 
-def grid_for(df, side):
+def otm_grid(df, side):
     surface = df[df['w'] == side].copy()
     surface['moneyness'] = np.where(
         surface['w'] == 'call',
         surface['s_ref'] / surface['strike'],
         surface['strike'] / surface['s_ref']
     )
-    surface = surface[surface['moneyness']<=1]
+    surface = surface[surface['moneyness']<=1.15]
     return surface.pivot(index='strike', columns='maturity_days', values='price')
 
-def smile_for(df, side):
-    surface = df[df['w'] == side].copy()
-    return surface.pivot(index='strike', columns='maturity_days', values='price')
+def smile_for(df):
+    surface = df[df['w'] == 'call'].copy()
+    df['moneyness'] = np.where(
+        df['w'] == 'call',
+        df['s_ref'] / df['strike'],
+        df['strike'] / df['s_ref']
+    )
+    surface = df[df['moneyness']<1].copy().reset_index(drop=True)
+    return surface.pivot(index='strike', columns='maturity_days', values='implied_vol')
     
 def main():
-    from example_surface import make_surface  # type: ignore (MODEL/OBJECTIVE imported at module top)
+    from make_surface import make_surface  # type: ignore (MODEL/OBJECTIVE imported at module top)
     CALIBRATIONS_FILE = calib_paths(MODEL, OBJECTIVE)[0]
     cal = pd.read_csv(CALIBRATIONS_FILE)
     cal = cal.sort_values(by='iv_rmse',ascending=True).reset_index(drop=True)
@@ -182,10 +194,9 @@ def main():
     market = day_results['market']
     fit = day_results['fit']
 
-    plot_surface(grid_for(df, 'call'), TEXDIR / "price_surface_calls.eps")
-    plot_surface(grid_for(df, 'put'), TEXDIR / "price_surface_puts.eps", invert_K=True)
-    plot_surface(smile_for(df, 'call'), TEXDIR / "call_smile.eps")
-    plot_surface(smile_for(df, 'put'), TEXDIR / "put_smile.eps", invert_K=True)
+    plot_surface(otm_grid(df, 'call'), TEXDIR / "price_surface_calls.eps")
+    plot_surface(otm_grid(df, 'put'), TEXDIR / "price_surface_puts.eps", invert_K=True)
+    plot_surface(smile_for(df), TEXDIR / "call_smile.eps")
     write_otm_TeX(spot, date, params, market, fit)
     
 if __name__ == "__main__":

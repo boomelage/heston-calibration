@@ -7,8 +7,8 @@ switches are ``MODEL`` (picks the QuantLib engine -- Heston vs Bates -- AND the
 read, ``results/<model>/calibrations/<objective>/``). Everything else is per-script
 grid/plot parameters, grouped by the script that consumes it.
 
-Imported by ``surfaces/example_surface.py``, ``smiles/smiles.py`` and
-``surfaces/make_eps.py`` (each adds ``src/results`` to ``sys.path`` then
+Imported by ``surfaces/make_surface.py``, ``smiles/smiles.py`` and
+``surfaces/plot_surfaces.py`` (each adds ``src/results`` to ``sys.path`` then
 ``import results_config``).
 """
 import numpy as np
@@ -18,10 +18,10 @@ import numpy as np
 # MODEL picks the QuantLib engine (Heston vs Bates) AND the results/<model>/ output tree.
 # OBJECTIVE picks which calibration run to read (results/<model>/calibrations/<objective>/).
 # This module is the single source for both -- the other scripts import them from here.
-MODEL = "heston"      # 'heston' or 'bates'
+MODEL = "bates"      # 'heston' or 'bates'
 OBJECTIVE = "vol"     # 'vol' or 'price'
 
-# Matplotlib styling shared by smiles.py and make_eps.py. Computer Modern serif to match the
+# Matplotlib styling shared by smiles.py and plot_surfaces.py. Computer Modern serif to match the
 # LaTeX document; cmr10 lacks U+2212 so unicode_minus is disabled to avoid missing-glyph warnings.
 PLOT_RCPARAMS = {
     'font.family': 'serif',
@@ -34,11 +34,11 @@ PLOT_RCPARAMS = {
 
 # Placeholder Black vol seeded into BlackConstantVol for the price->IV inversion. impliedVolatility
 # solves for the vol that reprices the model NPV, so this value is ignored; it only initialises the
-# term structure. Used by example_surface.make_surface and smiles._day_engine.
+# term structure. Used by make_surface.make_surface and smiles._day_engine.
 INVERSION_PLACEHOLDER_VOL = 0.20
 
 
-# ------- `surfaces/example_surface.py` parameters
+# ------- `surfaces/make_surface.py` parameters
 
 # Moneyness grid (strike = m * spot) the model surface is sampled on. K/S around the money.
 MONEYNESS = np.round(np.arange(0.75, 1.25, 0.005), 4).tolist()   # 0.75 .. 1.245
@@ -88,7 +88,7 @@ SMILE_FIGSIZE = (8, 2.7)
 SMILE_CMAP = "tab10"
 
 
-# ------- `surfaces/make_eps.py` parameters
+# ------- `surfaces/plot_surfaces.py` parameters
 
 # 3D view angle (elevation, azimuth) for the price-surface renders.
 SURFACE_ELEV, SURFACE_AZIM = 25, -60

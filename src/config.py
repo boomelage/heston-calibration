@@ -100,6 +100,15 @@ BOUND_TOL = 1e-3        # fraction of a bound's span within which a param counts
 # For BlackCalibrationHelper.impliedVolatility(price, accuracy, maxEval, lo, hi).
 IV_ACC, IV_MAXEVAL, IV_LO, IV_HI = 1e-6, 500, 1e-4, 5.0
 
+# ---- Engine: optimizer (Levenberg-Marquardt + EndCriteria) ----
+# Both calibration engines (calibrate_heston / calibrate_bates) build their LM optimizer and stopping
+# criteria from these. Plain numeric args (not live ql objects), so they live here; the engines
+# construct ql.LevenbergMarquardt(*LM_ARGS) and ql.EndCriteria(*END_CRITERIA_ARGS).
+#   LevenbergMarquardt(epsfcn, xtol, gtol)
+LM_ARGS = (1e-8, 1e-8, 1e-8)
+#   EndCriteria(maxIterations, maxStationaryStateIterations, rootEpsilon, functionEpsilon, gradientNormEpsilon)
+END_CRITERIA_ARGS = (1000, 100, 1e-8, 1e-8, 1e-8)
+
 # ---- Engine: wing weighting (PLAN.md Phase 3 Lever B) ----
 # Up-weight OTM wing cells in the LM objective by |log(Kstar/S_ref)| so the fit stops trading the
 # wings away for the body. weight = 1 + GAIN * (|log(K/S)| / SCALE) ** POWER  (1 at ATM, rising into
@@ -150,3 +159,38 @@ def calib_paths(model, objective):
     return (base / "calibrations.csv",
             base / "rejections.csv",
             base / "calibration_tests")
+
+
+def spec_path(model, objective):
+    """Resolve the run's config snapshot path (config_spec.json), next to calibrations.csv.
+
+    Kept separate from `calib_paths` (whose 3-tuple is unpacked positionally by callers) so adding
+    the spec file does not shift that contract. `calibrator_prototype` writes this JSON each run; any
+    downstream script (e.g. the figure/table builders) can load it to recover the exact knobs a run
+    used without hard-coding values.
+    """
+    base = RESULTS / model / "calibrations" / objective
+    base.mkdir(parents=True, exist_ok=True)
+    return base / "config_spec.json"
+
+
+def as_dict():
+    """The calibration 'specification': every JSON-serializable module-level constant in this config.
+
+    Reflects over this module's namespace and keeps each public name whose value `json` can encode
+    (ints, floats, strings, bools, and nested lists/tuples/dicts of them: the bounds dicts, the seed
+    grid, the optimizer args, ...). Callables (`day_count`/`calendar`/`calib_paths`/`spec_path`/this
+    function) and `Path` objects (`REPO`/`RESULTS`) are skipped. New knobs are captured automatically,
+    so the snapshot never drifts from the live config. Tuples round-trip through JSON as lists.
+    """
+    import json as _json
+    spec = {}
+    for name, val in globals().items():
+        if name.startswith('_') or callable(val):
+            continue
+        try:
+            _json.dumps(val)
+        except (TypeError, ValueError):
+            continue
+        spec[name] = val
+    return spec

@@ -15,7 +15,7 @@ inversion returns spurious roots in the short-dated far-OTM corner (prices ~0), 
 We sample on a moneyness grid (strikes = m * spot) and a maturity grid (in days), and write the
 result both long-form (one row per grid point) and as a strike x maturity pivot for inspection.
 
-Run:  python src/results/surfaces/example_surface.py
+Run:  python src/results/surfaces/make_surface.py
 Out:  results/example_surface.csv        (long: strike, maturity_days, moneyness, implied_vol)
       results/example_surface_grid.csv   (pivot: index=strike, columns=maturity_days)
 """
@@ -48,7 +48,7 @@ DATA = SURFACES / "data"
 from config import calib_paths, calendar as ql_calendar  # type: ignore
 CALIBRATIONS_FILE = calib_paths(MODEL, OBJECTIVE)[0]
 
-from utils import heston_implied_vol, heston_price, build_model_engine
+from utils import model_implied_vol, model_price, build_model_engine
 
 def make_surface(target_date=None, OUT=DATA, SAVE=False):
     if SAVE:
@@ -93,8 +93,8 @@ def make_surface(target_date=None, OUT=DATA, SAVE=False):
         for m in MONEYNESS:
             strike = m * spot
             for w in ('call', 'put'):
-                iv = heston_implied_vol(strike, maturity_date, spot, engine, bsm_process, w=w)
-                price = heston_price(strike, maturity_date, spot, w, engine)
+                iv = model_implied_vol(strike, maturity_date, spot, engine, bsm_process, w=w)
+                price = model_price(strike, maturity_date, spot, w, engine)
                 records.append({
                     's_ref':spot,
                     'strike': round(strike, 4),
@@ -114,7 +114,7 @@ def make_surface(target_date=None, OUT=DATA, SAVE=False):
         high_move = str(high_move).strip().lower() == 'true'
     params = {"kappa": kappa, "theta": theta, "rho": rho, "eta": eta, "v0": v0}
     if MODEL == "bates":
-        # Carry the jump triple so a consumer (e.g. make_eps) can rebuild a Bates engine from
+        # Carry the jump triple so a consumer (e.g. plot_surfaces) can rebuild a Bates engine from
         # day_results['params']. (smiles.py rebuilds its engine straight from calibrations.csv now.)
         params.update(lambda_=float(row['lambda_']), nu=float(row['nu']), delta=float(row['delta']))
     day_results = {

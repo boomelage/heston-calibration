@@ -33,6 +33,7 @@ from config import (
     LOW, HIGH, IV_RMSE_ACCEPT,
     DEFAULT_OBJECTIVE, SEED_GRID_TEMPLATE,
     WING_WEIGHT_GAIN,
+    LM_ARGS, END_CRITERIA_ARGS,
     calendar as _calendar,
 )
 # Model-agnostic helpers shared with calibrate_bates.py (factored out so the two engines can't drift).
@@ -96,8 +97,8 @@ def _calibrate_once(start, surface, s, r_ts, g_ts, S_handle, constraint, error_t
                 mkt_vols.append(float(vol))
                 weights.append(_wing_weight(k, s) if apply_wing else 1.0)
 
-    lm = ql.LevenbergMarquardt(1e-8, 1e-8, 1e-8)
-    end = ql.EndCriteria(1000, 100, 1e-8, 1e-8, 1e-8)
+    lm = ql.LevenbergMarquardt(*LM_ARGS)
+    end = ql.EndCriteria(*END_CRITERIA_ARGS)
     if apply_wing:
         # weights must be a plain python list (a DoubleVector); ql.Array does NOT bind this overload.
         model.calibrate(helpers, lm, end, constraint, weights)

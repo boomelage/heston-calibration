@@ -10,7 +10,7 @@ This repository has quite convoluted logic at the moment and relies a bit too mu
 
 All model/calibration constants (surface coverage knobs, the box bounds, the acceptance gate, the OTM cutoff, the seed grid) live in one place: [`src/config.py`](src/config.py).
 
-The downstream figure/table scripts live under [`src/results/`](src/results/) (`surfaces/{example_surface,make_eps}.py`, `smiles/smiles.py`, `tables/objective_comparison.py`). They read calibrations from and write figures into the repo-level `results/` tree, and share the QuantLib helpers in [`src/utils.py`](src/utils.py).
+The downstream figure/table scripts live under [`src/results/`](src/results/) (`surfaces/{make_surface,plot_surfaces}.py`, `smiles/smiles.py`, `tables/objective_comparison.py`). They read calibrations from and write figures into the repo-level `results/` tree, and share the QuantLib helpers in [`src/utils.py`](src/utils.py).
 
 As you can see the whole setup is quite dependent on a rather convoluted file structure with very specific data formats and the way the data is called in [`calibrator_prototype.py`](src/calibrator_prototype.py) is through hardcoded calls to dataframe column names.
 

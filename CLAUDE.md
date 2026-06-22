@@ -96,7 +96,8 @@ python -c "import sys; sys.path.insert(0,'data'); from get_rg import rg; print(r
 #            in-memory (utils._prepare_options), so there is no separate extraction script. Writes
 #            accepted params to the single results/<model>/calibrations/<objective>/calibrations.csv, one
 #            row per REJECTED day (with the cause) to results/<model>/calibrations/<objective>/rejections.csv,
-#            and per-day repricing diagnostics to results/<model>/calibrations/<objective>/calibration_tests/.
+#            per-day repricing diagnostics to results/<model>/calibrations/<objective>/calibration_tests/,
+#            and a Python-readable snapshot of the config that ran to results/<model>/calibrations/<objective>/config_spec.json.
 #            <model> is `heston` (default) or `bates`, via --MODEL; <objective> is `vol` (default) or
 #            `price`, via --OBJECTIVE. --LIMIT N caps to the N most recent days. Prints the accept rate
 #            and a rejections-by-reason tally. Resolves paths from __file__, runs from any dir.
@@ -125,8 +126,9 @@ cleaning is done in-memory by the calibrator (no on-disk OTM snapshots).
 **git-ignored** for the same reason — it grows with years of data. A fresh clone has none of
 them — to bootstrap, drop `UnderlyingOptionsTradesCalcs_*.csv` into `data/options/raw/`, then run
 Stage 2+3 (which regenerates `calibration_tests/`). Only the
-small derived artefacts are tracked: the `{calibrations,rejections,validation}.csv` triple for the
-default **`vol`** objective (`results/heston/calibrations/vol/`) plus `data/market/`. The `price`
+small derived artefacts are tracked: the `{calibrations,rejections,validation}.csv` triple plus the
+`config_spec.json` run snapshot for the default **`vol`** objective (`results/heston/calibrations/vol/`)
+plus `data/market/`. The `price`
 objective is still selectable (`--OBJECTIVE price`) but its outputs are **not committed on this branch**
 (the older narrow-config `price` baseline lives on `master`). Each objective's bulky per-day
 `calibration_tests/` stays git-ignored (only a `.gitkeep` is tracked).
@@ -134,7 +136,19 @@ objective is still selectable (`--OBJECTIVE price`) but its outputs are **not co
 **Output routing is namespaced by model AND objective:** `results/<model>/calibrations/<objective>/`
 (`<model>` ∈ `heston, bates`). The Heston tree was migrated from the old `results/calibrations/<objective>/`
 to `results/heston/calibrations/<objective>/`; Bates lands under `results/bates/...`. The single source
-of truth is `config.calib_paths(model, objective)` (and `_objective_paths` wraps it).
+of truth is `config.calib_paths(model, objective)` (and `_objective_paths` wraps it). The run snapshot
+`config_spec.json` sits alongside in the same directory, resolved by the sibling `config.spec_path(model,
+objective)` (kept separate from `calib_paths` so its positional 3-tuple contract is untouched).
+
+**Run-spec snapshot (`config_spec.json`).** Each accepted run writes a Python-readable JSON snapshot of
+the exact config it used next to `calibrations.csv` (`utils.write_config_spec`, called from
+`calibrator_prototype.main`). The config values come from `config.as_dict()` — every JSON-serializable
+module-level constant, captured by reflection so new knobs appear automatically (callables like
+`day_count`/`calendar`/`calib_paths` and `Path` objects like `REPO`/`RESULTS` are skipped; tuples
+round-trip as JSON arrays). A `_run` header records `timestamp`, `git_commit`, `model`, `objective`,
+`limit`, and the accept/reject tally. It is written iff `calibrations.csv` is (and removed alongside it
+when a run accepts no days). Downstream LaTeX-fragment scripts (e.g. `src/results/smiles/smiles.py`) can
+`json.load` it to recover the run's bounds/coverage/gate without hard-coding values.
 
 There is no single-test command because there are no tests. To exercise just an engine, import
 `calibrate_heston(vol_matrix, s, r, g, objective="vol")` from `src/calibrate_heston.py` (or
@@ -143,8 +157,8 @@ DataFrame. `objective` selects the in-engine LM objective ("vol" IV-space, the d
 relative-price); the orchestrator passes its `OBJECTIVE` constant through.
 
 **Downstream figure/table scripts** live under `src/results/` (moved there from `results/`):
-`surfaces/example_surface.py` (rebuilds a model IV/price surface from one calibration row),
-`surfaces/make_eps.py` (writes the OTM surface/smile EPS + `otm.tex`), `smiles/smiles.py` (per-day
+`surfaces/make_surface.py` (rebuilds a model IV/price surface from one calibration row),
+`surfaces/plot_surfaces.py` (writes the OTM surface/smile EPS + `otm.tex`), `smiles/smiles.py` (per-day
 market-vs-model smile EPS + `smiles.tex`), and `tables/objective_comparison.py` (price-vs-vol metrics
 table). `smiles.py` does **not** read the raw CBOE trades: it draws the model smile lines from the
 calibrated params in `calibrations.csv` and overlays the market scatter straight from that day's
@@ -152,19 +166,19 @@ calibrated params in `calibrations.csv` and overlays the market scatter straight
 column). A missing tests file drops the scatter (model lines only over `MATURITIES_DAYS`); a missing
 `calibrations.csv` row is a hard error. They resolve `REPO = Path(__file__).parents[2]` and read calibrations from / write figures into
 the **repo-level** `results/<model>/` tree, and share the QuantLib helpers (`build_model_engine` ->
-`build_heston_engine`/`build_bates_engine`, plus the engine-agnostic `heston_price`,
-`heston_implied_vol`) in `src/utils.py`. They are **model-aware**: `MODEL`/`OBJECTIVE` plus every
-plotting/grid knob for `example_surface.py`, `make_eps.py` and `smiles.py` live in **one** file,
+`build_heston_engine`/`build_bates_engine`, plus the engine-agnostic `model_price`,
+`model_implied_vol`) in `src/utils.py`. They are **model-aware**: `MODEL`/`OBJECTIVE` plus every
+plotting/grid knob for `make_surface.py`, `plot_surfaces.py` and `smiles.py` live in **one** file,
 `src/results/results_config.py` (each of the three adds `src/results` to `sys.path` and imports from
 it). Set `MODEL` to `heston` or `bates` there and it picks the engine, the `results/<model>/...`
 source/output tree, and the figure labels for all three at once; the grids (`MONEYNESS`,
 `MATURITIES_DAYS`), the smile knobs (`NT`, `MKTMONSTEP` — each accepts `None` to draw every
 maturity/strike; `XLO/XHI` fallback window) and the surface
 view (`SURFACE_ELEV/AZIM`, figsizes) are tuned in the same place. (`objective_comparison.py` is **not**
-wired to `results_config.py`; it keeps its own `MODEL` constant.) `example_surface.py` carries the
+wired to `results_config.py`; it keeps its own `MODEL` constant.) `make_surface.py` carries the
 Bates jump triple in `day_results['params']`, and `smiles.py` shows it in the per-figure caption.
 (`objective_comparison.py` needs *both* a price and a vol run for the chosen model on disk.) Run e.g.
-`python src/results/surfaces/make_eps.py` then `python src/results/smiles/smiles.py` after a
+`python src/results/surfaces/plot_surfaces.py` then `python src/results/smiles/smiles.py` after a
 calibration to refresh the paper's figures.
 
 ## Pipeline architecture
@@ -304,8 +318,9 @@ Returns `{theta, kappa, eta, rho, v0, feller, iv_rmse, rmse, n_helpers, accepted
 `config.py` as the named `BOUNDS` dict; `LOW`/`HIGH` are derived as `[BOUNDS[p][L/H] for p in
 PARAM_ORDER]`, with `PARAM_ORDER = ("theta","kappa","eta","rho","v0")` declaring that order in exactly
 one place (get `PARAM_ORDER` wrong and bounds land on the wrong params). The engine imports `LOW`/`HIGH`
-/`IV_RMSE_ACCEPT`/the seed-grid template/the `WING_WEIGHT_GAIN` flag from `config.py`; only the `_ERR`
-string→QuantLib-enum map (live `ql` objects) stays in `calibrate_heston.py`.
+/`IV_RMSE_ACCEPT`/the seed-grid template/the `WING_WEIGHT_GAIN` flag/the optimizer args
+(`LM_ARGS`, `END_CRITERIA_ARGS`, fed to `ql.LevenbergMarquardt`/`ql.EndCriteria`) from `config.py`; only
+the `_ERR` string→QuantLib-enum map (live `ql` objects) stays in `calibrate_heston.py`.
 
 **Shared engine helpers (`src/_engine_common.py`).** The model-agnostic helpers `_on_boundary(params,
 low, high)`, `_seed_var`, `_wing_weight`, `_iv_rmse` were factored out of `calibrate_heston.py` so the
@@ -411,8 +426,8 @@ breaks a downstream stage:
   IV-RMSE on the shared days, and roughly **halved `eta`** (1.17 -> 0.52: jumps absorb the tail the
   Heston vol-of-vol was overfitting); Feller stays violated. The weakly-identified `nu`/`delta` park on
   their bounds (gate-exempt), a sign those two bounds are tight. The downstream consumers are now
-  **model-aware** (a `MODEL` constant each; `validate_calibrations.py`, `example_surface.py`,
-  `smiles.py`, `make_eps.py`, `objective_comparison.py`). **Not yet done:** a full multi-year Bates run,
+  **model-aware** (a `MODEL` constant each; `validate_calibrations.py`, `make_surface.py`,
+  `smiles.py`, `plot_surfaces.py`, `objective_comparison.py`). **Not yet done:** a full multi-year Bates run,
   and an optional `nu`/`delta` bound widening. See `PLAN.md`'s `Completed tasks` (Bates extension, PR #12).
 - The `data/__pycache__/` holds bytecode for deleted modules (`get_data`, `get_options`, ...) — ignore it.
 

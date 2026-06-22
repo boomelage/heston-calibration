@@ -5,20 +5,16 @@ Every model/calibration knob lives here so the orchestrator (`calibrator_prototy
 (`validate_calibrations.py`) all read one source of truth. PLAN.md Phase 3 tunes these values
 (MIN_DTM, the box bounds, a Feller penalty, ...); editing one line here is the whole change.
 
-Why a Python module, not JSON: several "constants" are not trivially serialisable or are coupled to
-code. The box bounds are only correct in `model.params()` order [theta, kappa, eta, rho, v0]; the
-objective map points at live QuantLib enum objects (kept next to the engine); the seed grid is a
-template a function expands. Expressing the bounds as a named dict (`BOUNDS`) with `PARAM_ORDER`
-turns the positional-order footgun into a single declared mapping.
-
-The date conventions (`day_count`, `calendar`) are the one place QuantLib objects are built in this
-module. They are pure market conventions (not engine-coupled like the `_ERR` objective enums), and
-were previously duplicated as literals across the engines, repricing wrappers and figure scripts, so
-they belong in one place. The serialisable choice is the *name* (`DAY_COUNT_NAME`/`CALENDAR_NAME`);
-the factories just map a name to a fresh QuantLib instance.
 """
 from pathlib import Path
-import QuantLib as ql
+
+# Date conventions are defined once in pricing/_quantlib_config.py (alongside the QuantLib engine
+# builders that consume them) and re-exported here so the rest of the pipeline keeps a single
+# `from config import day_count, calendar` facade. config is the definition site for everything else;
+# for the day count / calendar it is a thin pass-through to the canonical source.
+from pricing._quantlib_config import (  # noqa: F401  (re-exported)
+    day_count, calendar, DAY_COUNT_NAME, CALENDAR_NAME,
+)
 
 # ---- Surface selection / coverage (calibrator_prototype._select_surface / calibrate_by_day) ----
 # Pooling the whole day (one fit) lets us take more maturities than the old per-spot path.
@@ -92,7 +88,7 @@ DEFAULT_MODEL = "heston"
 # Selection and the gate always run off IV-space RMSE; the objective only changes what each restart
 # minimises. The string->QuantLib-enum map (`_ERR`) stays next to the engine (live ql objects).
 OBJECTIVE_NAMES = ("price", "vol")
-DEFAULT_OBJECTIVE = "price"
+DEFAULT_OBJECTIVE = "vol"
 
 # ---- Engine: acceptance gate / tolerances ----
 # IV-space RMSE (vol points): model-implied vol vs market vol per helper. ~2 vol points is a tight
@@ -154,40 +150,3 @@ def calib_paths(model, objective):
     return (base / "calibrations.csv",
             base / "rejections.csv",
             base / "calibration_tests")
-
-
-# ---- QuantLib date conventions (single source of truth) ----
-# The day count for all flat-forward curves and the calendar for the calibration helpers. These were
-# hardcoded as `ql.Actual365Fixed()` / `ql.UnitedStates(ql.UnitedStates.NYSE)` in five places (both
-# engines, both utils engine builders, the vanilla pricer, and the figure scripts); they now live here.
-# Under the flat-forward curves used throughout, the helper calendar is immaterial to the fit, but it
-# is kept consistent so a future non-flat curve does not silently disagree between modules.
-# `day_count(name=None)` / `calendar(name=None)` return a FRESH instance (QuantLib value types are cheap
-# and safe to rebuild); `name=None` resolves to the canonical choice below.
-DAY_COUNT_NAME = "Actual365Fixed"
-CALENDAR_NAME = "UnitedStates.NYSE"
-_DAY_COUNTS = {
-    "Actual365Fixed": lambda: ql.Actual365Fixed(),
-    "Thirty360.USA": lambda: ql.Thirty360(ql.Thirty360.USA),
-}
-_CALENDARS = {
-    "UnitedStates.NYSE": lambda: ql.UnitedStates(ql.UnitedStates.NYSE),
-}
-
-
-def day_count(name=None):
-    """Fresh day-count instance for `name` (defaults to DAY_COUNT_NAME)."""
-    name = name or DAY_COUNT_NAME
-    try:
-        return _DAY_COUNTS[name]()
-    except KeyError:
-        raise ValueError(f"unsupported day count {name!r}; known: {sorted(_DAY_COUNTS)}")
-
-
-def calendar(name=None):
-    """Fresh calendar instance for `name` (defaults to CALENDAR_NAME)."""
-    name = name or CALENDAR_NAME
-    try:
-        return _CALENDARS[name]()
-    except KeyError:
-        raise ValueError(f"unsupported calendar {name!r}; known: {sorted(_CALENDARS)}")

@@ -2,7 +2,12 @@ import numpy as np
 import pandas as pd
 import QuantLib as ql
 
-from config import OTM_MONEYNESS_CUTOFF, OTM_MONEYNESS_FLOOR, day_count as _day_count
+from config import OTM_MONEYNESS_CUTOFF, OTM_MONEYNESS_FLOOR
+from pricing._quantlib_utils import _quantlib_utils
+
+# One shared builder: it carries the canonical day count and is the single place QuantLib engines
+# are constructed (see pricing/_quantlib_utils.py).
+_qu = _quantlib_utils()
 
 def df_moneyness(df):
     """Ratio moneyness: spot/strike for calls, strike/spot for puts.
@@ -93,22 +98,12 @@ def heston_implied_vol(strike, maturity_date, spot, heston_engine, bsm_process, 
 
 def build_heston_engine(row, calculation_date):
     """Rebuild the Heston model from one calibrations.csv row; return its pricing engine plus the
-    spot handle and term structures (reused to build the Black process the inversion runs against)."""
-    ql.Settings.instance().evaluationDate = calculation_date
-    day_count = _day_count()
-    r_ts = ql.YieldTermStructureHandle(
-        ql.FlatForward(calculation_date, float(row['risk_free_rate']), day_count))
-    g_ts = ql.YieldTermStructureHandle(
-        ql.FlatForward(calculation_date, float(row['dividend_rate']), day_count))
-    s_handle = ql.QuoteHandle(ql.SimpleQuote(float(row['spot_price'])))
-    # HestonProcess constructor order: (r, g, S0, v0, kappa, theta, sigma=eta, rho)
-    process = ql.HestonProcess(
-        r_ts, g_ts, s_handle,
-        float(row['v0']), float(row['kappa']), float(row['theta']),
-        float(row['eta']), float(row['rho'])
-    )
-    engine = ql.AnalyticHestonEngine(ql.HestonModel(process))
-    return engine, s_handle, r_ts, g_ts, day_count
+    spot handle and term structures (reused to build the Black process the inversion runs against).
+    Thin wrapper over the shared builder so the QuantLib construction lives in exactly one place."""
+    return _qu._heston_engine(
+        s=row['spot_price'], r=row['risk_free_rate'], g=row['dividend_rate'],
+        kappa=row['kappa'], theta=row['theta'], rho=row['rho'], eta=row['eta'], v0=row['v0'],
+        calculation_date=calculation_date)
 
 
 def heston_price(strike, maturity_date, spot, w, heston_engine):
@@ -123,23 +118,13 @@ def heston_price(strike, maturity_date, spot, w, heston_engine):
 def build_bates_engine(row, calculation_date):
     """Rebuild the Bates model from one calibrations.csv row; return its pricing engine plus the spot
     handle and term structures (same return shape as build_heston_engine). The row must carry the
-    jump triple `lambda_, nu, delta` alongside the five Heston params."""
-    ql.Settings.instance().evaluationDate = calculation_date
-    day_count = _day_count()
-    r_ts = ql.YieldTermStructureHandle(
-        ql.FlatForward(calculation_date, float(row['risk_free_rate']), day_count))
-    g_ts = ql.YieldTermStructureHandle(
-        ql.FlatForward(calculation_date, float(row['dividend_rate']), day_count))
-    s_handle = ql.QuoteHandle(ql.SimpleQuote(float(row['spot_price'])))
-    # BatesProcess constructor order: (r, g, S0, v0, kappa, theta, eta, rho, lambda, nu, delta)
-    process = ql.BatesProcess(
-        r_ts, g_ts, s_handle,
-        float(row['v0']), float(row['kappa']), float(row['theta']),
-        float(row['eta']), float(row['rho']),
-        float(row['lambda_']), float(row['nu']), float(row['delta']),
-    )
-    engine = ql.BatesEngine(ql.BatesModel(process))
-    return engine, s_handle, r_ts, g_ts, day_count
+    jump triple `lambda_, nu, delta` alongside the five Heston params. Thin wrapper over the shared
+    builder so the QuantLib construction lives in exactly one place."""
+    return _qu._bates_engine(
+        s=row['spot_price'], r=row['risk_free_rate'], g=row['dividend_rate'],
+        kappa=row['kappa'], theta=row['theta'], rho=row['rho'], eta=row['eta'], v0=row['v0'],
+        lambda_=row['lambda_'], nu=row['nu'], delta=row['delta'],
+        calculation_date=calculation_date)
 
 
 def build_model_engine(row, calculation_date, model):

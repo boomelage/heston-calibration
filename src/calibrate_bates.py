@@ -33,10 +33,13 @@ from config import (
     BATES_LOW, BATES_HIGH, BATES_JUMP_SEED, IV_RMSE_ACCEPT,
     DEFAULT_OBJECTIVE, SEED_GRID_TEMPLATE,
     WING_WEIGHT_GAIN,
-    day_count as _day_count, calendar as _calendar,
+    calendar as _calendar,
 )
 # Model-agnostic helpers shared with calibrate_heston.py (factored out so the two engines can't drift).
 from _engine_common import _on_boundary, _seed_var, _wing_weight, _iv_rmse
+# Single home of the QuantLib process/term-structure construction (constructor arg order, day count).
+from pricing._quantlib_utils import _quantlib_utils
+_qu = _quantlib_utils()
 
 # String->QuantLib-enum objective map. The helper stays HestonModelHelper (ql.BatesHelper does not
 # exist in this QuantLib build); only the pricing engine attached to it is a BatesEngine. As in the
@@ -71,7 +74,7 @@ def _calibrate_once(start, surface, s, r_ts, g_ts, S_handle, constraint, error_t
     `iv_rmse_sel` is the (optionally wing-weighted) IV-RMSE LM saw for ranking; `iv_rmse_gate` is the
     unweighted IV-RMSE for the gate/reporting. With wing weighting off the two are identical."""
     v0, kappa, theta, eta, rho, lambda_, nu, delta = start
-    process = ql.BatesProcess(r_ts, g_ts, S_handle, v0, kappa, theta, eta, rho, lambda_, nu, delta)
+    process = _qu.bates_process(r_ts, g_ts, S_handle, kappa, theta, rho, eta, v0, lambda_, nu, delta)
     model = ql.BatesModel(process)
     engine = ql.BatesEngine(model)
 
@@ -115,10 +118,8 @@ def calibrate_bates(vol_matrix, s, r, g, objective=DEFAULT_OBJECTIVE) -> dict:
     error_type = _ERR[objective]
     calculation_date = ql.Date.todaysDate()
     ql.Settings.instance().evaluationDate = calculation_date
-    day_count = _day_count()
-    r_ts = ql.YieldTermStructureHandle(ql.FlatForward(calculation_date, float(r), day_count))
-    g_ts = ql.YieldTermStructureHandle(ql.FlatForward(calculation_date, float(g), day_count))
-    S_handle = ql.QuoteHandle(ql.SimpleQuote(float(s)))
+    r_ts, g_ts = _qu._term_structures(r, g, calculation_date)
+    S_handle = _qu._spot_handle(s)
     constraint = ql.NonhomogeneousBoundaryConstraint(ql.Array(BATES_LOW), ql.Array(BATES_HIGH))
 
     best = None  # (params, iv_rmse_sel, iv_rmse_gate, price_rmse, n_helpers)

@@ -13,19 +13,10 @@ references before committing if they appear in generated content.
 Keep this document in sync with the code as you work. When a change alters anything described here —
 files moved or renamed, column contracts changed, a "Known issue" fixed or a newly found one, run
 commands or stages changed — update CLAUDE.md in the **same** change: add what is now true and delete
-what is now stale. A stale line here is worse than a missing one. Do not leave fixed issues marked
+what is now stale. A stale line here is worse than a missing one.q Do not leave fixed issues marked
 "done"; remove them.
 
-**Treat `CLAUDE.md` and `PLAN.md` as two living organisms.** They are never "finished." They must be
-*constantly evolving* in step with the code and with each other: every session that touches the
-repository should leave them a little more accurate and a little more useful than it found them. A
-document that has stopped changing is a document that has started to rot. Growth, pruning, and revision
-are the normal state, not the exception. The two evolve *together* — a change to one that is not
-reflected in the other is an organism out of sync with itself, and that drift is exactly what these
-files exist to prevent.
-
-**It is the agent's standing duty to keep `CLAUDE.md` and `PLAN.md` continuously current, and to do so
-proactively — not only when asked.** On any session that touches the code or the plan:
+On any session that touches the code or the plan:
 
 - **Propose a resync.** Reread both documents against the actual code, flag every line that has drifted,
   and bring them back into agreement with what the code now does. Both must stay faithful to the
@@ -64,8 +55,10 @@ results are recorded in `PLAN.md`'s `Completed tasks` (Bates extension, PR #12).
 - **Python 3.12**, **QuantLib 1.35**. Also: `pandas`, `numpy`, `scipy`, `joblib`.
 - The QuantLib pricing wrapper is **vendored in-repo** at `src/pricing/` (formerly the author's
   external `quantlib_pricers` package, now copied in so the repo is self-contained). It is a plain
-  directory with no `__init__.py`, so `pricing` is a namespace package: the single module
-  `vanilla_pricer.py` holds the class `vanilla_pricer` (used as `vanp = vanilla_pricer()`). The
+  directory with no `__init__.py`, so `pricing` is a namespace package holding three modules:
+  `vanilla_pricer.py` (the class `vanilla_pricer`, used as `vanp = vanilla_pricer()`),
+  `_quantlib_config.py` (the QuantLib date conventions), and `_quantlib_utils.py` (the class
+  `_quantlib_utils`: the single home of all QuantLib process/engine/option construction). The
   upstream package's `asian_option_pricer` / `barrier_option_pricer` were dropped (this pipeline does
   not price asians or barriers). The class is imported as `from pricing.vanilla_pricer import
   vanilla_pricer` **after** `src` is added to `sys.path`. There is no `requirements.txt`, `setup.py`,
@@ -77,10 +70,16 @@ The pipeline is three stages. There is no build/lint/test tooling — you run sc
 model/calibration constants (surface coverage knobs, box bounds, the acceptance gate, the OTM
 filter floor/cutoff, the wing-weight knobs, the seed grid, the Bates bounds/seed) live in one place:
 `src/config.py`. Tune there, not in the individual modules. The QuantLib **date conventions** (the
-`Actual365Fixed` day count and `UnitedStates.NYSE` calendar) are centralized there too, as
-`config.day_count(name=None)` / `config.calendar(name=None)` (the named choices are `DAY_COUNT_NAME`
-/ `CALENDAR_NAME`); both engines, both `utils` engine builders, the vendored `pricing.vanilla_pricer`,
-and the figure scripts call these instead of rebuilding the literals. The driver calibrates **every** raw file in
+`Actual365Fixed` day count and `UnitedStates.NYSE` calendar) are defined in
+`src/pricing/_quantlib_config.py` as `day_count(name=None)` / `calendar(name=None)` (named choices
+`DAY_COUNT_NAME` / `CALENDAR_NAME`) and **re-exported by `config`**, so `config.day_count` /
+`config.calendar` keep working as the facade. All QuantLib **process/engine/option construction** is
+likewise centralized in `src/pricing/_quantlib_utils.py` (`_quantlib_utils`): both calibration engines
+build their `HestonProcess`/`BatesProcess` via `_qu.heston_process`/`_qu.bates_process`, `utils`'s
+`build_heston_engine`/`build_bates_engine` are thin wrappers over `_qu._heston_engine`/`_qu._bates_engine`
+(which return `(engine, s_handle, ts_r, ts_g, day_count)`), and `vanilla_pricer` prices through
+`_qu._{heston,mc_heston,bates}_engine` + `_qu._european_option`. A QuantLib constructor-order change is
+a one-line edit there. The driver calibrates **every** raw file in
 `data/options/raw/` by default; `--LIMIT N` restricts to the `N` most recent trading days (by date).
 The full multi-year sample is ~3,217 trading days and one Heston `vol` run takes a few hours on this
 machine (multi-start LM, ~1,500 cells/day, 8 parallel jobs). A Bates run is ~4.5x slower per day (the
@@ -257,10 +256,11 @@ by `--MODEL {heston,bates}` (default `heston`) and the objective by `--OBJECTIVE
 
 **Stage 3 — calibration engine (`src/calibrate_heston.py`).** Pure function
 `calibrate_heston(vol_matrix, s, r, g) -> dict`, **hardened** (PLAN Work items 2 & 3). Builds a QuantLib
-`HestonProcess` / `HestonModel` with an `AnalyticHestonEngine` and one `HestonModelHelper` per
+`HestonProcess` (via the shared `_qu.heston_process`, the one place the constructor arg order lives) /
+`HestonModel` with an `AnalyticHestonEngine` and one `HestonModelHelper` per
 non-NaN surface cell (maturity as `Period(days, Days)`, `config.calendar()` = NYSE, `Date.todaysDate()`
-as eval date — immaterial under the flat-forward curves used here; the flat curves use
-`config.day_count()` = `Actual365Fixed`). It then:
+as eval date — immaterial under the flat-forward curves used here; the flat curves are built by
+`_qu._term_structures` on `config.day_count()` = `Actual365Fixed`). It then:
 
 1. **Multiple restarts:** for each of a small data-seeded grid of starting points (`_seed_grid`),
    calibrates with Levenberg–Marquardt under **box bounds**

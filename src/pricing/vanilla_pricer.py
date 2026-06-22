@@ -4,33 +4,20 @@ import QuantLib as ql
 from joblib import Parallel, delayed
 from scipy.stats import norm
 
-import config  # repo-level config.py (src/ is on sys.path); single source of the date conventions
+from pricing._quantlib_utils import _quantlib_utils  # one home for all QuantLib construction
+from pricing._quantlib_config import MC_STEPS, MC_RNG, MC_NUM_PATHS, MC_SEED  # MC defaults
 
-class vanilla_pricer():
-	def __init__(self,day_count_name=None,steps=None,rng=None,numPaths=None,seed=1312):
+class vanilla_pricer:
+	def __init__(self,day_count_name=None,steps=None,rng=None,numPaths=None,seed=None):
+		# All QuantLib processes/engines/options are built by this helper, so a constructor-order or
+		# convention change happens in pricing/_quantlib_utils.py, not in every method below.
+		self.qu = _quantlib_utils(day_count_name)
 
-		# None resolves to config.DAY_COUNT_NAME inside day_count(); a name is validated there too.
-		self.day_count_name = day_count_name
-
-		self.steps = steps
-		if steps == None:
-			self.steps = 10
-
-		self.rng = rng
-		if rng == None:
-			self.rng = "pseudorandom" # could use "lowdiscrepancy"
-
-		self.numPaths = numPaths
-		if numPaths == None:
-			self.numPaths = 100000
-		
-		self.seed = seed
-		if seed == None:
-			self.seed = 0
-
-	def day_count(self):
-		# Single source of truth: config maps the name (None => config.DAY_COUNT_NAME) to a ql instance.
-		return config.day_count(self.day_count_name)
+		# MC engine settings: a None arg resolves to the default in _quantlib_config.
+		self.steps = MC_STEPS if steps is None else steps
+		self.rng = MC_RNG if rng is None else rng
+		self.numPaths = MC_NUM_PATHS if numPaths is None else numPaths
+		self.seed = MC_SEED if seed is None else seed
 
 	def numpy_black_scholes(self, s, k, t, r, volatility,w):
 		if w == 'call':
@@ -52,54 +39,26 @@ class vanilla_pricer():
 			row['volatility'],
 			row['w']
 		)
-
-
+	
 	def df_numpy_black_scholes(self, df):
 		max_jobs = os.cpu_count() // 4
 		max_jobs = max(1, max_jobs)
 		return Parallel(n_jobs=max_jobs)(delayed(self.row_numpy_black_scholes)(row) for _, row in df.iterrows())
 
 
+	# ------- Monte Carlo Heston model price (stochastic volatility) -------	
 	def mc_heston_price(self,
 		s,k,t,r,g,w,
 		kappa,theta,rho,eta,v0,
 		):
 		calculation_date = ql.Date.todaysDate()
-		s = float(s)
-		k = float(k)
-		t = int(t)
-		r = float(r)
-		g = float(g)
-		kappa = float(kappa)
-		theta = float(theta)
-		rho = float(rho)
-		eta = float(eta)
-		v0 = float(v0)
-		ql.Settings.instance().evaluationDate = calculation_date
-		expiration_date = calculation_date + ql.Period(t,ql.Days)
-		ts_r = ql.YieldTermStructureHandle(ql.FlatForward(calculation_date,float(r),self.day_count()))
-		ts_g = ql.YieldTermStructureHandle(ql.FlatForward(calculation_date,float(g),self.day_count()))
-
-		if w == 'call':
-			option_type = ql.Option.Call
-		elif w == 'put':
-			option_type = ql.Option.Put
-		else:
-			raise ValueError("call/put flag w sould be either 'call' or 'put'")
-
-		payoff = ql.PlainVanillaPayoff(option_type, k)
-		exercise = ql.EuropeanExercise(expiration_date)
-		european_option = ql.VanillaOption(payoff, exercise)
-
-		heston_process = ql.HestonProcess(
-		ts_r, ts_g, 
-		ql.QuoteHandle(ql.SimpleQuote(s)), 
-		v0, kappa, theta, eta, rho
-		)
-
-		engine = ql.MCEuropeanHestonEngine(heston_process, self.rng, self.steps, requiredSamples=self.numPaths,seed=self.seed)
+		engine, *_ = self.qu._mc_heston_engine(
+			s, r, g, kappa, theta, rho, eta, v0,
+			self.rng, self.steps, self.numPaths, self.seed, 
+   			calculation_date=calculation_date)
+		european_option = self.qu._european_option(w, k, t, calculation_date)
 		european_option.setPricingEngine(engine)
-		return max(european_option.NPV(),0)
+		return max(european_option.NPV(), 0)
 
 	def row_mc_heston_price(self,row):
 		return self.mc_heston_price(
@@ -113,7 +72,7 @@ class vanilla_pricer():
 			row['theta'],
 			row['rho'],
 			row['eta'],
-			row['v0'],
+			row['v0']
 			)
 
 	def df_mc_heston_price(self,df):
@@ -122,49 +81,16 @@ class vanilla_pricer():
 		return Parallel(n_jobs=max_jobs)(delayed(self.row_mc_heston_price)(row) for _, row in df.iterrows())
 
 
-
+	# ------- Analytic Heston model price (stochastic volatility) -------
 	def heston_price(self,
 		s,k,t,r,g,w,
 		kappa,theta,rho,eta,v0,
 	):
-		s = float(s)
-		k = float(k)
-		t = int(t)
-		r = float(r)
-		g = float(g)
-		kappa = float(kappa)
-		theta = float(theta)
-		rho = float(rho)
-		eta = float(eta)
-		v0 = float(v0)
-
 		calculation_date = ql.Date.todaysDate()
-		ql.Settings.instance().evaluationDate = calculation_date
-		expiration_date = calculation_date + ql.Period(int(t),ql.Days)
-		ts_r = ql.YieldTermStructureHandle(ql.FlatForward(calculation_date,float(r),self.day_count()))
-		ts_g = ql.YieldTermStructureHandle(ql.FlatForward(calculation_date,float(g),self.day_count()))
-
-		if w == 'call':
-			option_type = ql.Option.Call
-		elif w == 'put':
-			option_type = ql.Option.Put
-		else:
-			raise ValueError("call/put flag w sould be either 'call' or 'put'")
-
-		payoff = ql.PlainVanillaPayoff(option_type, k)
-		exercise = ql.EuropeanExercise(expiration_date)
-		european_option = ql.VanillaOption(payoff, exercise)
-
-		heston_process = ql.HestonProcess(
-		ts_r, ts_g, 
-		ql.QuoteHandle(ql.SimpleQuote(s)), 
-		v0, kappa, theta, eta, rho
-		)
-
-		heston_model = ql.HestonModel(heston_process)
-		engine = ql.AnalyticHestonEngine(heston_model)
+		engine, *_ = self.qu._heston_engine(
+			s, r, g, kappa, theta, rho, eta, v0, calculation_date=calculation_date)
+		european_option = self.qu._european_option(w, k, t, calculation_date)
 		european_option.setPricingEngine(engine)
-  
 		return max(european_option.NPV(),0)
 
 	def row_heston_price(self,row):
@@ -179,7 +105,7 @@ class vanilla_pricer():
 			row['theta'],
 			row['rho'],
 			row['eta'],
-			row['v0'],
+			row['v0']
 			)
 
 	def df_heston_price(self, df):
@@ -187,41 +113,19 @@ class vanilla_pricer():
 		max_jobs = max(1, max_jobs)
 		return Parallel(n_jobs=max_jobs)(delayed(self.row_heston_price)(row) for _, row in df.iterrows())
 
-
+	# ------- Bates model price (stochastic volatility & jumps) -------
 	def bates_price(self,
 		s,k,t,r,g,w,
 		kappa,theta,rho,eta,v0,
 		lambda_, nu, delta
 	):
 		calculation_date = ql.Date.todaysDate()
-		ql.Settings.instance().evaluationDate = calculation_date
-		expiration_date = calculation_date + ql.Period(int(t),ql.Days)
-		ts_r = ql.YieldTermStructureHandle(ql.FlatForward(calculation_date,float(r),self.day_count()))
-		ts_g = ql.YieldTermStructureHandle(ql.FlatForward(calculation_date,float(g),self.day_count()))
-
-
-		if w == 'call':
-			option_type = ql.Option.Call
-		elif w == 'put':
-			option_type = ql.Option.Put
-		else:
-			raise ValueError("call/put flag w sould be either 'call' or 'put'")
-		bates_process = ql.BatesProcess(
-		ts_r, 
-		ts_g,
-		ql.QuoteHandle(ql.SimpleQuote(s)),
-		v0, kappa, theta, eta, rho,
-		lambda_, nu, delta,
-		)
-		engine = ql.BatesEngine(ql.BatesModel(bates_process))
-
-		payoff = ql.PlainVanillaPayoff(option_type, float(k))
-		europeanExercise = ql.EuropeanExercise(expiration_date)
-		european_option = ql.VanillaOption(payoff, europeanExercise)
+		engine, *_ = self.qu._bates_engine(
+			s, r, g, kappa, theta, rho, eta, v0, lambda_, nu, delta,
+			calculation_date=calculation_date)
+		european_option = self.qu._european_option(w, k, t, calculation_date)
 		european_option.setPricingEngine(engine)
-
-		bates = european_option.NPV()
-		return bates
+		return max(european_option.NPV(), 0)
 
 	def row_bates_price(self,row):
 		return self.bates_price(
@@ -238,7 +142,7 @@ class vanilla_pricer():
 			row['v0'],
 			row['lambda_'],
 			row['nu'],
-			row['delta'],
+			row['delta']
 			)
 
 	def df_bates_price(self, df):

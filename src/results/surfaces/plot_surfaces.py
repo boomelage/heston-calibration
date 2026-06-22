@@ -80,7 +80,7 @@ def plot_surface(grid, out_path, title=None, invert_K=False):
         ax.invert_xaxis()
     ax.set_ylabel(r'maturity in years ($T$)')
     ax.set_zlabel(r'price')
-    ax.set_zlim(bottom=0)
+    ax.set_zlim(np.nanmin(Z), np.nanmax(Z))
     if title:
         ax.set_title(title)
     # fig.colorbar(surf, shrink=0.5, aspect=5)

@@ -24,7 +24,7 @@
 	linkcolor=black, 
 	citecolor=black, 
 	urlcolor=blue,
-	pdfborder={0,0,0}
+%	pdfborder={0,0,0}
 }
 
 \setcounter{tocdepth}{3}% to get subsubsections in toc
@@ -102,8 +102,6 @@
 	\pagenumbering{gobble}
 	\begin{titlepage}
 		\vfill
-		\maketitle
-		\vfill
 		\begin{abstract}
 			\noindent We specify a routine that calibrates the five canonical \citet{heston1993}
 			parameters $\Phi=(\theta,\kappa,\eta,\rho,v_0)$ to a day of CBOE S\&P~500
@@ -120,6 +118,8 @@
 			surface and gate. We keep Heston as the default throughout and present Bates as the
 			eight-parameter generalisation it specialises from.
 		\end{abstract}
+		\vfill
+		\maketitle
 		\vfill
 		{\small \tableofcontents}
 		\vfill
@@ -696,7 +696,7 @@
 		
 	\vfill
 	{\small
-		\bibliographystyle{plainnat}
+		\bibliographystyle{chicago}
 		\bibliography{refs-heston-calibration}
 	}
 	\vfill
@@ -704,7 +704,7 @@
 	
 	\appendix
 	
-	\input{results/heston/surfaces/plots/tex/otm.tex}
+	\input{results/heston/surfaces/plots/tex/surfaces.tex}
 	\newpage
 	
 	\begingroup

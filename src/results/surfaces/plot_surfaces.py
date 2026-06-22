@@ -110,12 +110,12 @@ with a relative-price RMSE of <rmse>.
 The Feller condition <fellersign> at this calibration,
 with $2\kappa\theta - \eta^2 = <feller>$.
 } 
-calibrated pricing operator $C_{\mathrm{H}}(\Phi^{\star})$~\eqref{eq:heston-price}~\eqref{eq:accept}.
+calibrated pricing operator <operator>~\eqref{eq:accept}.
 \begin{figure}[H]
     \begin{center}
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/price_surface_puts.eps}
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/price_surface_calls.eps}
-        \caption{<MODEL_LABEL> OTM option prices for $S_{\mathrm{ref}}$ <spot> on <date> with $\Phi^{\star} = (<theta>,\ <kappa>,\ <eta>,\ <rho>,\ <v0>)$: puts wing (left) and calls wing (right).}
+        \caption{<MODEL_LABEL> OTM option prices for $S_{\mathrm{ref}}$ <spot> on <date> with <parameters>: puts wing (left) and calls wing (right).}
         \label{Fig:wings}
     \end{center}
     \begin{center}
@@ -126,13 +126,25 @@ calibrated pricing operator $C_{\mathrm{H}}(\Phi^{\star})$~\eqref{eq:heston-pric
 \end{figure}
 
 """
+    
+    hestonparams = r'$\Phi^{\star} = (<theta>,\ <kappa>,\ <eta>,\ <rho>,\ <v0>)$'
+    batesparams = r'$\Theta^{\star} = (<theta>,\ <kappa>,\ <eta>,\ <rho>,\ <v0>, \ <lambda>, \ <nu>, \ <delta>)$'
+    paramstr = hestonparams if MODEL == 'heston' else batesparams
+    paramstr = paramstr.replace('<theta>', str(round(params['theta'], 4)))
+    paramstr = paramstr.replace('<kappa>', str(round(params['kappa'], 4)))
+    paramstr = paramstr.replace('<eta>', str(round(params['eta'], 4)))
+    paramstr = paramstr.replace('<rho>', str(round(params['rho'], 4)))
+    paramstr = paramstr.replace('<v0>', str(round(params['v0'], 4)))
+    if MODEL == 'bates':
+        paramstr = paramstr.replace('<lambda>', str(round(params['lambda_'], 4)))
+        paramstr = paramstr.replace('<nu>', str(round(params['nu'], 4)))
+        paramstr = paramstr.replace('<delta>', str(round(params['delta'], 4)))
+    hestoneq = r'$C_{\mathrm{H}}(\Phi^{\star}; S,K,\tau,w)$~\eqref{eq:heston-price}'
+    bateseq = r'$C_{\mathrm{Bates}}(\Theta^{\star}; S,K,\tau,w)$~\eqref{eq:bates-cf}'
+    TeX = TeX.replace('<parameters>', paramstr)
+    TeX = TeX.replace('<operator>', hestoneq if MODEL == 'heston' else bateseq)
     TeX = TeX.replace('<spot>', str(spot))
     TeX = TeX.replace('<date>', str(date.strftime(r"%B %d, %Y")))
-    TeX = TeX.replace('<theta>', str(round(params['theta'], 4)))
-    TeX = TeX.replace('<kappa>', str(round(params['kappa'], 4)))
-    TeX = TeX.replace('<eta>', str(round(params['eta'], 4)))
-    TeX = TeX.replace('<rho>', str(round(params['rho'], 4)))
-    TeX = TeX.replace('<v0>', str(round(params['v0'], 4)))
     TeX = TeX.replace('<r>', f"{market['risk_free_rate']*100:.2f}")
     TeX = TeX.replace('<q>', f"{market['dividend_rate']*100:.2f}")
     TeX = TeX.replace('<ivrmse>', f"{fit['iv_rmse']*100:.2f}")
@@ -151,7 +163,7 @@ calibrated pricing operator $C_{\mathrm{H}}(\Phi^{\star})$~\eqref{eq:heston-pric
     TeX = TeX.replace('<MODEL>', str(MODEL))
     TeX = TeX.replace('<MODEL_LABEL>', str(MODEL_LABEL))
 
-    tex_path = TEXDIR / r"otm.tex"
+    tex_path = TEXDIR / r"surfaces.tex"
     tex_path.write_text(TeX)
 
 def grid_for(df, side):

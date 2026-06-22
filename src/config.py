@@ -159,3 +159,38 @@ def calib_paths(model, objective):
     return (base / "calibrations.csv",
             base / "rejections.csv",
             base / "calibration_tests")
+
+
+def spec_path(model, objective):
+    """Resolve the run's config snapshot path (config_spec.json), next to calibrations.csv.
+
+    Kept separate from `calib_paths` (whose 3-tuple is unpacked positionally by callers) so adding
+    the spec file does not shift that contract. `calibrator_prototype` writes this JSON each run; any
+    downstream script (e.g. the figure/table builders) can load it to recover the exact knobs a run
+    used without hard-coding values.
+    """
+    base = RESULTS / model / "calibrations" / objective
+    base.mkdir(parents=True, exist_ok=True)
+    return base / "config_spec.json"
+
+
+def as_dict():
+    """The calibration 'specification': every JSON-serializable module-level constant in this config.
+
+    Reflects over this module's namespace and keeps each public name whose value `json` can encode
+    (ints, floats, strings, bools, and nested lists/tuples/dicts of them: the bounds dicts, the seed
+    grid, the optimizer args, ...). Callables (`day_count`/`calendar`/`calib_paths`/`spec_path`/this
+    function) and `Path` objects (`REPO`/`RESULTS`) are skipped. New knobs are captured automatically,
+    so the snapshot never drifts from the live config. Tuples round-trip through JSON as lists.
+    """
+    import json as _json
+    spec = {}
+    for name, val in globals().items():
+        if name.startswith('_') or callable(val):
+            continue
+        try:
+            _json.dumps(val)
+        except (TypeError, ValueError):
+            continue
+        spec[name] = val
+    return spec

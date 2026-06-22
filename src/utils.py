@@ -1,7 +1,13 @@
+import json
+import datetime
+import subprocess
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import QuantLib as ql
 
+import config
 from config import OTM_MONEYNESS_CUTOFF, OTM_MONEYNESS_FLOOR
 from pricing._quantlib_utils import _quantlib_utils
 
@@ -134,3 +140,46 @@ def build_model_engine(row, calculation_date, model):
     if model == "bates":
         return build_bates_engine(row, calculation_date)
     return build_heston_engine(row, calculation_date)
+
+
+# ---- Run-specification snapshot (written by calibrator_prototype next to calibrations.csv) ----
+# A Python-readable record of the exact config a run used, so downstream scripts that build LaTeX
+# fragments (e.g. src/results/smiles/smiles.py) can recover bounds/coverage/gate knobs without
+# hard-coding them. The config values come from config.as_dict() (reflection, so new knobs appear
+# automatically); write_config_spec wraps them with a small `_run` metadata block.
+
+def _git_commit():
+    """Short HEAD hash for the run record, or None outside a git checkout / when git is unavailable."""
+    try:
+        out = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=str(Path(__file__).parent), stderr=subprocess.DEVNULL)
+        return out.decode().strip()
+    except Exception:
+        return None
+
+
+def write_config_spec(model, objective, limit, n_accepted, n_rejected):
+    """Write config_spec.json next to calibrations.csv: a snapshot of the config the run used plus a
+    `_run` metadata block (timestamp, git commit, model/objective/limit, accept-reject tally).
+
+    Config values come from config.as_dict() (every JSON-serializable module-level constant, captured
+    by reflection). Downstream consumers `json.load` this to read the run's bounds, coverage knobs and
+    gate. Returns the written path. The caller writes it whenever calibrations.csv is written (and
+    removes it alongside)."""
+    spec = {
+        "_run": {
+            "timestamp": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+            "git_commit": _git_commit(),
+            "model": model,
+            "objective": objective,
+            "limit": limit,
+            "n_accepted": n_accepted,
+            "n_rejected": n_rejected,
+            "n_attempted": n_accepted + n_rejected,
+        },
+    }
+    spec.update(config.as_dict())
+    path = config.spec_path(model, objective)
+    path.write_text(json.dumps(spec, indent=2))
+    return path

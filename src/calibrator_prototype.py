@@ -50,13 +50,13 @@ if str(SRC) not in sys.path:
 
 from pricing.vanilla_pricer import vanilla_pricer
 vanp = vanilla_pricer()
-from utils import _prepare_options
+from utils import _prepare_options, write_config_spec
 from calibrate_heston import calibrate_heston
 from calibrate_bates import calibrate_bates
 from config import (
     MAX_NT, MAX_NK, STRIKE_GRID, MIN_DTM, MAX_DTM,
     MIN_MATS, MIN_STRIKES, MIN_CELLS, MAX_MOVE_PCT,
-    IV_RMSE_ACCEPT, OBJECTIVE_NAMES, MODEL_NAMES, calib_paths,
+    IV_RMSE_ACCEPT, OBJECTIVE_NAMES, MODEL_NAMES, calib_paths, spec_path,
     DEFAULT_MODEL, DEFAULT_OBJECTIVE
 )
 
@@ -302,13 +302,20 @@ def main():
     accepted = [r for r in results if 'reason' not in r]
     rejected = [r for r in results if 'reason' in r]
 
+    SPEC_FILE = spec_path(args.MODEL, args.OBJECTIVE)
     if accepted:
         out = pd.DataFrame(accepted).set_index('date').sort_index()
         out.to_csv(CALIBRATIONS_FILE)
         print(f"\nwrote {len(accepted)} accepted day(s) -> {CALIBRATIONS_FILE}")
+        # Snapshot the exact config this run used next to calibrations.csv (Python-readable for the
+        # downstream LaTeX-fragment scripts). Written iff calibrations.csv is, removed alongside it.
+        write_config_spec(args.MODEL, args.OBJECTIVE, args.LIMIT, len(accepted), len(rejected))
+        print(f"wrote config snapshot -> {SPEC_FILE}")
     else:
         if CALIBRATIONS_FILE.exists():
             CALIBRATIONS_FILE.unlink()
+        if SPEC_FILE.exists():
+            SPEC_FILE.unlink()
         print(f"\nno accepted days; removed {CALIBRATIONS_FILE}")
 
     if rejected:

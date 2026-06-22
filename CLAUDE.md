@@ -96,7 +96,8 @@ python -c "import sys; sys.path.insert(0,'data'); from get_rg import rg; print(r
 #            in-memory (utils._prepare_options), so there is no separate extraction script. Writes
 #            accepted params to the single results/<model>/calibrations/<objective>/calibrations.csv, one
 #            row per REJECTED day (with the cause) to results/<model>/calibrations/<objective>/rejections.csv,
-#            and per-day repricing diagnostics to results/<model>/calibrations/<objective>/calibration_tests/.
+#            per-day repricing diagnostics to results/<model>/calibrations/<objective>/calibration_tests/,
+#            and a Python-readable snapshot of the config that ran to results/<model>/calibrations/<objective>/config_spec.json.
 #            <model> is `heston` (default) or `bates`, via --MODEL; <objective> is `vol` (default) or
 #            `price`, via --OBJECTIVE. --LIMIT N caps to the N most recent days. Prints the accept rate
 #            and a rejections-by-reason tally. Resolves paths from __file__, runs from any dir.
@@ -125,8 +126,9 @@ cleaning is done in-memory by the calibrator (no on-disk OTM snapshots).
 **git-ignored** for the same reason — it grows with years of data. A fresh clone has none of
 them — to bootstrap, drop `UnderlyingOptionsTradesCalcs_*.csv` into `data/options/raw/`, then run
 Stage 2+3 (which regenerates `calibration_tests/`). Only the
-small derived artefacts are tracked: the `{calibrations,rejections,validation}.csv` triple for the
-default **`vol`** objective (`results/heston/calibrations/vol/`) plus `data/market/`. The `price`
+small derived artefacts are tracked: the `{calibrations,rejections,validation}.csv` triple plus the
+`config_spec.json` run snapshot for the default **`vol`** objective (`results/heston/calibrations/vol/`)
+plus `data/market/`. The `price`
 objective is still selectable (`--OBJECTIVE price`) but its outputs are **not committed on this branch**
 (the older narrow-config `price` baseline lives on `master`). Each objective's bulky per-day
 `calibration_tests/` stays git-ignored (only a `.gitkeep` is tracked).
@@ -134,7 +136,19 @@ objective is still selectable (`--OBJECTIVE price`) but its outputs are **not co
 **Output routing is namespaced by model AND objective:** `results/<model>/calibrations/<objective>/`
 (`<model>` ∈ `heston, bates`). The Heston tree was migrated from the old `results/calibrations/<objective>/`
 to `results/heston/calibrations/<objective>/`; Bates lands under `results/bates/...`. The single source
-of truth is `config.calib_paths(model, objective)` (and `_objective_paths` wraps it).
+of truth is `config.calib_paths(model, objective)` (and `_objective_paths` wraps it). The run snapshot
+`config_spec.json` sits alongside in the same directory, resolved by the sibling `config.spec_path(model,
+objective)` (kept separate from `calib_paths` so its positional 3-tuple contract is untouched).
+
+**Run-spec snapshot (`config_spec.json`).** Each accepted run writes a Python-readable JSON snapshot of
+the exact config it used next to `calibrations.csv` (`utils.write_config_spec`, called from
+`calibrator_prototype.main`). The config values come from `config.as_dict()` — every JSON-serializable
+module-level constant, captured by reflection so new knobs appear automatically (callables like
+`day_count`/`calendar`/`calib_paths` and `Path` objects like `REPO`/`RESULTS` are skipped; tuples
+round-trip as JSON arrays). A `_run` header records `timestamp`, `git_commit`, `model`, `objective`,
+`limit`, and the accept/reject tally. It is written iff `calibrations.csv` is (and removed alongside it
+when a run accepts no days). Downstream LaTeX-fragment scripts (e.g. `src/results/smiles/smiles.py`) can
+`json.load` it to recover the run's bounds/coverage/gate without hard-coding values.
 
 There is no single-test command because there are no tests. To exercise just an engine, import
 `calibrate_heston(vol_matrix, s, r, g, objective="vol")` from `src/calibrate_heston.py` (or

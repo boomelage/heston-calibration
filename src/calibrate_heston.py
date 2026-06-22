@@ -33,10 +33,13 @@ from config import (
     LOW, HIGH, IV_RMSE_ACCEPT,
     DEFAULT_OBJECTIVE, SEED_GRID_TEMPLATE,
     WING_WEIGHT_GAIN,
-    day_count as _day_count, calendar as _calendar,
+    calendar as _calendar,
 )
 # Model-agnostic helpers shared with calibrate_bates.py (factored out so the two engines can't drift).
 from _engine_common import _on_boundary, _seed_var, _wing_weight, _iv_rmse
+# Single home of the QuantLib process/term-structure construction (constructor arg order, day count).
+from pricing._quantlib_utils import _quantlib_utils
+_qu = _quantlib_utils()
 
 # String->QuantLib-enum objective map. Kept next to the engine (live ql objects, not serialisable);
 # the string names/default live in config. Selection and the gate always run off IV-space RMSE, so
@@ -68,7 +71,7 @@ def _calibrate_once(start, surface, s, r_ts, g_ts, S_handle, constraint, error_t
     wing-weighted IV-RMSE the LM objective saw (for restart ranking); `iv_rmse_gate` is the unweighted
     IV-RMSE (for the acceptance gate and reporting). With wing weighting off they are identical."""
     v0, kappa, theta, eta, rho = start
-    process = ql.HestonProcess(r_ts, g_ts, S_handle, v0, kappa, theta, eta, rho)
+    process = _qu.heston_process(r_ts, g_ts, S_handle, kappa, theta, rho, eta, v0)
     model = ql.HestonModel(process)
     engine = ql.AnalyticHestonEngine(model)
 
@@ -116,10 +119,8 @@ def calibrate_heston(vol_matrix, s, r, g, objective=DEFAULT_OBJECTIVE) -> dict:
     error_type = _ERR[objective]
     calculation_date = ql.Date.todaysDate()
     ql.Settings.instance().evaluationDate = calculation_date
-    day_count = _day_count()
-    r_ts = ql.YieldTermStructureHandle(ql.FlatForward(calculation_date, float(r), day_count))
-    g_ts = ql.YieldTermStructureHandle(ql.FlatForward(calculation_date, float(g), day_count))
-    S_handle = ql.QuoteHandle(ql.SimpleQuote(float(s)))
+    r_ts, g_ts = _qu._term_structures(r, g, calculation_date)
+    S_handle = _qu._spot_handle(s)
     constraint = ql.NonhomogeneousBoundaryConstraint(ql.Array(LOW), ql.Array(HIGH))
 
     # best ranked by iv_rmse_sel (wing-weighted, the objective LM saw); the gate uses iv_rmse_gate

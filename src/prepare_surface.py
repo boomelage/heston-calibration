@@ -73,33 +73,6 @@ def _prepare_options(raw):
     df = df[(df['moneyness'] > OTM_MONEYNESS_FLOOR) & (df['moneyness'] < OTM_MONEYNESS_CUTOFF)]
     return df.drop(columns='moneyness').dropna().copy()
 
-def _select_surface(df):
-    """Pick the day's calibration surface in moneyness-normalised (K*) strike space.
-
-    The trades are OTM calls and puts spanning both wings (see `_prepare_options`). Top MAX_NT
-    maturities by traded volume; within each, the MAX_NK nearest-the-money strikes per wing on K*
-    (already centred on S_ref): the highest OTM puts (below spot) and the lowest OTM calls (above
-    spot). Returns the selected snapshot rows with original strike/spot retained for repricing, or
-    None if no maturity qualifies. The public `select_surface` wrapper turns that None into a
-    `SkipDay("thin", ...)`.
-    """
-    byt = df.groupby('days_to_maturity')
-    vol_by_t = byt['trade_size'].sum().sort_values(ascending=False)
-    T = np.sort(vol_by_t.index[:MAX_NT]).tolist()
-
-    selected = []
-    for t in T:
-        dft = byt.get_group(t)
-        cK = np.sort(dft.loc[dft['w'] == 'call', 'Kstar'].unique())
-        pK = np.sort(dft.loc[dft['w'] == 'put', 'Kstar'].unique())
-        if len(cK) > 1 and len(pK) > 1:
-            keep = list(pK[-min(len(pK), MAX_NK):]) + list(cK[:min(len(cK), MAX_NK)])
-            selected.append(dft[dft['Kstar'].isin(keep)])
-    if not selected:
-        return None
-    return pd.concat(selected, ignore_index=True)
-
-
 def prepare_surface(df):
     """Turn a cleaned OTM snapshot into the day's calibratable, moneyness-normalised trades.
 
@@ -137,6 +110,32 @@ def prepare_surface(df):
     df['Kstar'] = (df['strike_price'] / df['spot_price']) * S_ref
     df['Kstar'] = (df['Kstar'] / STRIKE_GRID).round() * STRIKE_GRID
     return PreparedDay(df, date, S_ref, spot_min, spot_max, spot_range_pct, high_move)
+
+def _select_surface(df):
+    """Pick the day's calibration surface in moneyness-normalised (K*) strike space.
+
+    The trades are OTM calls and puts spanning both wings (see `_prepare_options`). Top MAX_NT
+    maturities by traded volume; within each, the MAX_NK nearest-the-money strikes per wing on K*
+    (already centred on S_ref): the highest OTM puts (below spot) and the lowest OTM calls (above
+    spot). Returns the selected snapshot rows with original strike/spot retained for repricing, or
+    None if no maturity qualifies. The public `select_surface` wrapper turns that None into a
+    `SkipDay("thin", ...)`.
+    """
+    byt = df.groupby('days_to_maturity')
+    vol_by_t = byt['trade_size'].sum().sort_values(ascending=False)
+    T = np.sort(vol_by_t.index[:MAX_NT]).tolist()
+
+    selected = []
+    for t in T:
+        dft = byt.get_group(t)
+        cK = np.sort(dft.loc[dft['w'] == 'call', 'Kstar'].unique())
+        pK = np.sort(dft.loc[dft['w'] == 'put', 'Kstar'].unique())
+        if len(cK) > 1 and len(pK) > 1:
+            keep = list(pK[-min(len(pK), MAX_NK):]) + list(cK[:min(len(cK), MAX_NK)])
+            selected.append(dft[dft['Kstar'].isin(keep)])
+    if not selected:
+        return None
+    return pd.concat(selected, ignore_index=True)
 
 def select_surface(df):
     """Pick the day's surface and pivot it to a Kstar x maturity IV matrix.

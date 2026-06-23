@@ -302,6 +302,8 @@ def main():
                         help="Model to calibrate: `heston` (5 params) or `bates` (Heston + jumps, 8 params)")
     parser.add_argument("--LIMIT", type=int, default=0,
                         help="If >0, calibrate only the LIMIT most recent trading days (by date). 0 = all.")
+    parser.add_argument("--MAX_JOBS", type=int, default=max(1, os.cpu_count() // 4),
+                        help="Number of threads to use at one (one day's calibration per thread) (1//4 of available threads by default)")
     args = parser.parse_args()
 
     CALIBRATIONS_FILE, REJECTIONS_FILE, TESTS = _objective_paths(args.MODEL, args.OBJECTIVE)
@@ -374,7 +376,6 @@ def main():
     # so the driver MUST live behind `if __name__ == "__main__"` (via main()) -- otherwise each worker
     # re-runs the Parallel call below and recursively spawns process pools.
     from joblib import Parallel, delayed
-    max_jobs = max(1, os.cpu_count() // 4)
     
     accepted, rejected = [], []
     # On a fresh run the first mid-run flush creates calibrations.csv with a header; on a resume the
@@ -384,7 +385,7 @@ def main():
     # Ctrl-C stops the loop but does NOT abort: we fall through to the end-of-run block and still
     # write the authoritative calibrations.csv + config_spec.json from the days completed so far.
     try:
-        for r in Parallel(n_jobs=max_jobs, return_as="generator_unordered")(
+        for r in Parallel(n_jobs=args.MAX_JOBS, return_as="generator_unordered")(
                 delayed(calibrate_by_day)(f, args.OBJECTIVE, args.MODEL) for f in files):
             if r is None:
                 continue

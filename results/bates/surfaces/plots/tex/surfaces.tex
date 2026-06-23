@@ -1,26 +1,29 @@
 
-\section{Example option prices} Produced by the market\!\,\footnote{
-The fit uses 1427 calibration cells across 20 maturities and 242 strikes,
-backed by 300,595 contracts of traded volume.
-The reference spot was $S_{\mathrm{ref}} = 5353.717$,
-priced under a risk-free rate of 5.08\% and a dividend rate of 1.34\%.
-The intraday spot range was 1.05\%.
-Fit quality is 0.23 vol points of implied-volatility RMSE,
-with a relative-price RMSE of 0.0578.
+\textbf{Bates model prices} produced by the market\!\,\footnote{
+The fit uses 261 calibration cells across 7 maturities and 98 strikes,
+backed by 319,344 contracts of traded volume.
+The reference spot was $S_{\mathrm{ref}} = 1383.9303$,
+priced under a risk-free rate of 0.16\% and a dividend rate of 2.01\%.
+The intraday spot range was 0.76\%.
+Fit quality is 0.46 vol points of implied-volatility RMSE,
+with a relative-price RMSE of 0.1642.
 The Feller condition violates at this calibration,
-with $2\kappa\theta - \eta^2 = -0.0628$.
+with $2\kappa\theta - \eta^2 = -0.2392$.
 } 
-calibrated pricing operator $C_{\mathrm{Bates}}(\Theta^{\star}; S,K,\tau,w)$~\eqref{eq:bates-cf}~\eqref{eq:accept}.
+calibrated pricing operator:
+\begin{center}
+    $C_{\mathrm{Bates}}(\Theta^{\star}; S,K,\tau,w)$~\eqref{eq:bates-cf}~\eqref{eq:accept}.
+\end{center}
 \begin{figure}[H]
     \begin{center}
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/bates/surfaces/plots/tex/price_surface_puts.eps}
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/bates/surfaces/plots/tex/price_surface_calls.eps}
-        \caption{Bates option prices for $S_{\mathrm{ref}}$ 5353.717 on June 07, 2024 with $\Theta^{\star} = (0.0316,\ 0.839,\ 0.3405,\ -0.587,\ 0.0099, \ 0.0478, \ -0.3211, \ 0.3904)$: puts wing (left) and calls wing (right).}
-        \label{Fig:wings}
+        \caption{Bates option prices for $S_{\mathrm{ref}}$ 1383.9303 on April 20, 2012 with $\Theta^{\star} = (0.138,\ 0.4673,\ 0.6067,\ -0.7813,\ 0.0225, \ 0.0529, \ -0.5, \ 0.4815)$: puts wing (left) and calls wing (right).}
+        \label{Fig:bates-wings}
     \end{center}
     \begin{center}
-        \includegraphics[width=10cm,keepaspectratio=true]{results/bates/surfaces/plots/tex/call_smile.eps}
-        \caption{\emph{Out of the money} implied volatilites from Figure~\ref{Fig:wings}}
+        \includegraphics[width=9cm,keepaspectratio=true]{results/bates/surfaces/plots/tex/smile_surface.eps}
+        \caption{\emph{Out of the money} implied volatilites from Figure~\ref{Fig:bates-wings}}
     \end{center}
 \end{figure}
 

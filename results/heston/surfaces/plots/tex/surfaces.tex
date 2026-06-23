@@ -1,26 +1,29 @@
 
-\section{Example option prices} Produced by the market\!\,\footnote{
-The fit uses 1467 calibration cells across 20 maturities and 313 strikes,
-backed by 374,209 contracts of traded volume.
-The reference spot was $S_{\mathrm{ref}} = 5194.443$,
-priced under a risk-free rate of 4.99\% and a dividend rate of 1.39\%.
-The intraday spot range was 1.46\%.
-Fit quality is 0.33 vol points of implied-volatility RMSE,
-with a relative-price RMSE of 0.0605.
+\textbf{Heston model prices} produced by the market\!\,\footnote{
+The fit uses 1057 calibration cells across 20 maturities and 212 strikes,
+backed by 289,441 contracts of traded volume.
+The reference spot was $S_{\mathrm{ref}} = 2939.9736$,
+priced under a risk-free rate of 2.53\% and a dividend rate of 1.88\%.
+The intraday spot range was 0.87\%.
+Fit quality is 0.37 vol points of implied-volatility RMSE,
+with a relative-price RMSE of 0.0882.
 The Feller condition violates at this calibration,
-with $2\kappa\theta - \eta^2 = -0.3398$.
+with $2\kappa\theta - \eta^2 = -2.7602$.
 } 
-calibrated pricing operator $C_{\mathrm{H}}(\Phi^{\star}; S,K,\tau,w)$~\eqref{eq:heston-price}~\eqref{eq:accept}.
+calibrated pricing operator:
+\begin{center}
+    $C_{\mathrm{H}}(\Phi^{\star}; S,K,\tau,w)$~\eqref{eq:heston-price}~\eqref{eq:accept}.
+\end{center}
 \begin{figure}[H]
     \begin{center}
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/heston/surfaces/plots/tex/price_surface_puts.eps}
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/heston/surfaces/plots/tex/price_surface_calls.eps}
-        \caption{Heston option prices for $S_{\mathrm{ref}}$ 5194.443 on April 05, 2024 with $\Phi^{\star} = (0.0725,\ 0.7148,\ 0.666,\ -0.6408,\ 0.0198)$: puts wing (left) and calls wing (right).}
-        \label{Fig:wings}
+        \caption{Heston option prices for $S_{\mathrm{ref}}$ 2939.9736 on May 03, 2019 with $\Phi^{\star} = (0.043,\ 3.88,\ 1.7589,\ -0.6901,\ 0.013)$: puts wing (left) and calls wing (right).}
+        \label{Fig:heston-wings}
     \end{center}
     \begin{center}
-        \includegraphics[width=10cm,keepaspectratio=true]{results/heston/surfaces/plots/tex/call_smile.eps}
-        \caption{\emph{Out of the money} implied volatilites from Figure~\ref{Fig:wings}}
+        \includegraphics[width=9cm,keepaspectratio=true]{results/heston/surfaces/plots/tex/smile_surface.eps}
+        \caption{\emph{Out of the money} implied volatilites from Figure~\ref{Fig:heston-wings}}
     \end{center}
 \end{figure}
 

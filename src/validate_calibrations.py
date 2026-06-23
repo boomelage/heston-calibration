@@ -203,7 +203,11 @@ def main():
     if not CALIBRATIONS_FILE.exists():
         print(f"No calibrations file at {CALIBRATIONS_FILE}")
         return
-    cal = pd.read_csv(CALIBRATIONS_FILE)   # one row per trading day
+    # float_precision='round_trip': grade_row echoes every calibrations.csv column VERBATIM into the
+    # tracked validation.csv (record = {**row.to_dict(), ...}). The default C parser is not
+    # correctly-rounded (can land 1 ULP off), so reading the params back any other way would write
+    # 1-ULP-shifted copies of theta/kappa/eta/... into validation.csv instead of the source values.
+    cal = pd.read_csv(CALIBRATIONS_FILE, float_precision='round_trip')   # one row per trading day
     all_reports = []
     for _, row in cal.iterrows():
         date = str(row["date"])

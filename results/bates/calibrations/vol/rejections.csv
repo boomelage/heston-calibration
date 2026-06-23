@@ -1,7 +1,4 @@
 date,reason,detail,iv_rmse,n_maturities,n_strikes,n_cells
-2024-08-05,iv_miss,calibration rejected (iv_rmse=0.0293 > 0.02),0.029276933726924415,20,166,1600
-2024-09-09,pegged,calibration rejected (boundary-pegged),0.005662529642159181,20,294,1574
-2024-09-10,pegged,calibration rejected (boundary-pegged),0.0055989041790502035,20,278,1547
-2024-09-11,pegged,calibration rejected (boundary-pegged),0.008409244000628199,20,351,1534
-2024-10-07,pegged,calibration rejected (boundary-pegged),0.009470411787909288,20,266,1454
-2024-10-09,pegged,calibration rejected (boundary-pegged),0.008781561803645577,20,285,1456
+2012-04-02,iv_miss,calibration rejected (iv_rmse=0.0377 > 0.02),0.03773631668631725,9,122,364
+2012-08-01,pegged,calibration rejected (boundary-pegged),0.0075405147264355306,10,96,366
+2012-09-13,pegged,calibration rejected (boundary-pegged),0.00854231336226383,11,116,488

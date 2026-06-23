@@ -41,10 +41,10 @@ INVERSION_PLACEHOLDER_VOL = 0.20
 # ------- `surfaces/make_surface.py` parameters
 
 # Moneyness grid (strike = m * spot) the model surface is sampled on. K/S around the money.
-MONEYNESS = np.round(np.arange(0.75, 1.25, 0.005), 4).tolist()   # 0.75 .. 1.245
+MONEYNESS = np.round(np.arange(0.75, 1.4, 0.005), 4).tolist()   # 0.75 .. 1.245
 
 # Maturity grid in calendar days the model surface is sampled on (>= MIN_DTM up to ~MAX_DTM).
-MATURITIES_DAYS = np.arange(start=30, stop=730, step=30).tolist()
+MATURITIES_DAYS = np.arange(start=60, stop=750, step=7).tolist()
 
 
 # ------- `smiles/smiles.py` parameters
@@ -57,12 +57,12 @@ MATURITIES_DAYS = np.arange(start=30, stop=730, step=30).tolist()
 # Number of maturities drawn per figure. The plotted set always includes the lowest and highest
 # available maturity; the remaining NT-2 are spaced as equally as possible. Set NT >= the number of
 # available maturities, or NT = None, to draw them all.
-NT = 5
+NT = 6
 
 # Maturity window (calendar days) the displayed smiles are clipped to before the NT sparse pick.
 # Either bound may be None to disable it: TMIN=None drops the lower bound, TMAX=None the upper,
 # both None draws every available maturity.
-TMIN, TMAX = 100, 750
+TMIN, TMAX = 0, 750
 
 # Per-row maturity key: True draws a legend, False draws a colorbar.
 USE_LEGEND = True

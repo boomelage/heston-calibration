@@ -71,7 +71,7 @@ if str(SRC) not in sys.path:
 
 from pricing.vanilla_pricer import vanilla_pricer
 vanp = vanilla_pricer()
-from utils import _prepare_options, write_config_spec
+from utils import _prepare_options, write_config_spec, _file_date
 from calibrate_heston import calibrate_heston
 from calibrate_bates import calibrate_bates
 import config
@@ -384,12 +384,6 @@ def main():
 
     TRADES = Path(__file__).parent.parent / "data" / "options" / "raw"
 
-    def _file_date(p):
-        """The trailing _<date> token of a raw trades filename, e.g. '2024-10-15' from
-        'UnderlyingOptionsTradesCalcs_2024-10-15.csv'. Same string the per-day rows are keyed by, so it
-        matches the resume `processed_dates` set."""
-        b = os.path.basename(p)
-        return b[b.rfind('_') + 1:-4]
 
     files = [os.path.join(TRADES, f) for f in os.listdir(TRADES) if f.endswith('.csv')]
     # Sort chronologically by the date token (robust to mixed filename prefixes), so --LIMIT selects the

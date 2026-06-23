@@ -1,3 +1,4 @@
+import os
 import json
 import datetime
 import subprocess
@@ -184,3 +185,10 @@ def write_config_spec(model, objective, limit, n_accepted, n_rejected):
     path = config.spec_path(model, objective)
     path.write_text(json.dumps(spec, indent=2))
     return path
+
+def _file_date(p):
+    """The trailing _<date> token of a raw trades filename, e.g. '2024-10-15' from
+    'UnderlyingOptionsTradesCalcs_2024-10-15.csv'. Same string the per-day rows are keyed by, so it
+    matches the resume `processed_dates` set."""
+    b = os.path.basename(p)
+    return b[b.rfind('_') + 1:-4]

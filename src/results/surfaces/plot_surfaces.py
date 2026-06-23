@@ -63,7 +63,10 @@ def plot_surface(grid, out_path, title=None, invert_K=False, invert_T=False, AZI
 
     fig = plt.figure(figsize=SURFACE_FIGSIZE)
     plt.style.use('fast')
-    ax: Axes3D = fig.add_subplot(111, projection='3d')  # type: ignore[assignment]
+    # computed_zorder=False so axis ticks/labels always draw on top of the surface; the default
+    # (True) depth-sorts the white-faced surface in front of the z-axis label once the view is
+    # rotated, hiding the label behind the facets.
+    ax: Axes3D = fig.add_subplot(111, projection='3d', computed_zorder=False)  # type: ignore[assignment]
     surf = ax.plot_surface(X, Y, Z, rstride=3, cstride=3,
                     color="white", edgecolor="black",
                     linewidth=0.4, shade=False, antialiased=True)
@@ -88,7 +91,9 @@ def plot_surface(grid, out_path, title=None, invert_K=False, invert_T=False, AZI
         ax.set_title(title)
     # fig.colorbar(surf, shrink=0.5, aspect=5)
     fig.tight_layout()
-    fig.savefig(out_path, format='eps', bbox_inches='tight')
+    # pad_inches: bbox_inches='tight' under-counts the rotated 3D z-axis label in mplot3d and crops
+    # it off (the smile view rotates the z-axis title out past the tight box); the pad keeps it in.
+    fig.savefig(out_path, format='eps', bbox_inches='tight', pad_inches=0.4)
     plt.close(fig)
     print(f"wrote {out_path.name}")
 

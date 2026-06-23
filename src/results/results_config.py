@@ -18,7 +18,7 @@ import numpy as np
 # MODEL picks the QuantLib engine (Heston vs Bates) AND the results/<model>/ output tree.
 # OBJECTIVE picks which calibration run to read (results/<model>/calibrations/<objective>/).
 # This module is the single source for both -- the other scripts import them from here.
-MODEL = "heston"      # 'heston' or 'bates'
+MODEL = "bates"      # 'heston' or 'bates'
 OBJECTIVE = "vol"     # 'vol' or 'price'
 
 # Matplotlib styling shared by smiles.py and plot_surfaces.py. Computer Modern serif to match the
@@ -62,7 +62,7 @@ NT = 6
 # Maturity window (calendar days) the displayed smiles are clipped to before the NT sparse pick.
 # Either bound may be None to disable it: TMIN=None drops the lower bound, TMAX=None the upper,
 # both None draws every available maturity.
-TMIN, TMAX = 0, 750
+TMIN, TMAX = 30, 750
 
 # Per-row maturity key: True draws a legend, False draws a colorbar.
 USE_LEGEND = True

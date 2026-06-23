@@ -1,0 +1,215 @@
+{
+  "_run": {
+    "timestamp": "2026-06-23T16:56:47+03:00",
+    "git_commit": "f8635de",
+    "model": "bates",
+    "objective": "vol",
+    "limit": 0,
+    "n_accepted": 225,
+    "n_rejected": 11,
+    "n_attempted": 236
+  },
+  "DAY_COUNT_NAME": "Actual365Fixed",
+  "CALENDAR_NAME": "UnitedStates.NYSE",
+  "MAX_NT": 20,
+  "MAX_NK": 40,
+  "STRIKE_GRID": 5.0,
+  "MIN_DTM": 14,
+  "MAX_DTM": 730,
+  "MIN_MATS": 3,
+  "MIN_STRIKES": 5,
+  "MIN_CELLS": 12,
+  "MAX_MOVE_PCT": 0.03,
+  "OTM_MONEYNESS_CUTOFF": 0.98,
+  "OTM_MONEYNESS_FLOOR": 0.6,
+  "PARAM_ORDER": [
+    "theta",
+    "kappa",
+    "eta",
+    "rho",
+    "v0"
+  ],
+  "BOUNDS": {
+    "theta": [
+      0.0001,
+      1.0
+    ],
+    "kappa": [
+      0.01,
+      20.0
+    ],
+    "eta": [
+      0.01,
+      2.0
+    ],
+    "rho": [
+      -0.999,
+      0.5
+    ],
+    "v0": [
+      0.0001,
+      1.0
+    ]
+  },
+  "LOW": [
+    0.0001,
+    0.01,
+    0.01,
+    -0.999,
+    0.0001
+  ],
+  "HIGH": [
+    1.0,
+    20.0,
+    2.0,
+    0.5,
+    1.0
+  ],
+  "BATES_PARAM_ORDER": [
+    "theta",
+    "kappa",
+    "eta",
+    "rho",
+    "v0",
+    "nu",
+    "delta",
+    "lambda_"
+  ],
+  "BATES_BOUNDS": {
+    "theta": [
+      0.0001,
+      1.0
+    ],
+    "kappa": [
+      0.01,
+      20.0
+    ],
+    "eta": [
+      0.01,
+      2.0
+    ],
+    "rho": [
+      -0.999,
+      0.5
+    ],
+    "v0": [
+      0.0001,
+      1.0
+    ],
+    "nu": [
+      -0.5,
+      0.2
+    ],
+    "delta": [
+      0.001,
+      0.5
+    ],
+    "lambda_": [
+      0.0,
+      5.0
+    ]
+  },
+  "BATES_LOW": [
+    0.0001,
+    0.01,
+    0.01,
+    -0.999,
+    0.0001,
+    -0.5,
+    0.001,
+    0.0
+  ],
+  "BATES_HIGH": [
+    1.0,
+    20.0,
+    2.0,
+    0.5,
+    1.0,
+    0.2,
+    0.5,
+    5.0
+  ],
+  "BATES_JUMP_SEED": [
+    0.1,
+    -0.1,
+    0.1
+  ],
+  "MODEL_NAMES": [
+    "heston",
+    "bates"
+  ],
+  "DEFAULT_MODEL": "heston",
+  "OBJECTIVE_NAMES": [
+    "price",
+    "vol"
+  ],
+  "DEFAULT_OBJECTIVE": "vol",
+  "IV_RMSE_ACCEPT": 0.02,
+  "BOUND_TOL": 0.001,
+  "IV_ACC": 1e-06,
+  "IV_MAXEVAL": 500,
+  "IV_LO": 0.0001,
+  "IV_HI": 5.0,
+  "LM_ARGS": [
+    1e-08,
+    1e-08,
+    1e-08
+  ],
+  "END_CRITERIA_ARGS": [
+    1000,
+    100,
+    1e-08,
+    1e-08,
+    1e-08
+  ],
+  "WING_WEIGHT_GAIN": 0.0,
+  "WING_WEIGHT_POWER": 1.0,
+  "WING_WEIGHT_SCALE": 0.05,
+  "SEED_VAR_FALLBACK": 0.04,
+  "SEED_VAR_LO": 0.001,
+  "SEED_VAR_HI": 0.25,
+  "SEED_GRID_TEMPLATE": [
+    [
+      1.0,
+      1.0,
+      1.0,
+      0.5,
+      -0.7
+    ],
+    [
+      1.0,
+      3.0,
+      1.0,
+      1.0,
+      -0.5
+    ],
+    [
+      1.0,
+      0.5,
+      1.0,
+      0.3,
+      -0.9
+    ],
+    [
+      1.0,
+      5.0,
+      1.0,
+      0.8,
+      -0.6
+    ],
+    [
+      0.8,
+      2.0,
+      1.2,
+      0.6,
+      -0.75
+    ],
+    [
+      1.0,
+      8.0,
+      1.0,
+      1.2,
+      -0.4
+    ]
+  ]
+}

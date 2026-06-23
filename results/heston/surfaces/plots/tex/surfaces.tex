@@ -1,0 +1,29 @@
+
+\textbf{Heston model prices} produced by the market\!\,\footnote{
+The fit uses 656 calibration cells across 15 maturities and 140 strikes,
+backed by 240,081 contracts of traded volume.
+The reference spot was $S_{\mathrm{ref}} = 1957.9267$,
+priced under a risk-free rate of 0.09\% and a dividend rate of 1.97\%.
+The intraday spot range was 0.97\%.
+Fit quality is 0.54 vol points of implied-volatility RMSE,
+with a relative-price RMSE of 0.1371.
+The Feller condition violates at this calibration,
+with $2\kappa\theta - \eta^2 = -1.1428$.
+} 
+calibrated pricing operator:
+\begin{center}
+    $C_{\mathrm{H}}(\Phi^{\star}; S,K,\tau,w)$~\eqref{eq:heston-price}~\eqref{eq:accept}.
+\end{center}
+\begin{figure}[H]
+    \begin{center}
+        \includegraphics[width=6.25cm,keepaspectratio=true]{results/heston/surfaces/plots/tex/price_surface_puts.eps}
+        \includegraphics[width=6.25cm,keepaspectratio=true]{results/heston/surfaces/plots/tex/price_surface_calls.eps}
+        \caption{Heston option prices for $S_{\mathrm{ref}}$ 1957.9267 on October 24, 2014 with $\Phi^{\star} = (0.0538,\ 3.4097,\ 1.2288,\ -0.7475,\ 0.024)$: puts wing (left) and calls wing (right).}
+        \label{Fig:heston-wings}
+    \end{center}
+    \begin{center}
+        \includegraphics[width=9cm,keepaspectratio=true]{results/heston/surfaces/plots/tex/smile_surface.eps}
+        \caption{\emph{Out of the money} implied volatilites from Figure~\ref{Fig:heston-wings}}
+    \end{center}
+\end{figure}
+

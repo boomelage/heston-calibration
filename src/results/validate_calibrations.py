@@ -20,21 +20,24 @@ improvement.
 All graded rows are written to a single ``results/calibrations/<objective>/validation.csv``; a
 per-day summary and a cross-day stability block are printed.
 """
-from pathlib import Path
-
+import sys
 import numpy as np
 import pandas as pd
-import QuantLib as ql
+# import QuantLib as ql
+from pathlib import Path
 
-SRC = Path(__file__).parent.resolve()
+RESULTS_CODE = Path(__file__).parent.resolve()
+SRC = RESULTS_CODE.parent
 RESULTS = SRC.parent / "results"
+
+for _p in (str(SRC), str(RESULTS_CODE), str(RESULTS)):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 from utils import implied_vol
 from config import BOUNDS, IV_RMSE_ACCEPT, OBJECTIVE_NAMES, MODEL_NAMES, calib_paths
+from results_config import MODEL, OBJECTIVE
 
-# Switch these two constants to grade a different run (mirrors the orchestrator's --MODEL/--OBJECTIVE).
-MODEL = 'bates'     # 'heston' or 'bates'
-OBJECTIVE = 'vol'    # 'vol' or 'price'
 if OBJECTIVE not in OBJECTIVE_NAMES:
     raise SystemExit(f"unknown objective {OBJECTIVE!r}; expected one of {OBJECTIVE_NAMES}")
 if MODEL not in MODEL_NAMES:

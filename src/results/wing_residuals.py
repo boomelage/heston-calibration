@@ -23,17 +23,21 @@ so a NEGATIVE resid means the model UNDERESTIMATES IV there. It then reports, ac
 `load_residuals(objective)` returns the per-contract frame and `summarize(df)` the bucket tables, so
 the sweep can import and reuse them instead of re-reading the files.
 """
-from pathlib import Path
-
+import sys
 import numpy as np
 import pandas as pd
+from pathlib import Path
 
-from utils import implied_vol
-
-SRC = Path(__file__).parent.resolve()
+RESULTS_CODE = Path(__file__).parent.resolve()
+SRC = RESULTS_CODE.parent
 RESULTS = SRC.parent / "results"
 
-OBJECTIVE = 'vol'   # which results/calibrations/<objective>/ to grade; mirrors validate_calibrations.py
+for _p in (str(SRC), str(RESULTS_CODE), str(RESULTS)):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+from results_config import MODEL, OBJECTIVE
+from utils import implied_vol
 
 # Signed log-moneyness ln(K/S) bin edges: puts < 0, calls > 0. ~+/-0.05 ~ 5% OTM.
 LM_EDGES = [-np.inf, -0.20, -0.12, -0.07, -0.04, -0.02, 0.02, 0.04, 0.07, 0.12, 0.20, np.inf]
@@ -44,7 +48,7 @@ DTM_EDGES = [0, 45, 90, 180, 10000]
 
 
 def _tests_dir(objective):
-    return RESULTS / "calibrations" / objective / "calibration_tests"
+    return RESULTS / MODEL / "calibrations" / objective / "calibration_tests"
 
 
 def load_residuals(objective=OBJECTIVE):
@@ -63,7 +67,7 @@ def load_residuals(objective=OBJECTIVE):
         df["model_iv"] = [
             implied_vol(p, w, S, K, r, g, t)
             for p, w, S, K, r, g, t in zip(
-                df["heston"], df["w"], df["spot_price"], df["strike_price"],
+                df[MODEL], df["w"], df["spot_price"], df["strike_price"],
                 df["risk_free_rate"], df["dividend_rate"], T,
             )
         ]

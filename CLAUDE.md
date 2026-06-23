@@ -101,7 +101,7 @@ python -c "import sys; sys.path.insert(0,'data'); from get_rg import rg; print(r
 #            <model> is `heston` (default) or `bates`, via --MODEL; <objective> is `vol` (default) or
 #            `price`, via --OBJECTIVE. --LIMIT N caps to the N most recent days. Prints the accept rate
 #            and a rejections-by-reason tally. Resolves paths from __file__, runs from any dir.
-#            RESUMES AUTOMATICALLY: if calibrations.csv + rejections.csv already exist it skips the days
+#            RESUMES AUTOMATICALLY: if calibrations.csv OR rejections.csv already exists it skips the days
 #            they cover and merges new rows in (aborts if config.py changed since; see Stage 2). Delete
 #            those files to start fresh.
 python src/calibrator_prototype.py                       # heston, vol, all days (or resume)
@@ -143,15 +143,18 @@ of truth is `config.calib_paths(model, objective)` (and `_objective_paths` wraps
 `config_spec.json` sits alongside in the same directory, resolved by the sibling `config.spec_path(model,
 objective)` (kept separate from `calib_paths` so its positional 3-tuple contract is untouched).
 
-**Run-spec snapshot (`config_spec.json`).** Each accepted run writes a Python-readable JSON snapshot of
+**Run-spec snapshot (`config_spec.json`).** Each run writes a Python-readable JSON snapshot of
 the exact config it used next to `calibrations.csv` (`utils.write_config_spec`, called from
 `calibrator_prototype.main`). The config values come from `config.as_dict()` — every JSON-serializable
 module-level constant, captured by reflection so new knobs appear automatically (callables like
 `day_count`/`calendar`/`calib_paths` and `Path` objects like `REPO`/`RESULTS` are skipped; tuples
 round-trip as JSON arrays). A `_run` header records `timestamp`, `git_commit`, `model`, `objective`,
-`limit`, and the accept/reject tally. It is written iff `calibrations.csv` is (and removed alongside it
-when a run accepts no days). Downstream LaTeX-fragment scripts (e.g. `src/results/smiles/smiles.py`) can
-`json.load` it to recover the run's bounds/coverage/gate without hard-coding values.
+`limit`, and the accept/reject tally. It is written **at the start of the run** (before any incremental
+output, so a partial run always has a spec to verify a later resume against) and **rewritten at the end**
+with the final merged tally; it is kept whenever **either** `calibrations.csv` or `rejections.csv` is
+present, and removed only when the run produces no output at all. Downstream LaTeX-fragment scripts (e.g.
+`src/results/smiles/smiles.py`) can `json.load` it to recover the run's bounds/coverage/gate without
+hard-coding values.
 
 There is no single-test command because there are no tests. To exercise just an engine, import
 `calibrate_heston(vol_matrix, s, r, g, objective="vol")` from `src/calibrate_heston.py` (or
@@ -254,19 +257,19 @@ pooled, moneyness-normalised surface — not the old per-0.5-spot-bucket fits:
    most recent) as each worker finishes (joblib `return_as="generator_unordered"`) and **splits** them:
    accepted rows (no `reason` key) go to the single
    `results/<model>/calibrations/<objective>/calibrations.csv`, rejected rows (each carries a `reason`)
-   go to the complementary `results/<model>/calibrations/<objective>/rejections.csv`. **`calibrations.csv`
-   is appended incrementally** — each accepted row is appended from the single main process the moment its
-   day completes, so the file is **readable mid-run** (in worker-completion order); once the run finishes it
-   is **rewritten sorted by date**. All appends happen in the one main process (workers never touch the
-   file, they only return the row dict), so the serial write needs no locking and rows cannot interleave; a
-   partial-but-valid file survives an interrupted run. `rejections.csv` is still written **once at the
-   end** (sorted by date). **Resume is automatic** (see the dedicated paragraph below): the end-of-run
-   write **merges** this run's rows with whatever the files already held (dedup by date, this run wins),
-   so old rows are never clobbered; on a fresh run the existing frames are empty and the merge reduces to
-   the prior date-sorted rewrite. An empty merged set **removes** its file. **Ctrl-C does not abort**:
-   a `KeyboardInterrupt` stops the loop and falls through to the end-of-run block, so the authoritative
-   date-sorted `calibrations.csv` + `config_spec.json` are still written (merged with prior rows) from the
-   days completed so far. The end-of-run writes go through `_write_blocking`: if the target file is
+   go to the complementary `results/<model>/calibrations/<objective>/rejections.csv`. **Both
+   `calibrations.csv` and `rejections.csv` are appended incrementally** — each row is appended from the
+   single main process the moment its day completes (`_append_row`), so both files are **readable mid-run**
+   (in worker-completion order); once the run finishes each is **rewritten sorted by date**. All appends
+   happen in the one main process (workers never touch the files, they only return the row dict), so the
+   serial write needs no locking and rows cannot interleave; partial-but-valid files survive an interrupted
+   run. **Resume is automatic** (see the dedicated paragraph below): the end-of-run write **merges** this
+   run's rows with whatever the files already held (dedup by date, this run wins), so old rows are never
+   clobbered; on a fresh run the existing frames are empty and the merge reduces to the prior date-sorted
+   rewrite. An empty merged set **removes** its file. **Ctrl-C does not abort**: a `KeyboardInterrupt`
+   stops the loop and falls through to the end-of-run block, so the authoritative date-sorted
+   `calibrations.csv` + `rejections.csv` + `config_spec.json` are still written (merged with prior rows)
+   from the days completed so far. The end-of-run writes go through `_write_blocking`: if the target file is
    **locked** (e.g. open in Excel) the write raises `PermissionError`, and instead of crashing the run
    prompts with `input()` ("press Enter to retry") and retries until it succeeds. The mid-run
    incremental flush is best-effort by contrast: a momentary lock there is warned and skipped (the row
@@ -279,21 +282,23 @@ pooled, moneyness-normalised surface — not the old per-0.5-spot-bucket fits:
    existing tests file.
 
 **Resume (continuing an interrupted run).** A run **automatically continues** a previous one when
-**both** `calibrations.csv` and `rejections.csv` already exist. The driver reads the `date` column of
-both into a set and **skips every raw file whose date is already covered**, matched by date (not by a
-positional `files[N:]` count) — because workers finish out of order (`return_as="generator_unordered"`),
-the completed days are **not** a contiguous chronological prefix, so a count-based slice would re-run some
-days and skip others. The two existing frames are kept and **merged** into this run's new rows at the end
+**either** `calibrations.csv` **or** `rejections.csv` already exists. Because both files are appended
+incrementally, an interrupted run may have written only accepts, only rejects, or both, so any one
+present marks a prior run to continue (the old "both must exist, else a lone `calibrations.csv` is a
+half-written error" rule is gone). The driver reads the `date` column of whichever file(s) exist into a
+set and **skips every raw file whose date is already covered**, matched by date (not by a positional
+`files[N:]` count) — because workers finish out of order (`return_as="generator_unordered"`), the
+completed days are **not** a contiguous chronological prefix, so a count-based slice would re-run some
+days and skip others. The existing frames are kept and **merged** into this run's new rows at the end
 (dedup by date, this run wins; date-sorted), so prior rows survive. A resume **aborts** (`RuntimeError`)
 if the live `config.as_dict()` differs from the snapshot in `config_spec.json` — comparison is
 JSON-normalised on both sides so a tuple-vs-list round-trip does not false-trigger, and the error names
 the differing keys — since mixing fits from two configs would corrupt the file; it also aborts if that
-snapshot is missing, or if `calibrations.csv` exists without a matching `rejections.csv` (a half-written
-state). On resume the mid-run flush suppresses the CSV header (`header_written` starts `True` when the
-file already exists) so new rows append cleanly beneath the old ones. **To start fresh, delete the
-`results/<model>/calibrations/<objective>/` files manually.** (Edge case: a previous run that accepted
-**zero** days deletes its `calibrations.csv`, so the next run sees no resume state and reprocesses every
-day — correct output, just redundant work on the already-rejected days.)
+snapshot is missing (it is written at run start, so a partial run always has one). On resume each file's
+mid-run flush suppresses the CSV header (the `*_header_written` flag starts `True` when that file already
+exists) so new rows append cleanly beneath the old ones; a file absent at resume (only accepts, or only
+rejects, last run) gets its header from this run's first matching row. **To start fresh, delete the
+`results/<model>/calibrations/<objective>/` files manually.**
 
 The per-day **tests** path is built from `_objective_paths(MODEL, OBJECTIVE)` (a thin wrapper over
 `config.calib_paths`): the tests directory `results/<model>/calibrations/<objective>/calibration_tests/`

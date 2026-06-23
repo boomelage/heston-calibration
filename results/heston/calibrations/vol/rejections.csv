@@ -448,3 +448,8 @@ date,reason,detail,iv_rmse,n_maturities,n_strikes,n_cells
 2014-12-29,pegged,calibration rejected (boundary-pegged),0.007540883451566709,13.0,120.0,479.0
 2014-12-30,pegged,calibration rejected (boundary-pegged),0.006680260071985669,17.0,119.0,546.0
 2014-12-31,pegged,calibration rejected (boundary-pegged),0.012370321733205935,16.0,154.0,662.0
+2015-01-02,pegged,calibration rejected (boundary-pegged),0.013039304042740327,20.0,185.0,751.0
+2015-01-08,pegged,calibration rejected (boundary-pegged),0.008995924446612248,19.0,181.0,833.0
+2015-02-11,pegged,calibration rejected (boundary-pegged),0.010040422993040672,18.0,145.0,665.0
+2015-02-12,pegged,calibration rejected (boundary-pegged),0.00955543808974368,20.0,164.0,758.0
+2015-02-13,pegged,calibration rejected (boundary-pegged),0.008273164926056452,17.0,152.0,702.0

@@ -10,3 +10,6 @@ date,reason,detail,iv_rmse,n_maturities,n_strikes,n_cells
 2012-12-03,pegged,calibration rejected (boundary-pegged),0.006646813946169838,10,117,414
 2012-12-06,pegged,calibration rejected (boundary-pegged),0.005883973955135041,10,102,375
 2012-12-10,pegged,calibration rejected (boundary-pegged),0.005314048168640535,11,89,314
+2012-12-11,pegged,calibration rejected (boundary-pegged),0.006057056475792082,11,104,378
+2012-12-12,pegged,calibration rejected (boundary-pegged),0.005817701382303596,12,114,411
+2012-12-17,pegged,calibration rejected (boundary-pegged),0.006268053851827898,10,106,314

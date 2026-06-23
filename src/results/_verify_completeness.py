@@ -13,6 +13,9 @@ Discrepancies reported:
   - duplicate : a raw date that appears more than once within a single file.
   - orphan    : a result row whose date has no raw file (e.g. raw files deleted after the run;
                 RAW is git-ignored, so this is common on a fresh clone).
+  - no_test   : a calibrations.csv row whose per-day tests file is missing from TESTS. An accepted
+                day is written exactly when its tests file is written, so a calibration row without
+                its `cboe_spx_calibration_tests_<date>.csv` means the two desynced.
 
 Read-only. Prints a human-readable report to stdout and exits 1 if any discrepancy is found,
 else exits 0 (usable in CI / pre-commit).
@@ -88,6 +91,12 @@ def main():
         if nc > 1 or nr > 1:
             duplicate.append((date, nc, nr))
 
+    # ---- tests-file direction: every calibration row has its per-day tests file ----
+    # An accepted day writes its tests file exactly when its calibrations.csv row is written, so a
+    # calibration date without a `cboe_spx_calibration_tests_<date>.csv` in TESTS is a desync.
+    no_test = [d for d in sorted(set(calib_counts.index))
+               if not (TESTS / f"cboe_spx_calibration_tests_{d}.csv").exists()]
+
     # ---- reverse direction: result rows with no raw file ----
     orphan = sorted(d for d in result_set if d not in raw_set)
     # An orphan can also be duplicated/in-both; surface those facts there too.
@@ -128,14 +137,16 @@ def main():
     _block("DUPLICATE (>1 row in a single file)", duplicate,
            lambda t: f"{t[0]}  (calib={t[1]}, reject={t[2]})")
     _block("ORPHAN (result row with no raw file)", orphan, lambda d: d)
+    _block("NO_TEST (calibrations.csv row with no calibration_tests/ file)", no_test, lambda d: d)
 
-    n_issues = len(missing) + len(in_both) + len(duplicate) + len(orphan)
+    n_issues = len(missing) + len(in_both) + len(duplicate) + len(orphan) + len(no_test)
     if n_issues == 0 and raw_set:
-        print(f"\nOK: all {len(raw_set)} raw dates have exactly one result row.")
+        print(f"\nOK: all {len(raw_set)} raw dates have exactly one result row, "
+              f"and all {len(calib_counts)} calibration rows have a tests file.")
         return 0
     print(f"\nFAIL: {n_issues} discrepancy group(s) "
           f"(missing={len(missing)}, in_both={len(in_both)}, "
-          f"duplicate={len(duplicate)}, orphan={len(orphan)}).")
+          f"duplicate={len(duplicate)}, orphan={len(orphan)}, no_test={len(no_test)}).")
     return 1
 
 

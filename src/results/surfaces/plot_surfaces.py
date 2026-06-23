@@ -52,8 +52,9 @@ plt.rcParams.update(PLOT_RCPARAMS)
 ELEV, AZIM = SURFACE_ELEV, SURFACE_AZIM
 
 
-def plot_surface(grid, out_path, title=None, invert_K=False, invert_T=False, AZIM_ADJUST=0.0):
-    """Draw one strike x maturity x price surface (grid: index=strike, columns=maturity_days)."""
+def plot_surface(grid, out_path, title=None, invert_K=False, invert_T=False, AZIM_ADJUST=0.0,
+                 xlabel=r'moneyness ($K/S$)', zlabel=r'price'):
+    """Draw one moneyness x maturity x z surface (grid: index=moneyness, columns=maturity_days)."""
 
     strikes = grid.index.to_numpy(dtype=float)
     maturities = grid.columns.to_numpy(dtype=float) / 365.0      # days -> years, like the example
@@ -75,13 +76,13 @@ def plot_surface(grid, out_path, title=None, invert_K=False, invert_T=False, AZI
     ax.grid(False)
     ax.tick_params(labelsize=9, colors="black")
     ax.view_init(elev=ELEV, azim=AZIM+AZIM_ADJUST)
-    ax.set_xlabel(r'strike ($K$)')
+    ax.set_xlabel(xlabel)
     if invert_K:
         ax.invert_xaxis()
     if invert_T:
         ax.invert_yaxis()
     ax.set_ylabel(r'maturity in years ($T$)')
-    ax.set_zlabel(r'price')
+    ax.set_zlabel(zlabel)
     ax.set_zlim(np.nanmin(Z), np.nanmax(Z))
     if title:
         ax.set_title(title)
@@ -116,11 +117,11 @@ calibrated pricing operator:
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/price_surface_puts.eps}
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/price_surface_calls.eps}
         \caption{<MODEL_LABEL> option prices for $S_{\mathrm{ref}}$ <spot> on <date> with <parameters>: puts wing (left) and calls wing (right).}
-        \label{Fig:wings}
+        \label{Fig:<MODEL>-wings}
     \end{center}
     \begin{center}
         \includegraphics[width=9cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/smile_surface.eps}
-        \caption{\emph{Out of the money} implied volatilites from Figure~\ref{Fig:wings}}
+        \caption{\emph{Out of the money} implied volatilites from Figure~\ref{Fig:<MODEL>-wings}}
     \end{center}
 \end{figure}
 
@@ -173,17 +174,18 @@ def otm_grid(df, side):
         surface['strike'] / surface['s_ref']
     )
     surface = surface[surface['moneyness']<=1.15]
-    return surface.pivot(index='strike', columns='maturity_days', values='price')
+    return surface.pivot(index='moneyness', columns='maturity_days', values='price')
 
 def smile_for(df):
-    surface = df[df['w'] == 'call'].copy()
-    df['moneyness'] = np.where(
-        df['w'] == 'call',
-        df['s_ref'] / df['strike'],
-        df['strike'] / df['s_ref']
-    )
-    surface = df[df['moneyness']<1].copy().reset_index(drop=True)
-    return surface.pivot(index='strike', columns='maturity_days', values='implied_vol')
+    # Single signed log-moneyness axis ln(K/S) (NOT the per-wing ratio that always stays <1). Keep
+    # OTM only: puts below spot (ln(K/S) < 0), calls above (ln(K/S) > 0). One contract per axis point,
+    # so the two wings form a continuous smile instead of folding on top of each other (the old <1
+    # ratio collided a put at K/S=m with a call at S/K=1/m onto the same value, which made it zig-zag).
+    surface = df.copy()
+    surface['moneyness'] = np.log(surface['strike'] / surface['s_ref'])
+    otm = surface[((surface['w'] == 'put') & (surface['moneyness'] < 0)) |
+                  ((surface['w'] == 'call') & (surface['moneyness'] > 0))]
+    return otm.pivot(index='moneyness', columns='maturity_days', values='implied_vol')
     
 def main():
     from make_surface import make_surface  # type: ignore (MODEL/OBJECTIVE imported at module top)
@@ -199,9 +201,10 @@ def main():
     market = day_results['market']
     fit = day_results['fit']
 
-    plot_surface(otm_grid(df, 'call'), TEXDIR / "price_surface_calls.eps")
+    plot_surface(otm_grid(df, 'call'), TEXDIR / "price_surface_calls.eps", invert_K=True)
     plot_surface(otm_grid(df, 'put'), TEXDIR / "price_surface_puts.eps", invert_K=True)
-    plot_surface(smile_for(df), TEXDIR / "smile_surface.eps",AZIM_ADJUST=-10, invert_T=True)
+    plot_surface(smile_for(df), TEXDIR / "smile_surface.eps", AZIM_ADJUST=-10, invert_T=True,
+                 xlabel=r'log-moneyness ($\ln(K/S)$)', zlabel=r'implied volatility ($\sigma$)')
     write_otm_TeX(spot, date, params, market, fit)
     
 if __name__ == "__main__":

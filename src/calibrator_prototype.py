@@ -336,8 +336,11 @@ def main():
                 f"Config has changed since the run being resumed (differing keys: {changed}; see "
                 f"{SPEC_FILE}). Resuming would mix incompatible calibrations. Revert config.py to "
                 f"match, or clean {CALIBRATIONS_FILE.parent} to start fresh.")
-        existing_accepted = pd.read_csv(CALIBRATIONS_FILE)
-        existing_rejected = pd.read_csv(REJECTIONS_FILE)
+        # float_precision='round_trip' makes read-back bit-exact: the default fast C parser is not
+        # correctly-rounded (can land 1 ULP off), so re-serializing resumed rows would otherwise churn
+        # their shortest-repr (e.g. 0.020857999999999998 -> 0.0208579999999999) on every resume.
+        existing_accepted = pd.read_csv(CALIBRATIONS_FILE, float_precision='round_trip')
+        existing_rejected = pd.read_csv(REJECTIONS_FILE, float_precision='round_trip')
         processed_dates = (set(existing_accepted['date'].astype(str))
                            | set(existing_rejected['date'].astype(str)))
         print(f"resuming: {len(existing_accepted)} accepted + {len(existing_rejected)} rejected "

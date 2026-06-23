@@ -23,10 +23,19 @@ coverage counts and the intraday spot range). It is APPENDED INCREMENTALLY as ea
 (streamed back via joblib's `return_as="generator_unordered"` and written from the single main
 process, so the file is readable mid-run in worker-completion order), then REWRITTEN SORTED BY DATE
 once the run finishes -- so the finished artefact still holds the accepted days, date-sorted, exactly
-as before. Truncated up front, so an interrupted run leaves a partial (but valid) file. Ctrl-C
-(KeyboardInterrupt) does not abort: it stops the loop and still writes the authoritative
-calibrations.csv + config_spec.json from the days completed so far. The end-of-run writes wait-and-retry
-if the target file is locked (e.g. open in Excel), prompting for Enter rather than crashing.
+as before. Ctrl-C (KeyboardInterrupt) does not abort: it stops the loop and still writes the
+authoritative calibrations.csv + config_spec.json from the days completed so far. The end-of-run
+writes wait-and-retry if the target file is locked (e.g. open in Excel), prompting for Enter rather
+than crashing.
+
+RESUME. A run AUTOMATICALLY continues a previous one when BOTH calibrations.csv and rejections.csv
+already exist: the days they cover are skipped (matched by DATE -- the completed days are not a
+contiguous chronological prefix because workers finish out of order), and this run's new rows are
+MERGED with the old rows (dedup by date, this run wins) before the date-sorted rewrite, so old rows
+are never clobbered. A resume first aborts if the live config differs from the snapshot in
+config_spec.json (resuming would mix incompatible fits), or if that snapshot is missing. A lone
+calibrations.csv with no rejections.csv is a half-written inconsistent state and also aborts. To
+start fresh, delete the results/<model>/calibrations/<objective>/ files manually.
 The bulky per-day repricing diagnostics stay one-file-per-day under
 `results/calibrations/<objective>/calibration_tests/`. A day is
 written to calibration_tests exactly when it contributes a row, so the two outputs always describe
@@ -42,6 +51,7 @@ regenerated each run, and an empty set removes its file.
 """
 import os
 import sys
+import json
 import argparse
 import pandas as pd
 import numpy as np
@@ -60,6 +70,7 @@ vanp = vanilla_pricer()
 from utils import _prepare_options, write_config_spec
 from calibrate_heston import calibrate_heston
 from calibrate_bates import calibrate_bates
+import config
 from config import (
     MAX_NT, MAX_NK, STRIKE_GRID, MIN_DTM, MAX_DTM,
     MIN_MATS, MIN_STRIKES, MIN_CELLS, MAX_MOVE_PCT,
@@ -295,6 +306,66 @@ def main():
 
     CALIBRATIONS_FILE, REJECTIONS_FILE, TESTS = _objective_paths(args.MODEL, args.OBJECTIVE)
     TESTS.mkdir(parents=True, exist_ok=True)
+    SPEC_FILE = spec_path(args.MODEL, args.OBJECTIVE)
+
+    # ---- Resume support ----
+    # When BOTH calibrations.csv and rejections.csv already exist this run CONTINUES the previous one:
+    # the days they already cover are SKIPPED (matched by date), and this run's new rows are MERGED into
+    # the existing files at the end so old rows are never clobbered. Resume is automatic (no flag). A
+    # lone calibrations.csv with no rejections.csv is an inconsistent half-written state -> hard error.
+    existing_accepted = pd.DataFrame()
+    existing_rejected = pd.DataFrame()
+    processed_dates = set()
+    if CALIBRATIONS_FILE.exists() and REJECTIONS_FILE.exists():
+        # A resumed run must use the SAME config as the run it continues, or calibrations.csv would mix
+        # incompatible fits. Compare the live config to the snapshot the previous run wrote and abort on
+        # any mismatch. Both sides are JSON-normalised first (config.as_dict() keeps tuples as tuples,
+        # but they serialise to JSON arrays) so the comparison is value-equal, not type-sensitive. The
+        # `_run` block (timestamp/commit/tally) is run metadata, not config, so it is dropped.
+        if not SPEC_FILE.exists():
+            raise RuntimeError(
+                f"Resuming ({CALIBRATIONS_FILE} exists) but no {SPEC_FILE} to verify the config "
+                f"against. Clean {CALIBRATIONS_FILE.parent} manually to start fresh.")
+        saved = json.loads(SPEC_FILE.read_text())
+        saved.pop('_run', None)
+        current = json.loads(json.dumps(config.as_dict()))
+        if saved != current:
+            changed = sorted(
+                k for k in set(saved) | set(current) if saved.get(k) != current.get(k))
+            raise RuntimeError(
+                f"Config has changed since the run being resumed (differing keys: {changed}; see "
+                f"{SPEC_FILE}). Resuming would mix incompatible calibrations. Revert config.py to "
+                f"match, or clean {CALIBRATIONS_FILE.parent} to start fresh.")
+        existing_accepted = pd.read_csv(CALIBRATIONS_FILE)
+        existing_rejected = pd.read_csv(REJECTIONS_FILE)
+        processed_dates = (set(existing_accepted['date'].astype(str))
+                           | set(existing_rejected['date'].astype(str)))
+        print(f"resuming: {len(existing_accepted)} accepted + {len(existing_rejected)} rejected "
+              f"day(s) already done; skipping those dates")
+    elif CALIBRATIONS_FILE.exists() and not REJECTIONS_FILE.exists():
+        raise RuntimeError(f"Stale calibrations file with no accompanying rejections file. Clean {CALIBRATIONS_FILE.parent} manually")
+
+    TRADES = Path(__file__).parent.parent / "data" / "options" / "raw"
+
+    def _file_date(p):
+        """The trailing _<date> token of a raw trades filename, e.g. '2024-10-15' from
+        'UnderlyingOptionsTradesCalcs_2024-10-15.csv'. Same string the per-day rows are keyed by, so it
+        matches the resume `processed_dates` set."""
+        b = os.path.basename(p)
+        return b[b.rfind('_') + 1:-4]
+
+    files = [os.path.join(TRADES, f) for f in os.listdir(TRADES) if f.endswith('.csv')]
+    # Sort chronologically by the date token (robust to mixed filename prefixes), so --LIMIT selects the
+    # most recent trading days. For a full run the order is immaterial.
+    files = sorted(files, key=_file_date)
+    # Skip already-done days by DATE membership, not by count: workers finish out of order
+    # (return_as="generator_unordered"), so an interrupted run's completed days are NOT a contiguous
+    # chronological prefix -- a positional files[N:] slice would re-run some days and skip others.
+    if processed_dates:
+        files = [f for f in files if _file_date(f) not in processed_dates]
+    if args.LIMIT and args.LIMIT > 0:
+        files = files[-args.LIMIT:]
+    files = pd.Series(files).reset_index(drop=True)
 
     # joblib's default loky backend spawns processes; on Windows the children re-import this module,
     # so the driver MUST live behind `if __name__ == "__main__"` (via main()) -- otherwise each worker
@@ -302,32 +373,11 @@ def main():
     from joblib import Parallel, delayed
     max_jobs = max(1, os.cpu_count() // 4)
     
-    TRADES = Path(__file__).parent.parent / "data" / "options" / "raw"
-    files = [os.path.join(TRADES, f) for f in os.listdir(TRADES) if f.endswith('.csv')]
-    # Sort chronologically by the trailing _<date> token (robust to mixed filename prefixes), so --LIMIT
-    # selects the most recent trading days. For a full run the order is immaterial.
-    files = sorted(files, key=lambda p: os.path.basename(p)[os.path.basename(p).rfind('_') + 1:-4])
-    if args.LIMIT and args.LIMIT > 0:
-        files = files[-args.LIMIT:]
-    files = pd.Series(files).reset_index(drop=True)
-
-    # Every attempted day returns exactly one row: an accepted calibration (no 'reason' key) or a
-    # rejection (carries 'reason'). Split them into the two complementary files. The loop covers all
-    # raw trades files, so both files are fully regenerated each run (no stale rows survive); an empty
-    # set removes its file rather than leaving it stale.
-    #
-    # calibrations.csv is streamed: results come back via `return_as="generator_unordered"` as each
-    # worker finishes, and the main process appends each accepted row immediately so the file is
-    # readable mid-run. All writes happen here in the single main process (the workers never touch
-    # calibrations.csv -- they only return the row dict), so the serial append loop needs no locking
-    # and rows cannot interleave. Mid-run the rows land in worker-completion order; the final block
-    # below rewrites the file sorted by date, so the finished artefact matches the old contract.
-    # rejections.csv is still written once at the end (see below).
-    if CALIBRATIONS_FILE.exists():
-        # truncate up front; a partial file on interrupt is intended
-        _write_blocking(CALIBRATIONS_FILE.unlink, CALIBRATIONS_FILE)
     accepted, rejected = [], []
-    header_written = False
+    # On a fresh run the first mid-run flush creates calibrations.csv with a header; on a resume the
+    # file already exists with old rows + header, so suppress the header and let new rows append cleanly
+    # beneath them (the file stays readable mid-run, and the end-of-run merge rewrites it sorted anyway).
+    header_written = CALIBRATIONS_FILE.exists()
     # Ctrl-C stops the loop but does NOT abort: we fall through to the end-of-run block and still
     # write the authoritative calibrations.csv + config_spec.json from the days completed so far.
     try:
@@ -355,17 +405,32 @@ def main():
         print(f"\nKeyboardInterrupt: stopping after {len(accepted)} accepted / {len(rejected)} "
               f"rejected day(s); finishing writes...")
 
-    SPEC_FILE = spec_path(args.MODEL, args.OBJECTIVE)
-    if accepted:
-        # Overwrite the append-order file with the date-sorted final version (matches the prior contract).
-        # The final writes block-and-retry on a file lock (see _write_blocking) instead of crashing.
-        out = pd.DataFrame(accepted).set_index('date').sort_index()
-        _write_blocking(lambda: out.to_csv(CALIBRATIONS_FILE), CALIBRATIONS_FILE)
-        print(f"\nwrote {len(accepted)} accepted day(s) -> {CALIBRATIONS_FILE}")
-        # Snapshot the exact config this run used next to calibrations.csv (Python-readable for the
-        # downstream LaTeX-fragment scripts). Written iff calibrations.csv is, removed alongside it.
+    # Merge this run's rows with whatever the resumed files already held (empty frames on a fresh run),
+    # dedupe by date (this run's row wins if a date somehow recurs), and rewrite sorted by date. On a
+    # fresh run this reduces to the old date-sorted write; on a resume it preserves the old rows that
+    # are no longer in the in-loop `accepted`/`rejected` lists. The writes block-and-retry on a file
+    # lock (see _write_blocking) instead of crashing.
+    def _merge(existing, new_rows):
+        frames = [df for df in (existing, pd.DataFrame(new_rows)) if not df.empty]
+        if not frames:
+            return pd.DataFrame()
+        out = pd.concat(frames, ignore_index=True)
+        out['date'] = out['date'].astype(str)
+        return out.drop_duplicates(subset='date', keep='last').set_index('date').sort_index()
+
+    merged_accepted = _merge(existing_accepted, accepted)
+    merged_rejected = _merge(existing_rejected, rejected)
+
+    if not merged_accepted.empty:
+        _write_blocking(lambda: merged_accepted.to_csv(CALIBRATIONS_FILE), CALIBRATIONS_FILE)
+        print(f"\nwrote {len(merged_accepted)} accepted day(s) (+{len(accepted)} this run) "
+              f"-> {CALIBRATIONS_FILE}")
+        # Snapshot the exact config next to calibrations.csv (Python-readable for the downstream
+        # LaTeX-fragment scripts). The accept/reject tally reflects the MERGED totals on disk, not just
+        # this run. Written iff calibrations.csv is, removed alongside it.
         _write_blocking(
-            lambda: write_config_spec(args.MODEL, args.OBJECTIVE, args.LIMIT, len(accepted), len(rejected)),
+            lambda: write_config_spec(args.MODEL, args.OBJECTIVE, args.LIMIT,
+                                      len(merged_accepted), len(merged_rejected)),
             SPEC_FILE)
         print(f"wrote config snapshot -> {SPEC_FILE}")
     else:
@@ -375,13 +440,13 @@ def main():
             _write_blocking(SPEC_FILE.unlink, SPEC_FILE)
         print(f"\nno accepted days; removed {CALIBRATIONS_FILE}")
 
-    if rejected:
-        rej = pd.DataFrame(rejected).set_index('date').sort_index()
-        _write_blocking(lambda: rej.to_csv(REJECTIONS_FILE), REJECTIONS_FILE)
-        attempted = len(accepted) + len(rejected)
-        print(f"wrote {len(rejected)} rejected day(s) -> {REJECTIONS_FILE}")
-        print(f"accept rate {len(accepted)}/{attempted} = {len(accepted) / attempted:.1%}; "
-              f"rejections by reason: {rej['reason'].value_counts().to_dict()}")
+    if not merged_rejected.empty:
+        _write_blocking(lambda: merged_rejected.to_csv(REJECTIONS_FILE), REJECTIONS_FILE)
+        attempted = len(merged_accepted) + len(merged_rejected)
+        print(f"wrote {len(merged_rejected)} rejected day(s) (+{len(rejected)} this run) "
+              f"-> {REJECTIONS_FILE}")
+        print(f"accept rate {len(merged_accepted)}/{attempted} = {len(merged_accepted) / attempted:.1%}; "
+              f"rejections by reason: {merged_rejected['reason'].value_counts().to_dict()}")
     else:
         if REJECTIONS_FILE.exists():
             _write_blocking(REJECTIONS_FILE.unlink, REJECTIONS_FILE)

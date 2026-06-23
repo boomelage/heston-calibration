@@ -19,3 +19,6 @@ date,reason,detail,iv_rmse,n_maturities,n_strikes,n_cells
 2013-01-18,no_trades,no trades after IV/DTM filter,,,,
 2013-02-13,no_trades,no trades after IV/DTM filter,,,,
 2013-02-21,pegged,calibration rejected (boundary-pegged),0.006937746702499598,12.0,118.0,528.0
+2013-04-05,pegged,calibration rejected (boundary-pegged),0.006285778297093909,14.0,120.0,510.0
+2013-04-15,pegged,calibration rejected (boundary-pegged),0.008962291828752016,12.0,150.0,546.0
+2013-06-05,pegged,calibration rejected (boundary-pegged),0.006013067494359203,13.0,144.0,586.0

@@ -37,3 +37,11 @@ date,reason,detail,iv_rmse,n_maturities,n_strikes,n_cells
 2013-02-13,no_trades,no trades after IV/DTM filter,,,,
 2013-02-21,pegged,calibration rejected (boundary-pegged),0.007772014408928443,12.0,118.0,528.0
 2013-02-28,pegged,calibration rejected (boundary-pegged),0.007227561230050119,12.0,123.0,462.0
+2013-04-04,pegged,calibration rejected (boundary-pegged),0.006438881666594053,15.0,113.0,394.0
+2013-04-05,pegged,calibration rejected (boundary-pegged),0.006730462302962024,14.0,120.0,510.0
+2013-04-15,pegged,calibration rejected (boundary-pegged),0.009214592865175498,12.0,150.0,546.0
+2013-04-17,pegged,calibration rejected (boundary-pegged),0.01049689205998703,15.0,139.0,517.0
+2013-06-05,pegged,calibration rejected (boundary-pegged),0.006690829918237211,13.0,144.0,586.0
+2013-06-06,pegged,calibration rejected (boundary-pegged),0.007743567745523145,14.0,147.0,646.0
+2013-06-11,pegged,calibration rejected (boundary-pegged),0.006473471945480964,12.0,138.0,461.0
+2013-07-17,pegged,calibration rejected (boundary-pegged),0.006451940250484186,12.0,106.0,347.0

@@ -1,13 +1,13 @@
 {
   "_run": {
-    "timestamp": "2026-06-24T00:05:53+03:00",
-    "git_commit": "fc1c7e9",
+    "timestamp": "2026-06-24T02:55:41+03:00",
+    "git_commit": "6e4ecf9",
     "model": "heston",
     "objective": "vol",
     "limit": 0,
-    "n_accepted": 714,
-    "n_rejected": 576,
-    "n_attempted": 1290
+    "n_accepted": 722,
+    "n_rejected": 846,
+    "n_attempted": 1568
   },
   "DAY_COUNT_NAME": "Actual365Fixed",
   "CALENDAR_NAME": "UnitedStates.NYSE",

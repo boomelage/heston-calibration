@@ -71,13 +71,13 @@ if str(SRC) not in sys.path:
 
 from pricing.vanilla_pricer import vanilla_pricer
 vanp = vanilla_pricer()
-from _utils import _prepare_options, write_config_spec, _file_date
+from _utils import write_config_spec, _file_date
+from prepare_surface import prepare_surface, select_surface, SkipDay
 from calibrate_heston import calibrate_heston
 from calibrate_bates import calibrate_bates
 import config
 from config import (
-    MAX_NT, MAX_NK, STRIKE_GRID, MIN_DTM, MAX_DTM,
-    MIN_MATS, MIN_STRIKES, MIN_CELLS, MAX_MOVE_PCT,
+    MIN_MATS, MIN_STRIKES, MIN_CELLS,
     IV_RMSE_ACCEPT, OBJECTIVE_NAMES, MODEL_NAMES, calib_paths, spec_path,
     DEFAULT_MODEL, DEFAULT_OBJECTIVE
 )
@@ -100,8 +100,9 @@ from get_rg import rg # pyright: ignore[reportMissingImports]
 rg_asc = rg.sort_index()
 
 # Surface coverage / selection knobs and engine bounds/gate live in config.py (single source of
-# truth, tuned by PLAN.md Phase 3): MAX_NT/MAX_NK/STRIKE_GRID/MIN_DTM/MAX_DTM/MIN_MATS/MIN_STRIKES/
-# MIN_CELLS/MAX_MOVE_PCT and IV_RMSE_ACCEPT are imported above.
+# truth, tuned by PLAN.md Phase 3): the surface-selection knobs MAX_NT/MAX_NK/MIN_MATS/MIN_STRIKES/
+# MIN_CELLS and the gate IV_RMSE_ACCEPT are imported above. The filter/normalisation knobs
+# (MIN_DTM/MAX_DTM/MAX_MOVE_PCT/STRIKE_GRID) moved with prepare_surface into prepare_surface.py.
 
 
 def _objective_paths(model, objective):
@@ -161,32 +162,6 @@ def _skip_day(test_path, reason, detail, iv_rmse=np.nan,
             'n_maturities': n_maturities, 'n_strikes': n_strikes, 'n_cells': n_cells}
 
 
-def _select_surface(df):
-    """Pick the day's calibration surface in moneyness-normalised (K*) strike space.
-
-    The trades are OTM calls and puts spanning both wings (see `_utils._prepare_options`). Top MAX_NT
-    maturities by traded volume; within each, the MAX_NK nearest-the-money strikes per wing on K*
-    (already centred on S_ref): the highest OTM puts (below spot) and the lowest OTM calls (above
-    spot). Returns the selected snapshot rows with original strike/spot retained for repricing, or
-    None if no maturity qualifies.
-    """
-    byt = df.groupby('days_to_maturity')
-    vol_by_t = byt['trade_size'].sum().sort_values(ascending=False)
-    T = np.sort(vol_by_t.index[:MAX_NT]).tolist()
-
-    selected = []
-    for t in T:
-        dft = byt.get_group(t)
-        cK = np.sort(dft.loc[dft['w'] == 'call', 'Kstar'].unique())
-        pK = np.sort(dft.loc[dft['w'] == 'put', 'Kstar'].unique())
-        if len(cK) > 1 and len(pK) > 1:
-            keep = list(pK[-min(len(pK), MAX_NK):]) + list(cK[:min(len(cK), MAX_NK)])
-            selected.append(dft[dft['Kstar'].isin(keep)])
-    if not selected:
-        return None
-    return pd.concat(selected, ignore_index=True)
-
-
 def calibrate_by_day(filepath, OBJECTIVE, MODEL):
     # Per-day tests file: the directory depends on (MODEL, OBJECTIVE) (results/<model>/calibrations/
     # <objective>/calibration_tests/, or the legacy results/calibrations/<objective>/ for heston);
@@ -198,41 +173,24 @@ def calibrate_by_day(filepath, OBJECTIVE, MODEL):
     date_str = filename[filename.rfind('_')+1:filename.rfind('.csv')]
     test_path = str(tests_dir / f"cboe_spx_calibration_tests_{date_str}.csv")
     # Read the raw CBOE trades file and clean it in-memory to the OTM snapshot the surface needs
-    # (column subset/rename, C/P -> call/put, calendar DTM, OTM-only) via _utils._prepare_options.
+    # (column subset/rename, C/P -> call/put, calendar DTM, OTM-only) via prepare_surface._prepare_options,
+    # then build the day's moneyness-normalised trades (IV/DTM filter, S_ref, Kstar) via prepare_surface.
+    # prepare_surface raises SkipDay when nothing survives the filter; convert it to a rejection row here
+    # (_skip_day owns test_path and the rejections.csv schema). Rate lookup stays below.
     df = pd.read_csv(filepath)
-    df = _prepare_options(df)
-    df = df[(df['trade_iv'] > 0) & (df['days_to_maturity'] >= MIN_DTM) & (df['days_to_maturity'] <= MAX_DTM)].copy()
-    if df.empty:
-        return _skip_day(test_path, "no_trades", "no trades after IV/DTM filter")
-    df['quote_datetime'] = pd.to_datetime(df['quote_datetime'])
-    date = df['quote_datetime'].dt.floor('D').unique()[0]
+    try:
+        df, date, S_ref, spot_min, spot_max, spot_range_pct, high_move = prepare_surface(df)
+    except SkipDay as e:
+        return _skip_day(test_path, e.reason, e.detail, **e.coverage)
     r = rg_asc['risk_free_rate'].asof(date)
     g = rg_asc['dividend_rate'].asof(date)
     if pd.isna(r) or pd.isna(g):
         return _skip_day(test_path, "no_rate", f"no rate on/before {pd.Timestamp(date).date()}")
 
-    # One reference spot for the whole day (volume-weighted). The intraday range that the
-    # sticky-moneyness re-centring assumes is mild; a large range strains that assumption.
-    S_ref = float(np.average(df['spot_price'], weights=df['trade_size']))
-    spot_min, spot_max = float(df['spot_price'].min()), float(df['spot_price'].max())
-    spot_range_pct = spot_max / spot_min - 1.0
-    high_move = spot_range_pct > MAX_MOVE_PCT
-    if high_move:
-        print(f"WARNING {pd.Timestamp(date).date()}: intraday spot range {spot_range_pct:.2%} "
-              f"> {MAX_MOVE_PCT:.0%}; normalisation to S_ref={S_ref:.1f} may be strained")
-
-    # Moneyness-normalise: each trade keeps m = K / S_row but is re-struck to K* = m * S_ref and
-    # snapped to the SPX strike grid, so trades at different intraday spots align on shared columns.
-    df['Kstar'] = (df['strike_price'] / df['spot_price']) * S_ref
-    df['Kstar'] = (df['Kstar'] / STRIKE_GRID).round() * STRIKE_GRID
-
-    sel = _select_surface(df)
-    if sel is None:
-        return _skip_day(test_path, "thin", "no usable maturities")
-    sel = sel.sort_values('trade_size', ascending=True)
-    surf = sel.pivot_table(index='Kstar', columns='days_to_maturity',
-                           values='trade_iv', aggfunc='last')
-
+    try:
+        sel, surf = select_surface(df)
+    except SkipDay as e:
+        return _skip_day(test_path, e.reason, e.detail, **e.coverage)
     n_strikes, n_mats = surf.shape
     n_cells = int(surf.count().sum())
     if n_mats < MIN_MATS or n_strikes < MIN_STRIKES or n_cells < MIN_CELLS:

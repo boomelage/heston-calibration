@@ -93,7 +93,7 @@ machine (multi-start LM, ~1,500 cells/day, 8 parallel jobs). A Bates run is ~4.5
 python -c "import sys; sys.path.insert(0,'data'); from get_rg import rg; print(rg[['risk_free_rate','dividend_rate']].head())"
 
 # Stage 2+3: calibrate ONCE per trading day. Reads raw trades directly and does the OTM cleaning
-#            in-memory (_utils._prepare_options), so there is no separate extraction script. Writes
+#            in-memory (prepare_surface._prepare_options), so there is no separate extraction script. Writes
 #            accepted params to the single results/<model>/calibrations/<objective>/calibrations.csv, one
 #            row per REJECTED day (with the cause) to results/<model>/calibrations/<objective>/rejections.csv,
 #            per-day repricing diagnostics to results/<model>/calibrations/<objective>/calibration_tests/,
@@ -202,7 +202,7 @@ day), while the bulky per-day repricing diagnostics stay one-file-per-day under
 `results/<model>/calibrations/<objective>/calibration_tests/`:
 
 ```plain
-raw/  --calibrator_prototype.py --MODEL {heston,bates} (_utils._prepare_options cleans to OTM in-memory)-->  results/<model>/calibrations/<objective>/calibrations.csv  + calibration_tests/
+raw/  --calibrator_prototype.py --MODEL {heston,bates} (prepare_surface._prepare_options cleans to OTM in-memory)-->  results/<model>/calibrations/<objective>/calibrations.csv  + calibration_tests/
 ```
 
 **Stage 1 — market rates (`data/get_rg.py`).** Imported for its side effect: building a
@@ -215,7 +215,7 @@ module-level DataFrame `rg`. Parses two hard-coded filenames in `data/market/`:
 Downstream only `risk_free_rate` and `dividend_rate` are consumed; the `_vol` columns and `rg`'s
 `spot_price` are computed but unused (spot comes from the options data instead).
 
-**OTM cleaning (`src/_utils._prepare_options`).** No longer a standalone stage/script (the old
+**OTM cleaning (`src/prepare_surface._prepare_options`).** No longer a standalone stage/script (the old
 `data/extract_otms.py` is removed). The calibrator calls this in-memory on each raw file: selects/renames
 a column subset, uses `underlying_bid` as `spot_price`, maps `option_type` C/P → `w` call/put, computes
 `days_to_maturity` (calendar days, `>0` only), keeps positive IV/spot/strike, then keeps the OTM band
@@ -229,7 +229,7 @@ acceptance and tightens IV-RMSE without losing the tradeable wing.
 core. For each raw trades file it does **one calibration per trading day** (PLAN Work item 3), over a
 pooled, moneyness-normalised surface — not the old per-0.5-spot-bucket fits:
 
-1. Read + clean trades (`_utils._prepare_options`); keep `trade_iv > 0` **and**
+1. Read + clean trades (`prepare_surface._prepare_options`); keep `trade_iv > 0` **and**
    `MIN_DTM <= days_to_maturity <= MAX_DTM` (`MIN_DTM`=14, `MAX_DTM`=730 in `config.py`). Ultra-short
    maturities are dropped: Heston fits them poorly and they drive `eta`/`kappa` to Feller-violating
    extremes, polluting the pooled fit.
@@ -399,7 +399,7 @@ when `lambda≈0`, so they often park on a bound without meaning). Bates bounds/
 Stages communicate through column names, not typed interfaces. Renaming any of these silently
 breaks a downstream stage:
 
-- cleaned OTM snapshot schema (in-memory, from `_utils._prepare_options`): `quote_datetime, strike_price, w, trade_size, trade_price, trade_iv, spot_price, days_to_maturity`.
+- cleaned OTM snapshot schema (in-memory, from `prepare_surface._prepare_options`): `quote_datetime, strike_price, w, trade_size, trade_price, trade_iv, spot_price, days_to_maturity`.
 - `results/<model>/calibrations/<objective>/calibrations.csv` schema (**single file, one row per trading day**, keyed by `date`):
   `spot_price` (= `S_ref`), `risk_free_rate, dividend_rate, theta, kappa, rho, eta, v0, feller,
   iv_rmse, rmse, n_helpers, accepted, n_maturities, n_strikes, contracts_count, total_volume,

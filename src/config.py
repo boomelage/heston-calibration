@@ -1,7 +1,7 @@
 """Central tuning constants for the Heston calibration pipeline.
 
 Every model/calibration knob lives here so the orchestrator (`calibrator_prototype.py`), the engine
-(`calibrate_heston.py`), the OTM filter (`_utils._prepare_options`) and the validator
+(`calibrate_heston.py`), the OTM filter (`prepare_surface._prepare_options`) and the validator
 (`validate_calibrations.py`) all read one source of truth. PLAN.md Phase 3 tunes these values
 (MIN_DTM, the box bounds, a Feller penalty, ...); editing one line here is the whole change.
 
@@ -16,7 +16,7 @@ from pricing._quantlib_config import (  # noqa: F401  (re-exported)
     day_count, calendar, DAY_COUNT_NAME, CALENDAR_NAME,
 )
 
-# ---- Surface selection / coverage (calibrator_prototype._select_surface / calibrate_by_day) ----
+# ---- Surface selection / coverage (prepare_surface._select_surface / calibrator_prototype.calibrate_by_day) ----
 # Pooling the whole day (one fit) lets us take more maturities than the old per-spot path.
 MAX_NT = 20          # maturities kept, ranked by traded volume (20 reaches ~485d; volume ranking
                      # caps a top-12 surface at ~394d even when MAX_DTM is larger)
@@ -30,7 +30,7 @@ MIN_STRIKES = 5      # require a real strike range
 MIN_CELLS = 12       # non-NaN surface cells required (target >= MIN_MATS x MIN_STRIKES)
 MAX_MOVE_PCT = 0.03  # intraday spot range above this flags the day (sticky-moneyness strained)
 
-# ---- OTM filter (_utils._prepare_options) ----
+# ---- OTM filter (prepare_surface._prepare_options) ----
 # Keep rows with FLOOR < ratio-moneyness < CUTOFF (see _utils.df_moneyness). The CUTOFF drops near-ATM
 # rows (keeps only OTM); the FLOOR drops the deep-OTM tail. Ratio moneyness = e^-|log(K/S)|, so the
 # 0.6 floor keeps |log-moneyness| < ~0.51 (~40% OTM): it removes the lottery-ticket strikes (|lm| out

@@ -208,7 +208,7 @@ widened to actually fit the wings and longer maturities: `MAX_NK` 8→40, `MAX_N
 calibration: once the wings are in the fit, the per-`|log-moneyness|` residual is small and mixed-sign
 (overall mean ~0 on the 100-day `vol` subset), not a systematic underbias. The cost was a deep-OTM
 lottery-ticket tail (`|log-moneyness|` out to ~3.3) that pegged the fit; an `OTM_MONEYNESS_FLOOR`=0.6 in
-`_utils._prepare_options` (`FLOOR < ratio moneyness < CUTOFF`) drops it, recovering acceptance (64→71/100)
+`prepare_surface._prepare_options` (`FLOOR < ratio moneyness < CUTOFF`) drops it, recovering acceptance (64→71/100)
 and tightening IV-RMSE while keeping the full tradeable wing. New read-only diagnostic
 `src/results/wing_residuals.py` grades the per-`|log-moneyness|` residual.
 

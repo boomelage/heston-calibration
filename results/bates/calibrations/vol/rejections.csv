@@ -22,3 +22,16 @@ date,reason,detail,iv_rmse,n_maturities,n_strikes,n_cells
 2013-04-05,pegged,calibration rejected (boundary-pegged),0.006285778297093909,14.0,120.0,510.0
 2013-04-15,pegged,calibration rejected (boundary-pegged),0.008962291828752016,12.0,150.0,546.0
 2013-06-05,pegged,calibration rejected (boundary-pegged),0.006013067494359203,13.0,144.0,586.0
+2013-09-30,pegged,calibration rejected (boundary-pegged),0.007439084842092186,11.0,125.0,465.0
+2013-10-02,pegged,calibration rejected (boundary-pegged),0.006260758807803293,10.0,129.0,450.0
+2013-10-09,pegged,calibration rejected (boundary-pegged),0.007350080202235327,11.0,155.0,601.0
+2013-10-10,pegged,calibration rejected (boundary-pegged),0.007178848141330386,11.0,135.0,530.0
+2013-10-14,pegged,calibration rejected (boundary-pegged),0.007998001471379234,11.0,115.0,390.0
+2013-10-15,pegged,calibration rejected (boundary-pegged),0.00922721224850706,10.0,116.0,405.0
+2013-10-21,pegged,calibration rejected (boundary-pegged),0.004905115132710552,11.0,95.0,375.0
+2013-11-21,pegged,calibration rejected (boundary-pegged),0.006043280271356302,12.0,118.0,458.0
+2013-11-27,pegged,calibration rejected (boundary-pegged),0.005170197819365375,12.0,119.0,391.0
+2013-11-29,pegged,calibration rejected (boundary-pegged),0.006921399673755483,11.0,115.0,359.0
+2013-12-02,pegged,calibration rejected (boundary-pegged),0.006183200041782457,11.0,109.0,396.0
+2013-12-03,pegged,calibration rejected (boundary-pegged),0.0070795226697275655,11.0,113.0,447.0
+2013-12-05,pegged,calibration rejected (boundary-pegged),0.007291762436812198,14.0,123.0,474.0

@@ -34,7 +34,7 @@ keep `CLAUDE.md` in sync with both.
   attempted** (1,631 accepted under the `vol` default, 50.7%), spanning 2012-01-03..2024-10-15.
   Accept-rate targets below are therefore stated as **proportions over the full set**, not "n of 5";
   the 2024-10-07..11 table is retained only as a worked diagnostic example of the pegging mechanism.
-- **Specification.** The delivered routine is stated formally in `heston-calibration.tex` (model +
+- **Specification.** The delivered routine is stated formally in `manuscript/skew-calibration.tex` (model +
   pricing operators, `S_ref`, `K*`, surface construction, price-space vs IV-space objectives, the
   boundary-pegging gate).
 - **Objective knob.** The in-engine LM objective is switchable via the `--OBJECTIVE {price,vol}` CLI
@@ -472,4 +472,4 @@ weakly-identified `nu`/`delta` park on their bounds (gate-exempt), a sign those 
 **Still deferred (not yet done).** A **full multi-year Bates run** for a committed baseline (the
 `BatesEngine` is ~4.5× slower per day, ~7 h for the full sample), and an optional **`nu`/`delta` bound
 widening** (e.g. -1.0 / 1.0) so rare-jump days find an interior optimum and the jump params stay
-interpretable. A Bates write-up section in `heston-calibration.tex` is a separate document task.
+interpretable. A Bates write-up section in `manuscript/skew-calibration.tex` is a separate document task.

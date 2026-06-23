@@ -369,7 +369,7 @@ def write_smiles_TeX(days):
             r"\begin{figure}[H]" "\n"
             r"    \begin{center}" "\n"
             f"        \\includegraphics[width=\\linewidth,keepaspectratio=false]"
-            f"{{results/{MODEL}/smiles/figures/smiles_{day['tag']}.eps}}\n"
+            f"{{../results/{MODEL}/smiles/figures/smiles_{day['tag']}.eps}}\n"
             r"        \captionsetup{font=tiny,skip=-2pt,belowskip=-2pt}" "\n"
             f"        \\caption{{{caption}}}\n"
             f"        \\label{{{label}}}\n"

@@ -119,13 +119,13 @@ calibrated pricing operator:
 \end{center}
 \begin{figure}[H]
     \begin{center}
-        \includegraphics[width=6.25cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/price_surface_puts.eps}
-        \includegraphics[width=6.25cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/price_surface_calls.eps}
+        \includegraphics[width=6.25cm,keepaspectratio=true]{../results/<MODEL>/surfaces/plots/tex/price_surface_puts.eps}
+        \includegraphics[width=6.25cm,keepaspectratio=true]{../results/<MODEL>/surfaces/plots/tex/price_surface_calls.eps}
         \caption{<MODEL_LABEL> option prices for $S_{\mathrm{ref}}$ <spot> on <date> with <parameters>: puts wing (left) and calls wing (right).}
         \label{Fig:<MODEL>-wings}
     \end{center}
     \begin{center}
-        \includegraphics[width=9cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/smile_surface.eps}
+        \includegraphics[width=9cm,keepaspectratio=true]{../results/<MODEL>/surfaces/plots/tex/smile_surface.eps}
         \caption{\emph{Out of the money} implied volatilites from Figure~\ref{Fig:<MODEL>-wings}}
     \end{center}
 \end{figure}

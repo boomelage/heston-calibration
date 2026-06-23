@@ -33,7 +33,7 @@ On any session that touches the code or the plan:
 
 Calibrate Heston (1993) stochastic-volatility parameters (`v0, kappa, theta, eta, rho`) to
 CBOE S&P 500 (SPX) intraday option trades, using QuantLib. `eta` is the vol-of-vol (QuantLib's
-`sigma`). The model SDE is documented in `heston-calibration.tex`:
+`sigma`). The model SDE is documented in `manuscript/skew-calibration.tex`:
 
 ```plain
 dX_t = (r - v_t/2) dt + sqrt(v_t)(rho dW_t + sqrt(1-rho^2) dB_t)
@@ -474,9 +474,9 @@ breaks a downstream stage:
   and an optional `nu`/`delta` bound widening. See `PLAN.md`'s `Completed tasks` (Bates extension, PR #12).
 - The `data/__pycache__/` holds bytecode for deleted modules (`get_data`, `get_options`, ...) — ignore it.
 
-## Writing prose (`heston-calibration.tex` and other `.tex` documents)
+## Writing prose (`manuscript/skew-calibration.tex` and other `.tex` documents)
 
-When you write or edit prose in `heston-calibration.tex` or any other `.tex` document here, write it the way a careful human author would, not the way an LLM defaults to. Concretely:
+When you write or edit prose in `manuscript/skew-calibration.tex` or any other `.tex` document here, write it the way a careful human author would, not the way an LLM defaults to. Concretely:
 
 - **Avoid the em dash (`—`) as a sentence connector.** It is the single clearest tell of machine-written prose, and the existing text overuses it. Prefer a period, a comma, a colon, or parentheses, and rephrase so the dash is not needed. Do not replace one em dash with another piece of dashy punctuation (en dash, double hyphen) doing the same job; restructure the sentence instead. (Genuine ranges like `12–31×` and `1…8192` keep their en dash/ellipsis — this is about prose connectors, not numerics.)
 - **Keep sentences short and digestible.** One idea per sentence. Break a long sentence into two or three rather than stacking clauses with dashes, semicolons, and nested parentheticals. If a sentence needs more than one comma-separated aside to parse, split it.

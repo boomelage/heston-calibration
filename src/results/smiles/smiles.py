@@ -364,12 +364,12 @@ def write_smiles_TeX(days):
         caption = (f"{MODEL_LABEL} implied-volatility smiles for {date_pretty}: "
                    r"put wing (left, $K/S$) and call wing (right, $S/K$), "
                    r"with market trades scattered.")
-        label = f"Fig:smiles_{day['tag']}"
+        label = f"Fig:{MODEL}_smiles_{day['tag']}"
         block = (
             r"\begin{figure}[H]" "\n"
             r"    \begin{center}" "\n"
             f"        \\includegraphics[width=\\linewidth,keepaspectratio=false]"
-            f"{{../results/{MODEL}/smiles/figures/smiles_{day['tag']}.eps}}\n"
+            f"{{results/{MODEL}/smiles/figures/smiles_{day['tag']}.eps}}\n"
             r"        \captionsetup{font=tiny,skip=-2pt,belowskip=-2pt}" "\n"
             f"        \\caption{{{caption}}}\n"
             f"        \\label{{{label}}}\n"

@@ -1,29 +1,31 @@
-"""Read-only validation of Heston calibration outputs (PLAN.md Work items 1 & 3).
+"""Read-only validation of Heston/Bates calibration outputs (PLAN.md Work items 1 & 3).
 
-Reads the single ``results/calibrations/<objective>/calibrations.csv`` (ONE row per trading day,
-Work item 3) and the matching per-day
-``results/calibrations/<objective>/calibration_tests/*.csv`` (repriced surface contracts) and emits,
-per trading day, a pass/fail report on:
+Reads the single ``results/<model>/calibrations/<objective>/calibrations.csv`` (ONE row per trading
+day, Work item 3) and the matching per-day
+``results/<model>/calibrations/<objective>/calibration_tests/*.csv`` (repriced surface contracts) and
+emits, per trading day, a pass/fail report on:
 
-  1. Fit quality   - relative repricing error (heston vs trade_price) and, more rigorously,
+  1. Fit quality   - relative repricing error (model vs trade_price) and, more rigorously,
                      the IV-space residual (model-implied vol vs market vol, in vol points).
   2. Economic      - two-tier flags (hard reject / suspicious) on (theta, kappa, eta, rho, v0)
-     reasonability   against SPX-plausible ranges, plus the Feller condition.
+     reasonability   against SPX-plausible ranges, plus the Feller condition. Under ``MODEL=bates``
+                     the jump triple (lambda_, nu, delta) is also reported and flagged (suspicious
+                     tier only, matching the engine's gate which exempts the jumps).
   3. Stability     - spread of the structural params **across days** (cross-day, post Work item 3);
                      these should cluster tightly for one underlying over a short window.
 
 This module touches nothing in the pipeline. Run it before and after the deeper fixes to measure
-improvement.
+improvement. The model/objective graded come from ``results_config`` (MODEL/OBJECTIVE), the same
+switches the other ``src/results/`` figure scripts read.
 
-    python src/validate_calibrations.py
+    python src/results/validate_calibrations.py
 
-All graded rows are written to a single ``results/calibrations/<objective>/validation.csv``; a
-per-day summary and a cross-day stability block are printed.
+All graded rows are written to a single ``results/<model>/calibrations/<objective>/validation.csv``;
+a per-day summary and a cross-day stability block are printed.
 """
 import sys
 import numpy as np
 import pandas as pd
-# import QuantLib as ql
 from pathlib import Path
 
 RESULTS_CODE = Path(__file__).parent.resolve()
@@ -35,7 +37,7 @@ for _p in (str(SRC), str(RESULTS_CODE), str(RESULTS)):
         sys.path.insert(0, _p)
 
 from utils import implied_vol
-from config import BOUNDS, IV_RMSE_ACCEPT, OBJECTIVE_NAMES, MODEL_NAMES, calib_paths
+from config import BOUNDS, BATES_BOUNDS, IV_RMSE_ACCEPT, OBJECTIVE_NAMES, MODEL_NAMES, calib_paths
 from results_config import MODEL, OBJECTIVE
 
 if OBJECTIVE not in OBJECTIVE_NAMES:
@@ -55,21 +57,35 @@ PRICE_COL = MODEL
 # Bates appends the jump triple; grade/stability include them when present.
 JUMP_PARAMS = ["lambda_", "nu", "delta"] if MODEL == "bates" else []
 
+# Hard-reject ranges must agree with the engine's box bounds, which differ by model: Heston uses
+# config.BOUNDS, Bates uses config.BATES_BOUNDS (the five Heston ranges plus the jump triple). Select
+# the matching dict so a bates run is graded against the bounds it was actually fit under.
+_B = BATES_BOUNDS if MODEL == "bates" else BOUNDS
+
 # Tunable acceptance/flag thresholds. "hard" = financially impossible -> reject;
 # "susp" (suspicious) = possible but atypical for SPX at these tenors -> flag, don't reject.
 # The hard-reject ranges that must agree with the engine (the box bounds and the IV gate) are
-# pulled from config.BOUNDS / config.IV_RMSE_ACCEPT so the two cannot drift. The remaining knobs
+# pulled from config bounds / config.IV_RMSE_ACCEPT so the two cannot drift. The remaining knobs
 # (peg/susp tolerances, kappa_lo) are validator-only judgement calls and stay local.
 THRESHOLDS = dict(
-    rho_peg=0.995, rho_lo=BOUNDS["rho"][0], rho_hi=BOUNDS["rho"][1],          # leverage => rho negative
-    eta_lo=BOUNDS["eta"][0], eta_hi=BOUNDS["eta"][1], eta_susp=1.5,           # SPX vol-of-vol ~0.3-1.2
-    theta_lo=BOUNDS["theta"][0], theta_hi=BOUNDS["theta"][1], theta_susp=0.25,  # vol>50% suspicious
-    v0_lo=BOUNDS["v0"][0], v0_hi=BOUNDS["v0"][1], v0_atm_tol=0.05,            # sqrt(v0) ~ front ATM IV
-    kappa_lo=0.0, kappa_hi=BOUNDS["kappa"][1],                               # mean-reversion speed
+    rho_peg=0.995, rho_lo=_B["rho"][0], rho_hi=_B["rho"][1],                  # leverage => rho negative
+    eta_lo=_B["eta"][0], eta_hi=_B["eta"][1], eta_susp=1.5,                   # SPX vol-of-vol ~0.3-1.2
+    theta_lo=_B["theta"][0], theta_hi=_B["theta"][1], theta_susp=0.25,        # vol>50% suspicious
+    v0_lo=_B["v0"][0], v0_hi=_B["v0"][1], v0_atm_tol=0.05,                    # sqrt(v0) ~ front ATM IV
+    kappa_lo=0.0, kappa_hi=_B["kappa"][1],                                    # mean-reversion speed
     iv_rmse_pts=IV_RMSE_ACCEPT,                                              # fit within ~2 vol points
+    # --- Bates jump triple (gate-exempt in the engine, so suspicious tier only) ---
+    jump_peg_frac=0.02,        # |param - bound| < this fraction of the bound's span => "pegged"
+    lambda_collapse=0.05,      # lambda below this => jumps off, fit collapsed to pure Heston (a note)
 )
 
 STRUCTURAL = ["theta", "kappa", "eta", "rho", "v0"] + JUMP_PARAMS
+
+
+def _pegged(val, lo, hi, frac):
+    """True if val sits within frac*span of either bound (weak-identification flag for the jumps)."""
+    span = hi - lo
+    return (val - lo) < frac * span or (hi - val) < frac * span
 
 
 
@@ -129,7 +145,20 @@ def grade_day(row, atm_iv, iv_rmse):
         kappa_degenerate=(kappa < 0.1 and theta > 0.5),
         feller_violated=feller < 0,
     )
-    out = {**hard, **susp}
+    # Bates jump triple. The engine gate exempts the jumps (lambda~0 is a legitimate Heston collapse,
+    # and nu/delta are unidentified when lambda~0), so these stay suspicious-tier and never hard-fail.
+    # The two weakly-identified jump params (nu, delta) parking on a bound, or lambda pegged at its
+    # cap, is the diagnostic worth surfacing; lambda~0 (jumps switched off) is reported as a note.
+    note = {}
+    if JUMP_PARAMS:
+        lam, nu, delta = row["lambda_"], row["nu"], row["delta"]
+        frac = t["jump_peg_frac"]
+        susp["lambda_pegged_hi"] = (BATES_BOUNDS["lambda_"][1] - lam) < frac * (
+            BATES_BOUNDS["lambda_"][1] - BATES_BOUNDS["lambda_"][0])
+        susp["nu_pegged"] = _pegged(nu, *BATES_BOUNDS["nu"], frac=frac)
+        susp["delta_pegged"] = _pegged(delta, *BATES_BOUNDS["delta"], frac=frac)
+        note["jumps_collapsed"] = lam < t["lambda_collapse"]
+    out = {**hard, **susp, **note}
     out["hard_fail"] = any(hard.values())
     out["n_suspicious"] = sum(susp.values())
     out["val_accepted"] = not out["hard_fail"]
@@ -176,14 +205,23 @@ def print_day(report):
           f"IV RMSE {r['iv_rmse']:.4f} vol pts")
     verdict = "PASS" if r["val_accepted"] else "HARD FAIL"
     print(f"  grade  : {verdict}   suspicious flags: {int(r['n_suspicious'])}")
-    flagged = [label for col, label in [
+    flag_labels = [
         ("rho_pegged", "rho pegged"), ("rho_wrong_sign", "rho>0"), ("eta_susp", "eta>1.5"),
         ("theta_susp", "theta>0.25"), ("v0_atm_mismatch", "sqrt(v0) far from ATM IV"),
         ("kappa_degenerate", "kappa<0.1 & theta>0.5"), ("feller_violated", "Feller<0"),
         ("fit_hard", "IV RMSE>2 vol pts"),
-    ] if bool(r.get(col))]
+    ]
+    if JUMP_PARAMS:
+        flag_labels += [
+            ("lambda_pegged_hi", "lambda pegged at cap"), ("nu_pegged", "nu pegged"),
+            ("delta_pegged", "delta pegged"),
+        ]
+    flagged = [label for col, label in flag_labels if bool(r.get(col))]
     if flagged:
         print(f"           flags: {', '.join(flagged)}")
+    if JUMP_PARAMS and bool(r.get("jumps_collapsed")):
+        print(f"           note : jumps collapsed (lambda={r.get('lambda_', float('nan')):.4f} ~ 0; "
+              f"fit is effectively pure Heston, nu/delta unidentified)")
     if bool(r.get("high_move")):
         print(f"           note : high intraday move ({r.get('spot_range_pct', float('nan')):.2%}) "
               f"- moneyness normalisation strained")

@@ -4,9 +4,10 @@ Read-only. Quantifies where the calibrated surface mis-fits the smile, stratifie
 and maturity, so the wing-weighting lever (`config.WING_WEIGHT_*`) can be judged by whether it
 shrinks the *wing* residual without breaking the body. This is the metric a GAIN sweep is graded on.
 
-For each repriced contract in `results/calibrations/<objective>/calibration_tests/*.csv` it inverts
-the fitted Heston price back to a Black implied vol (`utils.implied_vol`, the same dividend-consistent
-inverter `validate_calibrations.py` uses) and forms the residual
+For each repriced contract in `results/<model>/calibrations/<objective>/calibration_tests/*.csv` it
+inverts the fitted model price (the `heston`/`bates` column, picked by MODEL) back to a Black implied
+vol (`utils.implied_vol`, the same dividend-consistent inverter `validate_calibrations.py` uses) and
+forms the residual
 
     resid = model_iv - market_iv        (market_iv = the trade's `volatility` column)
 
@@ -18,7 +19,7 @@ so a NEGATIVE resid means the model UNDERESTIMATES IV there. It then reports, ac
      sweep should move;
   3. by maturity band x wing.
 
-    python src/wing_residuals.py            # OBJECTIVE set below (mirrors validate_calibrations.py)
+    python src/results/wing_residuals.py    # MODEL/OBJECTIVE from results_config (mirrors validate)
 
 `load_residuals(objective)` returns the per-contract frame and `summarize(df)` the bucket tables, so
 the sweep can import and reuse them instead of re-reading the files.
@@ -52,7 +53,7 @@ def _tests_dir(objective):
 
 
 def load_residuals(objective=OBJECTIVE):
-    """Invert every repriced contract's Heston price to a Black IV and return the residual frame.
+    """Invert every repriced contract's model price (heston/bates column) to a Black IV and return the residual frame.
 
     Columns: date, days_to_maturity, w, spot_price, strike_price, lm (signed ln K/S), abs_lm,
     market_iv, model_iv, resid (= model_iv - market_iv). Rows whose inversion failed are dropped.

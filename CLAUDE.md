@@ -108,18 +108,21 @@ python src/calibrator_prototype.py                       # heston, vol, all days
 python src/calibrator_prototype.py --MODEL bates --LIMIT 100   # bates, last 100 days
 
 # Validation (read-only): grade results/<model>/calibrations/<objective>/calibrations.csv +
-#          calibration_tests/ for fit quality, economic reasonability, and cross-day stability. Prompts
-#          for the objective (price/vol), writes results/<model>/calibrations/<objective>/validation.csv,
-#          and prints a per-day summary plus a cross-day stability block. Does not modify the pipeline.
-#          Model-aware: set the MODEL/OBJECTIVE constants at the top to grade a heston or bates run
-#          (bates also grades/reports the jump params lambda_/nu/delta).
-python src/validate_calibrations.py
+#          calibration_tests/ for fit quality, economic reasonability, and cross-day stability. Writes
+#          results/<model>/calibrations/<objective>/validation.csv, and prints a per-day summary plus a
+#          cross-day stability block. Does not modify the pipeline. Model-aware: the MODEL/OBJECTIVE it
+#          grades come from src/results/results_config.py (the same switches the figure scripts read);
+#          set MODEL there to heston or bates. Under bates it grades against BATES_BOUNDS and also
+#          reports/flags the jump triple (lambda_/nu/delta pegging, suspicious tier; lambda_~0 noted as
+#          a Heston collapse).
+python src/results/validate_calibrations.py
 
-# Wing-residual diagnostic (read-only): invert each repriced contract's Heston price back to a Black
-#          IV and report resid = model_iv - market_iv, stratified by signed log-moneyness, by
-#          |log-moneyness| (the axis config.WING_WEIGHT_* up-weights), and by maturity x wing. This is
-#          the metric a WING_WEIGHT_GAIN sweep is graded on (PLAN Lever B). OBJECTIVE constant at top.
-python src/wing_residuals.py
+# Wing-residual diagnostic (read-only): invert each repriced contract's model price (heston/bates
+#          column, picked by results_config.MODEL) back to a Black IV and report resid = model_iv -
+#          market_iv, stratified by signed log-moneyness, by |log-moneyness| (the axis
+#          config.WING_WEIGHT_* up-weights), and by maturity x wing. This is the metric a
+#          WING_WEIGHT_GAIN sweep is graded on (PLAN Lever B). MODEL/OBJECTIVE from results_config.
+python src/results/wing_residuals.py
 ```
 
 **Data not in version control.** `data/options/raw/` (raw CBOE trade files, ~80–90 MB/day — near
@@ -165,8 +168,10 @@ relative-price); the orchestrator passes its `OBJECTIVE` constant through.
 **Downstream figure/table scripts** live under `src/results/` (moved there from `results/`):
 `surfaces/make_surface.py` (rebuilds a model IV/price surface from one calibration row),
 `surfaces/plot_surfaces.py` (writes the OTM surface/smile EPS + `otm.tex`), `smiles/smiles.py` (per-day
-market-vs-model smile EPS + `smiles.tex`), and `tables/objective_comparison.py` (price-vs-vol metrics
-table). `smiles.py` does **not** read the raw CBOE trades: it draws the model smile lines from the
+market-vs-model smile EPS + `smiles.tex`), `tables/objective_comparison.py` (price-vs-vol metrics
+table), plus the two read-only graders at the `src/results/` top level: `validate_calibrations.py`
+(grades a run's `calibrations.csv` + `calibration_tests/`) and `wing_residuals.py` (residual-by-moneyness
+diagnostic). `smiles.py` does **not** read the raw CBOE trades: it draws the model smile lines from the
 calibrated params in `calibrations.csv` and overlays the market scatter straight from that day's
 `calibration_tests/` file (the exact contracts the day was fit on, market IV in the `volatility`
 column). A missing tests file drops the scatter (model lines only over `MATURITIES_DAYS`); a missing
@@ -175,9 +180,10 @@ the **repo-level** `results/<model>/` tree, and share the QuantLib helpers (`bui
 `build_heston_engine`/`build_bates_engine`, plus the engine-agnostic `model_price`,
 `model_implied_vol`) in `src/utils.py`. They are **model-aware**: `MODEL`/`OBJECTIVE` plus every
 plotting/grid knob for `make_surface.py`, `plot_surfaces.py` and `smiles.py` live in **one** file,
-`src/results/results_config.py` (each of the three adds `src/results` to `sys.path` and imports from
-it). Set `MODEL` to `heston` or `bates` there and it picks the engine, the `results/<model>/...`
-source/output tree, and the figure labels for all three at once; the grids (`MONEYNESS`,
+`src/results/results_config.py`. The two top-level graders `validate_calibrations.py` and
+`wing_residuals.py` also import `MODEL`/`OBJECTIVE` from `results_config` (each script adds `src/results`
+to `sys.path` first). Set `MODEL` to `heston` or `bates` there and it picks the engine, the
+`results/<model>/...` source/output tree, and the figure labels for all of them at once; the grids (`MONEYNESS`,
 `MATURITIES_DAYS`), the smile knobs (`NT`, `MKTMONSTEP` — each accepts `None` to draw every
 maturity/strike; `XLO/XHI` fallback window) and the surface
 view (`SURFACE_ELEV/AZIM`, figsizes) are tuned in the same place. (`objective_comparison.py` is **not**
@@ -422,8 +428,9 @@ breaks a downstream stage:
   `validate_calibrations.py` build this path from the same `calib_paths` rule; if the two drift apart the
   validator stops finding the tests files. The Heston tree was migrated from the old
   `results/calibrations/<objective>/` to `results/heston/...`; `validate_calibrations.py` is model-aware
-  (its `MODEL` constant feeds the same `calib_paths` rule and reads the model's `heston`/`bates` price
-  column).
+  (it reads `MODEL`/`OBJECTIVE` from `src/results/results_config.py`, which feed the same `calib_paths`
+  rule and select the model's `heston`/`bates` price column; under bates it also grades against
+  `BATES_BOUNDS` and flags the jump triple).
 - Moneyness normalisation assumes **sticky-moneyness** (IV ~stationary in `K/S` over a session). It
   is mild on normal days (~1% intraday range) but strained on large-move days; those are flagged
   `high_move` (range > `MAX_MOVE_PCT`=3%) and still written — treat their `S_ref` with suspicion.
@@ -434,7 +441,7 @@ breaks a downstream stage:
   (was 12), `MIN_DTM`=14 (was 29/7), `MAX_DTM`=730 (was 400), plus `OTM_MONEYNESS_FLOOR`=0.6. Putting the
   wings *into* the calibration (not just near-money) and dropping the deep lottery-ticket tail removed what
   looked like a systematic "model underestimates the wings": on the **full-sample `vol` run**
-  (`src/wing_residuals.py`) the per-`|log-moneyness|` residual is small and mixed-sign (bands within ±0.009,
+  (`src/results/wing_residuals.py`) the per-`|log-moneyness|` residual is small and mixed-sign (bands within ±0.009,
   overall RMSE ~0.011, mean +0.0015 vol pts), so the wing underfit seen in the old smile plots was largely an
   **extrapolation artefact** of near-money-only calibration, not an in-sample bias. The cost: the widening
   lifts `eta` and pushes Feller violation to 100% of accepted days (see the Feller bullet).
@@ -468,10 +475,13 @@ breaks a downstream stage:
   window) Bates accepted **94/100** vs Heston **63/100** on the same days, fit **35% tighter** in
   IV-RMSE on the shared days, and roughly **halved `eta`** (1.17 -> 0.52: jumps absorb the tail the
   Heston vol-of-vol was overfitting); Feller stays violated. The weakly-identified `nu`/`delta` park on
-  their bounds (gate-exempt), a sign those two bounds are tight. The downstream consumers are now
-  **model-aware** (a `MODEL` constant each; `validate_calibrations.py`, `make_surface.py`,
-  `smiles.py`, `plot_surfaces.py`, `objective_comparison.py`). **Not yet done:** a full multi-year Bates run,
-  and an optional `nu`/`delta` bound widening. See `PLAN.md`'s `Completed tasks` (Bates extension, PR #12).
+  their bounds (gate-exempt), a sign those two bounds are tight; `validate_calibrations.py` now surfaces
+  this as suspicious-tier `nu pegged`/`delta pegged` flags under bates. The downstream consumers are now
+  **model-aware**: the figure scripts and the two graders (`validate_calibrations.py`, `wing_residuals.py`,
+  `make_surface.py`, `smiles.py`, `plot_surfaces.py`) read `MODEL`/`OBJECTIVE` from
+  `src/results/results_config.py`, and `objective_comparison.py` keeps its own `MODEL` constant. **Not yet
+  done:** a full multi-year Bates run, and an optional `nu`/`delta` bound widening. See `PLAN.md`'s
+  `Completed tasks` (Bates extension, PR #12).
 - The `data/__pycache__/` holds bytecode for deleted modules (`get_data`, `get_options`, ...) — ignore it.
 
 ## Writing prose (`manuscript/skew-calibration.tex` and other `.tex` documents)

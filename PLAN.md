@@ -76,7 +76,7 @@ Line numbers in any sketch below drift — match on code, not line numbers.
 | Item | File(s) | Risk | Status |
 |------|---------|------|--------|
 | Phase 1 — input bugs (rate lookup, strike selection) | `src/calibrator_prototype.py` | low–med | ✅ done |
-| Phase 2 — validation module | `src/validate_calibrations.py` (new) | none (read-only) | ✅ done |
+| Phase 2 — validation module | `src/results/validate_calibrations.py` (new) | none (read-only) | ✅ done |
 | Phase 2 — engine hardening (bounds, multi-start, gate) | `src/calibrate_heston.py` | medium | ✅ done |
 | Phase 2 — one calibration per trading day | `src/calibrator_prototype.py`, `src/calibrate_heston.py` | high (schema) | ✅ done |
 | Phase 2 — IV-space acceptance gate | `src/calibrate_heston.py` | medium | ✅ done |
@@ -210,7 +210,7 @@ calibration: once the wings are in the fit, the per-`|log-moneyness|` residual i
 lottery-ticket tail (`|log-moneyness|` out to ~3.3) that pegged the fit; an `OTM_MONEYNESS_FLOOR`=0.6 in
 `utils._prepare_options` (`FLOOR < ratio moneyness < CUTOFF`) drops it, recovering acceptance (64→71/100)
 and tightening IV-RMSE while keeping the full tradeable wing. New read-only diagnostic
-`src/wing_residuals.py` grades the per-`|log-moneyness|` residual.
+`src/results/wing_residuals.py` grades the per-`|log-moneyness|` residual.
 
 **Lever B — weight the objective. [IMPLEMENTED, default-off; TESTED NULL — reverted to `GAIN=0`.]**
 Implemented as a **moneyness wing-weight** (not vega/volume): `_calibrate_once` up-weights OTM cells by
@@ -274,8 +274,8 @@ model.calibrate(helpers, lm, end, constraint, weights, [False, True, False, Fals
 
 ```bash
 python src/calibrator_prototype.py           # default --OBJECTIVE vol; runs every raw file (no slice)
-python src/validate_calibrations.py
-python src/wing_residuals.py                  # per-|log-moneyness| residual (grades the wing fit / floor)
+python src/results/validate_calibrations.py
+python src/results/wing_residuals.py          # per-|log-moneyness| residual (grades the wing fit / floor)
 # full-set summary (aggregate, do not dump every day). Default output is the `vol` objective; with
 # --OBJECTIVE price the run writes results/heston/calibrations/price/ instead — point the path at whichever
 # objective you just ran.
@@ -359,7 +359,7 @@ identified. The damning symptom: on **one day**, across **adjacent** spot bucket
 swing like that. Repricing error was median ≈ 20%, p90 ≈ 54%. That instability was the proof the
 per-bucket fit was under-determined.
 
-**Work item 1 — validation module (✅), `src/validate_calibrations.py`.** Read-only grader: fit
+**Work item 1 — validation module (✅), `src/results/validate_calibrations.py`.** Read-only grader: fit
 quality (relative repricing error **and** an IV-space residual — invert the `heston` price to a Black
 vol via `ql.blackFormulaImpliedStdDev` on the forward `F = S·e^{(r−g)T}`, dividend-consistent),
 two-tier economic flags (hard-reject vs suspicious) on the five params + Feller, and (post per-day)
@@ -455,9 +455,12 @@ comparison**, which needs both result sets on disk at once — hence routing is 
   `results/<model>/{smiles,surfaces,tables}/`. The existing Heston tree was migrated from
   `results/calibrations/...` to `results/heston/...`; Bates writes under `results/bates/...`.
   `config.calib_paths(model, objective)` is the single source of truth.
-- **Downstream consumers made model-aware** (a module-level `MODEL` constant each, routing through
-  `config.calib_paths` / `utils.build_model_engine`): `validate_calibrations.py`, `make_surface.py`,
-  `smiles.py`, `plot_surfaces.py`, `objective_comparison.py`. `utils.py` gained `build_bates_engine` + the
+- **Downstream consumers made model-aware** (routing through `config.calib_paths` /
+  `utils.build_model_engine`): `validate_calibrations.py`, `wing_residuals.py`, `make_surface.py`,
+  `smiles.py`, `plot_surfaces.py` read `MODEL`/`OBJECTIVE` from `src/results/results_config.py`;
+  `objective_comparison.py` keeps its own `MODEL` constant. Under bates, `validate_calibrations.py` grades
+  against `BATES_BOUNDS` and flags the parked jump triple (`nu`/`delta`/`lambda_` pegging). `utils.py`
+  gained `build_bates_engine` + the
   `build_model_engine(row, calc_date, model)` dispatcher; the pricing/inversion helpers were already
   engine-agnostic.
 

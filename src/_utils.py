@@ -80,7 +80,7 @@ def implied_vol(price, w, S, K, r, g, T):
 
 
 # ---- Model-engine helpers (used by the results/ figure scripts: make_surface, plot_surfaces, smiles).
-# Moved here from the former src/results/surfaces/utils.py so there is one shared utils module. These
+# Moved here from the former src/results/surfaces/_utils.py so there is one shared _utils module. These
 # evaluate whatever QuantLib pricing engine they are handed -- Heston OR Bates, built by
 # build_model_engine -- so they are model-agnostic (the engine carries the params). Distinct from the
 # price-inversion `implied_vol` above: `model_implied_vol` PRICES a strike under the engine and then

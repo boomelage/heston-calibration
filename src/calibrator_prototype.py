@@ -71,7 +71,7 @@ if str(SRC) not in sys.path:
 
 from pricing.vanilla_pricer import vanilla_pricer
 vanp = vanilla_pricer()
-from utils import _prepare_options, write_config_spec, _file_date
+from _utils import _prepare_options, write_config_spec, _file_date
 from calibrate_heston import calibrate_heston
 from calibrate_bates import calibrate_bates
 import config
@@ -164,7 +164,7 @@ def _skip_day(test_path, reason, detail, iv_rmse=np.nan,
 def _select_surface(df):
     """Pick the day's calibration surface in moneyness-normalised (K*) strike space.
 
-    The trades are OTM calls and puts spanning both wings (see `utils._prepare_options`). Top MAX_NT
+    The trades are OTM calls and puts spanning both wings (see `_utils._prepare_options`). Top MAX_NT
     maturities by traded volume; within each, the MAX_NK nearest-the-money strikes per wing on K*
     (already centred on S_ref): the highest OTM puts (below spot) and the lowest OTM calls (above
     spot). Returns the selected snapshot rows with original strike/spot retained for repricing, or
@@ -198,7 +198,7 @@ def calibrate_by_day(filepath, OBJECTIVE, MODEL):
     date_str = filename[filename.rfind('_')+1:filename.rfind('.csv')]
     test_path = str(tests_dir / f"cboe_spx_calibration_tests_{date_str}.csv")
     # Read the raw CBOE trades file and clean it in-memory to the OTM snapshot the surface needs
-    # (column subset/rename, C/P -> call/put, calendar DTM, OTM-only) via utils._prepare_options.
+    # (column subset/rename, C/P -> call/put, calendar DTM, OTM-only) via _utils._prepare_options.
     df = pd.read_csv(filepath)
     df = _prepare_options(df)
     df = df[(df['trade_iv'] > 0) & (df['days_to_maturity'] >= MIN_DTM) & (df['days_to_maturity'] <= MAX_DTM)].copy()

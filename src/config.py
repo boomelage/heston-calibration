@@ -1,7 +1,7 @@
 """Central tuning constants for the Heston calibration pipeline.
 
 Every model/calibration knob lives here so the orchestrator (`calibrator_prototype.py`), the engine
-(`calibrate_heston.py`), the OTM filter (`utils._prepare_options`) and the validator
+(`calibrate_heston.py`), the OTM filter (`_utils._prepare_options`) and the validator
 (`validate_calibrations.py`) all read one source of truth. PLAN.md Phase 3 tunes these values
 (MIN_DTM, the box bounds, a Feller penalty, ...); editing one line here is the whole change.
 
@@ -30,8 +30,8 @@ MIN_STRIKES = 5      # require a real strike range
 MIN_CELLS = 12       # non-NaN surface cells required (target >= MIN_MATS x MIN_STRIKES)
 MAX_MOVE_PCT = 0.03  # intraday spot range above this flags the day (sticky-moneyness strained)
 
-# ---- OTM filter (utils._prepare_options) ----
-# Keep rows with FLOOR < ratio-moneyness < CUTOFF (see utils.df_moneyness). The CUTOFF drops near-ATM
+# ---- OTM filter (_utils._prepare_options) ----
+# Keep rows with FLOOR < ratio-moneyness < CUTOFF (see _utils.df_moneyness). The CUTOFF drops near-ATM
 # rows (keeps only OTM); the FLOOR drops the deep-OTM tail. Ratio moneyness = e^-|log(K/S)|, so the
 # 0.6 floor keeps |log-moneyness| < ~0.51 (~40% OTM): it removes the lottery-ticket strikes (|lm| out
 # to ~3.3) whose extreme prices peg the fit to the bounds, while keeping the full tradeable wing

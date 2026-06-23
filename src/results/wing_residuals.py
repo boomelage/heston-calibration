@@ -6,7 +6,7 @@ shrinks the *wing* residual without breaking the body. This is the metric a GAIN
 
 For each repriced contract in `results/<model>/calibrations/<objective>/calibration_tests/*.csv` it
 inverts the fitted model price (the `heston`/`bates` column, picked by MODEL) back to a Black implied
-vol (`utils.implied_vol`, the same dividend-consistent inverter `validate_calibrations.py` uses) and
+vol (`_utils.implied_vol`, the same dividend-consistent inverter `validate_calibrations.py` uses) and
 forms the residual
 
     resid = model_iv - market_iv        (market_iv = the trade's `volatility` column)
@@ -19,7 +19,7 @@ so a NEGATIVE resid means the model UNDERESTIMATES IV there. It then reports, ac
      sweep should move;
   3. by maturity band x wing.
 
-    python src/results/wing_residuals.py    # MODEL/OBJECTIVE from results_config (mirrors validate)
+    python src/results/wing_residuals.py    # MODEL/OBJECTIVE from _results_config (mirrors validate)
 
 `load_residuals(objective)` returns the per-contract frame and `summarize(df)` the bucket tables, so
 the sweep can import and reuse them instead of re-reading the files.
@@ -37,8 +37,8 @@ for _p in (str(SRC), str(RESULTS_CODE), str(RESULTS)):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from results_config import MODEL, OBJECTIVE
-from utils import implied_vol
+from _results_config import MODEL, OBJECTIVE
+from _utils import implied_vol
 
 # Signed log-moneyness ln(K/S) bin edges: puts < 0, calls > 0. ~+/-0.05 ~ 5% OTM.
 LM_EDGES = [-np.inf, -0.20, -0.12, -0.07, -0.04, -0.02, 0.02, 0.04, 0.07, 0.12, 0.20, np.inf]

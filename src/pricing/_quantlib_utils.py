@@ -2,7 +2,7 @@
 
 Every QuantLib process, engine and option used across the repo is built here, so a change in
 QuantLib's constructor argument order (or the date conventions) is a one-line edit in this module
-instead of a hunt through `vanilla_pricer.py`, `utils.py`, `calibrate_heston.py` and
+instead of a hunt through `vanilla_pricer.py`, `_utils.py`, `calibrate_heston.py` and
 `calibrate_bates.py`. The date conventions themselves live in `_quantlib_config.py`.
 
 Constructor argument orders pinned here (QuantLib 1.35) -- the single home of these orderings:
@@ -14,7 +14,7 @@ never restate it.
 
 The engine builders return a fixed bundle `(engine, s_handle, ts_r, ts_g, day_count)`: the engine for
 pricing, the handles/day-count so a caller can build the matching Black process for IV inversion
-(`utils.build_heston_engine`) without rebuilding the term structures. Pricers that only need the
+(`_utils.build_heston_engine`) without rebuilding the term structures. Pricers that only need the
 engine unpack with `engine, *_ = ...`.
 """
 import QuantLib as ql

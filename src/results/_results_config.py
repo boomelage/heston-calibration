@@ -9,7 +9,7 @@ grid/plot parameters, grouped by the script that consumes it.
 
 Imported by ``surfaces/make_surface.py``, ``smiles/smiles.py`` and
 ``surfaces/plot_surfaces.py`` (each adds ``src/results`` to ``sys.path`` then
-``import results_config``).
+``import _results_config``).
 """
 import numpy as np
 

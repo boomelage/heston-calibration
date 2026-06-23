@@ -15,7 +15,7 @@ emits, per trading day, a pass/fail report on:
                      these should cluster tightly for one underlying over a short window.
 
 This module touches nothing in the pipeline. Run it before and after the deeper fixes to measure
-improvement. The model/objective graded come from ``results_config`` (MODEL/OBJECTIVE), the same
+improvement. The model/objective graded come from ``_results_config`` (MODEL/OBJECTIVE), the same
 switches the other ``src/results/`` figure scripts read.
 
     python src/results/validate_calibrations.py
@@ -36,9 +36,9 @@ for _p in (str(SRC), str(RESULTS_CODE), str(RESULTS)):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from utils import implied_vol
+from _utils import implied_vol
 from config import BOUNDS, BATES_BOUNDS, IV_RMSE_ACCEPT, OBJECTIVE_NAMES, MODEL_NAMES, calib_paths
-from results_config import MODEL, OBJECTIVE
+from _results_config import MODEL, OBJECTIVE
 
 if OBJECTIVE not in OBJECTIVE_NAMES:
     raise SystemExit(f"unknown objective {OBJECTIVE!r}; expected one of {OBJECTIVE_NAMES}")

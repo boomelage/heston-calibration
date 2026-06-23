@@ -3,7 +3,7 @@ import QuantLib as ql
 # ---- QuantLib date conventions (single source of truth) ----
 # The day count for all flat-forward curves and the calendar for the calibration helpers. These were
 # hardcoded as `ql.Actual365Fixed()` / `ql.UnitedStates(ql.UnitedStates.NYSE)` in five places (both
-# engines, both utils engine builders, the vanilla pricer, and the figure scripts); they now live here.
+# engines, both _utils engine builders, the vanilla pricer, and the figure scripts); they now live here.
 # Under the flat-forward curves used throughout, the helper calendar is immaterial to the fit, but it
 # is kept consistent so a future non-flat curve does not silently disagree between modules.
 # `day_count(name=None)` / `calendar(name=None)` return a FRESH instance (QuantLib value types are cheap

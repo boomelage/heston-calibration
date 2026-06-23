@@ -24,19 +24,19 @@ from pathlib import Path
 
 # This script now lives under src/results/surfaces/, but reads/writes the repo-level results/ tree.
 # `from make_surface import ...` resolves from this dir; SURFACES routes figure I/O to repo/results/.
-# RESULTS_CODE (src/results) holds results_config.py, the central knob file for the figure scripts.
+# RESULTS_CODE (src/results) holds _results_config.py, the central knob file for the figure scripts.
 import sys
 HERE = Path(__file__).parent.resolve()                 # src/results/surfaces
-SRC = HERE.parents[1]                                   # src/ (shared utils.py, config.py)
-RESULTS_CODE = HERE.parent                              # src/results (results_config.py)
+SRC = HERE.parents[1]                                   # src/ (shared _utils.py, config.py)
+RESULTS_CODE = HERE.parent                              # src/results (_results_config.py)
 REPO = HERE.parents[2]                                  # repo root (surfaces->results->src->repo)
 RESULTS = REPO / "results"
 for _p in (str(HERE), str(SRC), str(RESULTS_CODE)):
     if _p not in sys.path:
         sys.path.insert(0, _p)
-# All tunable parameters live in results_config.py. MODEL/OBJECTIVE pick the engine, the
+# All tunable parameters live in _results_config.py. MODEL/OBJECTIVE pick the engine, the
 # calibrations source, and the results/<model>/surfaces/ figure tree.
-from results_config import (  # type: ignore
+from _results_config import (  # type: ignore
     MODEL, OBJECTIVE, PLOT_RCPARAMS, SURFACE_ELEV, SURFACE_AZIM, SURFACE_FIGSIZE)
 from config import calib_paths  # type: ignore
 MODEL_LABEL = MODEL.capitalize()

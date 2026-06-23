@@ -1,6 +1,6 @@
 """Verify that a calibration run covers every raw trading day exactly once.
 
-For the (MODEL, OBJECTIVE) selected in ``results_config``, compare the dates encoded in the raw
+For the (MODEL, OBJECTIVE) selected in ``_results_config``, compare the dates encoded in the raw
 trades filenames under ``RAW`` against the ``date`` column of ``calibrations.csv`` and
 ``rejections.csv``. Every raw date must resolve to **exactly one** result row, in either the
 accepted file or the rejected file (an attempted day is always one or the other, never both,
@@ -31,9 +31,9 @@ for _p in (str(SRC), str(RESULTS_CODE), str(RESULTS), str(RAW)):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from utils import _file_date
+from _utils import _file_date
 from config import calib_paths
-from results_config import MODEL, OBJECTIVE
+from _results_config import MODEL, OBJECTIVE
 
 CALIBRATIONS_FILE, REJECTIONS_FILE, TESTS = calib_paths(MODEL, OBJECTIVE)
 

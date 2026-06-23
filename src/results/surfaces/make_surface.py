@@ -27,19 +27,19 @@ import QuantLib as ql
 from pathlib import Path
 
 # This script now lives under src/results/surfaces/, but reads/writes the repo-level results/ tree.
-# HERE is the script dir; SRC holds the shared utils/config; RESULTS routes data I/O to repo/results/.
-# RESULTS_CODE (src/results) holds results_config.py, the central knob file for the figure scripts.
+# HERE is the script dir; SRC holds the shared _utils/config; RESULTS routes data I/O to repo/results/.
+# RESULTS_CODE (src/results) holds _results_config.py, the central knob file for the figure scripts.
 HERE = Path(__file__).parent.resolve()                 # src/results/surfaces
-SRC = HERE.parents[1]                                   # src/ (shared utils.py, config.py)
-RESULTS_CODE = HERE.parent                              # src/results (results_config.py)
+SRC = HERE.parents[1]                                   # src/ (shared _utils.py, config.py)
+RESULTS_CODE = HERE.parent                              # src/results (_results_config.py)
 REPO = HERE.parents[2]                                  # repo root (surfaces->results->src->repo)
 for _p in (str(SRC), str(RESULTS_CODE)):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 RESULTS = REPO / "results"
-# All tunable parameters live in results_config.py. MODEL also picks the QuantLib engine
+# All tunable parameters live in _results_config.py. MODEL also picks the QuantLib engine
 # (Heston vs Bates) and the data output tree (results/<model>/surfaces/).
-from results_config import (  # type: ignore
+from _results_config import (  # type: ignore
     MODEL, OBJECTIVE, MONEYNESS, MATURITIES_DAYS, INVERSION_PLACEHOLDER_VOL)
 SURFACES = RESULTS / MODEL / "surfaces"                 # data dir at repo/results/<model>/surfaces
 DATA = SURFACES / "data"
@@ -48,7 +48,7 @@ DATA = SURFACES / "data"
 from config import calib_paths, calendar as ql_calendar  # type: ignore
 CALIBRATIONS_FILE = calib_paths(MODEL, OBJECTIVE)[0]
 
-from utils import model_implied_vol, model_price, build_model_engine
+from _utils import model_implied_vol, model_price, build_model_engine
 
 def make_surface(target_date=None, OUT=DATA, SAVE=False):
     if SAVE:

@@ -75,7 +75,7 @@ filter floor/cutoff, the wing-weight knobs, the seed grid, the Bates bounds/seed
 `DAY_COUNT_NAME` / `CALENDAR_NAME`) and **re-exported by `config`**, so `config.day_count` /
 `config.calendar` keep working as the facade. All QuantLib **process/engine/option construction** is
 likewise centralized in `src/pricing/_quantlib_utils.py` (`_quantlib_utils`): both calibration engines
-build their `HestonProcess`/`BatesProcess` via `_qu.heston_process`/`_qu.bates_process`, `utils`'s
+build their `HestonProcess`/`BatesProcess` via `_qu.heston_process`/`_qu.bates_process`, `_utils`'s
 `build_heston_engine`/`build_bates_engine` are thin wrappers over `_qu._heston_engine`/`_qu._bates_engine`
 (which return `(engine, s_handle, ts_r, ts_g, day_count)`), and `vanilla_pricer` prices through
 `_qu._{heston,mc_heston,bates}_engine` + `_qu._european_option`. A QuantLib constructor-order change is
@@ -93,7 +93,7 @@ machine (multi-start LM, ~1,500 cells/day, 8 parallel jobs). A Bates run is ~4.5
 python -c "import sys; sys.path.insert(0,'data'); from get_rg import rg; print(rg[['risk_free_rate','dividend_rate']].head())"
 
 # Stage 2+3: calibrate ONCE per trading day. Reads raw trades directly and does the OTM cleaning
-#            in-memory (utils._prepare_options), so there is no separate extraction script. Writes
+#            in-memory (_utils._prepare_options), so there is no separate extraction script. Writes
 #            accepted params to the single results/<model>/calibrations/<objective>/calibrations.csv, one
 #            row per REJECTED day (with the cause) to results/<model>/calibrations/<objective>/rejections.csv,
 #            per-day repricing diagnostics to results/<model>/calibrations/<objective>/calibration_tests/,
@@ -111,17 +111,17 @@ python src/calibrator_prototype.py --MODEL bates --LIMIT 100   # bates, last 100
 #          calibration_tests/ for fit quality, economic reasonability, and cross-day stability. Writes
 #          results/<model>/calibrations/<objective>/validation.csv, and prints a per-day summary plus a
 #          cross-day stability block. Does not modify the pipeline. Model-aware: the MODEL/OBJECTIVE it
-#          grades come from src/results/results_config.py (the same switches the figure scripts read);
+#          grades come from src/results/_results_config.py (the same switches the figure scripts read);
 #          set MODEL there to heston or bates. Under bates it grades against BATES_BOUNDS and also
 #          reports/flags the jump triple (lambda_/nu/delta pegging, suspicious tier; lambda_~0 noted as
 #          a Heston collapse).
 python src/results/validate_calibrations.py
 
 # Wing-residual diagnostic (read-only): invert each repriced contract's model price (heston/bates
-#          column, picked by results_config.MODEL) back to a Black IV and report resid = model_iv -
+#          column, picked by _results_config.MODEL) back to a Black IV and report resid = model_iv -
 #          market_iv, stratified by signed log-moneyness, by |log-moneyness| (the axis
 #          config.WING_WEIGHT_* up-weights), and by maturity x wing. This is the metric a
-#          WING_WEIGHT_GAIN sweep is graded on (PLAN Lever B). MODEL/OBJECTIVE from results_config.
+#          WING_WEIGHT_GAIN sweep is graded on (PLAN Lever B). MODEL/OBJECTIVE from _results_config.
 python src/results/wing_residuals.py
 ```
 
@@ -147,7 +147,7 @@ of truth is `config.calib_paths(model, objective)` (and `_objective_paths` wraps
 objective)` (kept separate from `calib_paths` so its positional 3-tuple contract is untouched).
 
 **Run-spec snapshot (`config_spec.json`).** Each run writes a Python-readable JSON snapshot of
-the exact config it used next to `calibrations.csv` (`utils.write_config_spec`, called from
+the exact config it used next to `calibrations.csv` (`_utils.write_config_spec`, called from
 `calibrator_prototype.main`). The config values come from `config.as_dict()` — every JSON-serializable
 module-level constant, captured by reflection so new knobs appear automatically (callables like
 `day_count`/`calendar`/`calib_paths` and `Path` objects like `REPO`/`RESULTS` are skipped; tuples
@@ -178,16 +178,16 @@ column). A missing tests file drops the scatter (model lines only over `MATURITI
 `calibrations.csv` row is a hard error. They resolve `REPO = Path(__file__).parents[2]` and read calibrations from / write figures into
 the **repo-level** `results/<model>/` tree, and share the QuantLib helpers (`build_model_engine` ->
 `build_heston_engine`/`build_bates_engine`, plus the engine-agnostic `model_price`,
-`model_implied_vol`) in `src/utils.py`. They are **model-aware**: `MODEL`/`OBJECTIVE` plus every
+`model_implied_vol`) in `src/_utils.py`. They are **model-aware**: `MODEL`/`OBJECTIVE` plus every
 plotting/grid knob for `make_surface.py`, `plot_surfaces.py` and `smiles.py` live in **one** file,
-`src/results/results_config.py`. The two top-level graders `validate_calibrations.py` and
-`wing_residuals.py` also import `MODEL`/`OBJECTIVE` from `results_config` (each script adds `src/results`
+`src/results/_results_config.py`. The two top-level graders `validate_calibrations.py` and
+`wing_residuals.py` also import `MODEL`/`OBJECTIVE` from `_results_config` (each script adds `src/results`
 to `sys.path` first). Set `MODEL` to `heston` or `bates` there and it picks the engine, the
 `results/<model>/...` source/output tree, and the figure labels for all of them at once; the grids (`MONEYNESS`,
 `MATURITIES_DAYS`), the smile knobs (`NT`, `MKTMONSTEP` — each accepts `None` to draw every
 maturity/strike; `XLO/XHI` fallback window) and the surface
 view (`SURFACE_ELEV/AZIM`, figsizes) are tuned in the same place. (`objective_comparison.py` is **not**
-wired to `results_config.py`; it keeps its own `MODEL` constant.) `make_surface.py` carries the
+wired to `_results_config.py`; it keeps its own `MODEL` constant.) `make_surface.py` carries the
 Bates jump triple in `day_results['params']`, and `smiles.py` shows it in the per-figure caption.
 (`objective_comparison.py` needs *both* a price and a vol run for the chosen model on disk.) Run e.g.
 `python src/results/surfaces/plot_surfaces.py` then `python src/results/smiles/smiles.py` after a
@@ -202,7 +202,7 @@ day), while the bulky per-day repricing diagnostics stay one-file-per-day under
 `results/<model>/calibrations/<objective>/calibration_tests/`:
 
 ```plain
-raw/  --calibrator_prototype.py --MODEL {heston,bates} (utils._prepare_options cleans to OTM in-memory)-->  results/<model>/calibrations/<objective>/calibrations.csv  + calibration_tests/
+raw/  --calibrator_prototype.py --MODEL {heston,bates} (_utils._prepare_options cleans to OTM in-memory)-->  results/<model>/calibrations/<objective>/calibrations.csv  + calibration_tests/
 ```
 
 **Stage 1 — market rates (`data/get_rg.py`).** Imported for its side effect: building a
@@ -215,11 +215,11 @@ module-level DataFrame `rg`. Parses two hard-coded filenames in `data/market/`:
 Downstream only `risk_free_rate` and `dividend_rate` are consumed; the `_vol` columns and `rg`'s
 `spot_price` are computed but unused (spot comes from the options data instead).
 
-**OTM cleaning (`src/utils._prepare_options`).** No longer a standalone stage/script (the old
+**OTM cleaning (`src/_utils._prepare_options`).** No longer a standalone stage/script (the old
 `data/extract_otms.py` is removed). The calibrator calls this in-memory on each raw file: selects/renames
 a column subset, uses `underlying_bid` as `spot_price`, maps `option_type` C/P → `w` call/put, computes
 `days_to_maturity` (calendar days, `>0` only), keeps positive IV/spot/strike, then keeps the OTM band
-via `utils.df_moneyness`: `OTM_MONEYNESS_FLOOR < ratio moneyness < OTM_MONEYNESS_CUTOFF` (0.6 and 0.98
+via `_utils.df_moneyness`: `OTM_MONEYNESS_FLOOR < ratio moneyness < OTM_MONEYNESS_CUTOFF` (0.6 and 0.98
 in `config.py`). The CUTOFF drops near-ATM rows (keeps only OTM); the **FLOOR drops the deep-OTM
 lottery-ticket tail** (ratio moneyness = `e^-|log(K/S)|`, so 0.6 keeps `|log-moneyness| < ~0.51`, ~40%
 OTM). Those far-OTM strikes have extreme prices that peg the fit to its bounds; flooring them recovers
@@ -229,7 +229,7 @@ acceptance and tightens IV-RMSE without losing the tradeable wing.
 core. For each raw trades file it does **one calibration per trading day** (PLAN Work item 3), over a
 pooled, moneyness-normalised surface — not the old per-0.5-spot-bucket fits:
 
-1. Read + clean trades (`utils._prepare_options`); keep `trade_iv > 0` **and**
+1. Read + clean trades (`_utils._prepare_options`); keep `trade_iv > 0` **and**
    `MIN_DTM <= days_to_maturity <= MAX_DTM` (`MIN_DTM`=14, `MAX_DTM`=730 in `config.py`). Ultra-short
    maturities are dropped: Heston fits them poorly and they drive `eta`/`kappa` to Feller-violating
    extremes, polluting the pooled fit.
@@ -399,7 +399,7 @@ when `lambda≈0`, so they often park on a bound without meaning). Bates bounds/
 Stages communicate through column names, not typed interfaces. Renaming any of these silently
 breaks a downstream stage:
 
-- cleaned OTM snapshot schema (in-memory, from `utils._prepare_options`): `quote_datetime, strike_price, w, trade_size, trade_price, trade_iv, spot_price, days_to_maturity`.
+- cleaned OTM snapshot schema (in-memory, from `_utils._prepare_options`): `quote_datetime, strike_price, w, trade_size, trade_price, trade_iv, spot_price, days_to_maturity`.
 - `results/<model>/calibrations/<objective>/calibrations.csv` schema (**single file, one row per trading day**, keyed by `date`):
   `spot_price` (= `S_ref`), `risk_free_rate, dividend_rate, theta, kappa, rho, eta, v0, feller,
   iv_rmse, rmse, n_helpers, accepted, n_maturities, n_strikes, contracts_count, total_volume,
@@ -412,7 +412,7 @@ breaks a downstream stage:
 - `calibration_tests/*.csv`: the day's repriced surface contracts (original `spot_price`/`strike_price`,
   plus `Kstar`, the fitted params, `volatility` (= `trade_iv`), `black_scholes`, and the model price
   column — `heston` (Heston) or `bates` (Bates, which also carries the `lambda_, nu, delta` columns)).
-- `utils.df_moneyness(df)` needs `w, spot_price, strike_price` (returns ratio moneyness: `spot/strike` for calls, `strike/spot` for puts; `< 1` => OTM).
+- `_utils.df_moneyness(df)` needs `w, spot_price, strike_price` (returns ratio moneyness: `spot/strike` for calls, `strike/spot` for puts; `< 1` => OTM).
 - `vanp.df_numpy_black_scholes(df)` needs `spot_price, strike_price, days_to_maturity, risk_free_rate, volatility, w`
   (note: `trade_iv` is renamed to `volatility` before this call).
 - `vanp.df_heston_price(df)` needs `spot_price, strike_price, days_to_maturity, risk_free_rate, dividend_rate, w, kappa, theta, rho, eta, v0`.
@@ -428,7 +428,7 @@ breaks a downstream stage:
   `validate_calibrations.py` build this path from the same `calib_paths` rule; if the two drift apart the
   validator stops finding the tests files. The Heston tree was migrated from the old
   `results/calibrations/<objective>/` to `results/heston/...`; `validate_calibrations.py` is model-aware
-  (it reads `MODEL`/`OBJECTIVE` from `src/results/results_config.py`, which feed the same `calib_paths`
+  (it reads `MODEL`/`OBJECTIVE` from `src/results/_results_config.py`, which feed the same `calib_paths`
   rule and select the model's `heston`/`bates` price column; under bates it also grades against
   `BATES_BOUNDS` and flags the jump triple).
 - Moneyness normalisation assumes **sticky-moneyness** (IV ~stationary in `K/S` over a session). It
@@ -479,7 +479,7 @@ breaks a downstream stage:
   this as suspicious-tier `nu pegged`/`delta pegged` flags under bates. The downstream consumers are now
   **model-aware**: the figure scripts and the two graders (`validate_calibrations.py`, `wing_residuals.py`,
   `make_surface.py`, `smiles.py`, `plot_surfaces.py`) read `MODEL`/`OBJECTIVE` from
-  `src/results/results_config.py`, and `objective_comparison.py` keeps its own `MODEL` constant. **Not yet
+  `src/results/_results_config.py`, and `objective_comparison.py` keeps its own `MODEL` constant. **Not yet
   done:** a full multi-year Bates run, and an optional `nu`/`delta` bound widening. See `PLAN.md`'s
   `Completed tasks` (Bates extension, PR #12).
 - The `data/__pycache__/` holds bytecode for deleted modules (`get_data`, `get_options`, ...) — ignore it.

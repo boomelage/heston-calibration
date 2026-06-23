@@ -14,10 +14,10 @@ from matplotlib.lines import Line2D
 # per-day calibration_tests/ file for that date (which holds exactly the contracts used in the fit,
 # with their market IV in the `volatility` column). A missing tests file just drops the scatter; a
 # missing calibrations row is a hard error. SMILES is the moved code dir; RESULTS/REPO route I/O.
-# RESULTS_CODE (src/results) holds results_config.py, the central knob file for the figure scripts.
+# RESULTS_CODE (src/results) holds _results_config.py, the central knob file for the figure scripts.
 SMILES = Path(__file__).parent.resolve()        # src/results/smiles
-SRC = SMILES.parents[1]                           # src/ (shared utils.py, config.py)
-RESULTS_CODE = SMILES.parent                      # src/results (results_config.py)
+SRC = SMILES.parents[1]                           # src/ (shared _utils.py, config.py)
+RESULTS_CODE = SMILES.parent                      # src/results (_results_config.py)
 REPO = SMILES.parents[2]                          # repo root (smiles->results->src->repo)
 RESULTS = REPO / "results"                        # real results data/figure dir
 
@@ -25,12 +25,12 @@ for _p in (str(SRC), str(RESULTS_CODE)):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-# All tunable parameters live in results_config.py (the central knob file).
-from results_config import (  # type: ignore
+# All tunable parameters live in _results_config.py (the central knob file).
+from _results_config import (  # type: ignore
     MODEL, OBJECTIVE, PLOT_RCPARAMS, INVERSION_PLACEHOLDER_VOL, NT, USE_LEGEND,
     XLO, XHI, MKTMONSTEP, SMILE_M_STEP, SMILE_FIGSIZE, SMILE_CMAP, MATURITIES_DAYS,
     TMIN, TMAX)
-from utils import build_model_engine, model_implied_vol # type: ignore
+from _utils import build_model_engine, model_implied_vol # type: ignore
 from config import calendar as ql_calendar, calib_paths # type: ignore
 
 plt.rcParams.update(PLOT_RCPARAMS)

@@ -81,7 +81,7 @@ Line numbers in any sketch below drift — match on code, not line numbers.
 | Phase 2 — one calibration per trading day | `src/calibrator_prototype.py`, `src/calibrate_heston.py` | high (schema) | ✅ done |
 | Phase 2 — IV-space acceptance gate | `src/calibrate_heston.py` | medium | ✅ done |
 | Write-desync fix | `src/calibrator_prototype.py` | low | ✅ done |
-| **Phase 3 — resolve boundary pegging (raise accept rate)** | `src/calibrate_heston.py`, `src/config.py`, `src/utils.py` | medium | ⏳ **open** (Lever A `MIN_DTM`=14 + coverage-widen + OTM floor landed; Lever B wired but tested null; C/D/E open) |
+| **Phase 3 — resolve boundary pegging (raise accept rate)** | `src/calibrate_heston.py`, `src/config.py`, `src/_utils.py` | medium | ⏳ **open** (Lever A `MIN_DTM`=14 + coverage-widen + OTM floor landed; Lever B wired but tested null; C/D/E open) |
 | Bates (1996) extension — engine, model-namespaced routing, downstream | `src/calibrate_bates.py`, `src/_engine_common.py`, `src/config.py`, `src/pricing/` | high (schema) | ✅ done (pilot baseline; full multi-year run + `nu`/`delta` widening deferred) |
 
 **QuantLib 1.35 API facts** (confirmed in this environment; the plan relies on no non-existent calls):
@@ -208,7 +208,7 @@ widened to actually fit the wings and longer maturities: `MAX_NK` 8→40, `MAX_N
 calibration: once the wings are in the fit, the per-`|log-moneyness|` residual is small and mixed-sign
 (overall mean ~0 on the 100-day `vol` subset), not a systematic underbias. The cost was a deep-OTM
 lottery-ticket tail (`|log-moneyness|` out to ~3.3) that pegged the fit; an `OTM_MONEYNESS_FLOOR`=0.6 in
-`utils._prepare_options` (`FLOOR < ratio moneyness < CUTOFF`) drops it, recovering acceptance (64→71/100)
+`_utils._prepare_options` (`FLOOR < ratio moneyness < CUTOFF`) drops it, recovering acceptance (64→71/100)
 and tightening IV-RMSE while keeping the full tradeable wing. New read-only diagnostic
 `src/results/wing_residuals.py` grades the per-`|log-moneyness|` residual.
 
@@ -456,10 +456,10 @@ comparison**, which needs both result sets on disk at once — hence routing is 
   `results/calibrations/...` to `results/heston/...`; Bates writes under `results/bates/...`.
   `config.calib_paths(model, objective)` is the single source of truth.
 - **Downstream consumers made model-aware** (routing through `config.calib_paths` /
-  `utils.build_model_engine`): `validate_calibrations.py`, `wing_residuals.py`, `make_surface.py`,
-  `smiles.py`, `plot_surfaces.py` read `MODEL`/`OBJECTIVE` from `src/results/results_config.py`;
+  `_utils.build_model_engine`): `validate_calibrations.py`, `wing_residuals.py`, `make_surface.py`,
+  `smiles.py`, `plot_surfaces.py` read `MODEL`/`OBJECTIVE` from `src/results/_results_config.py`;
   `objective_comparison.py` keeps its own `MODEL` constant. Under bates, `validate_calibrations.py` grades
-  against `BATES_BOUNDS` and flags the parked jump triple (`nu`/`delta`/`lambda_` pegging). `utils.py`
+  against `BATES_BOUNDS` and flags the parked jump triple (`nu`/`delta`/`lambda_` pegging). `_utils.py`
   gained `build_bates_engine` + the
   `build_model_engine(row, calc_date, model)` dispatcher; the pricing/inversion helpers were already
   engine-agnostic.

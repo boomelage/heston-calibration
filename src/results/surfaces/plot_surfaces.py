@@ -93,7 +93,7 @@ def plot_surface(grid, out_path, title=None, invert_K=False, invert_T=False, AZI
     fig.tight_layout()
     # pad_inches: bbox_inches='tight' under-counts the rotated 3D z-axis label in mplot3d and crops
     # it off (the smile view rotates the z-axis title out past the tight box); the pad keeps it in.
-    fig.savefig(out_path, format='eps', bbox_inches='tight', pad_inches=0.4)
+    fig.savefig(out_path, format='eps', bbox_inches='tight', pad_inches=0.2)
     plt.close(fig)
     print(f"wrote {out_path.name}")
 
@@ -209,7 +209,7 @@ def main():
     plot_surface(otm_grid(df, 'call'), TEXDIR / "price_surface_calls.eps", invert_K=True)
     plot_surface(otm_grid(df, 'put'), TEXDIR / "price_surface_puts.eps", invert_K=True)
     plot_surface(smile_for(df), TEXDIR / "smile_surface.eps", AZIM_ADJUST=-10, invert_T=True,
-                 xlabel=r'log-moneyness ($\ln(K/S)$)', zlabel=r'implied volatility ($\sigma$)')
+                 xlabel=r'log-moneyness ($\ln(K/S)$)', zlabel=r'implied volatility ($\sigma^{\mathrm{mod}}$)')
     write_otm_TeX(spot, date, params, market, fit)
     
 if __name__ == "__main__":

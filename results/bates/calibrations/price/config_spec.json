@@ -1,13 +1,13 @@
 {
   "_run": {
-    "timestamp": "2026-06-24T02:56:55+03:00",
-    "git_commit": "6e4ecf9",
+    "timestamp": "2026-06-24T14:47:12+03:00",
+    "git_commit": "91189e4",
     "model": "bates",
     "objective": "price",
     "limit": 0,
-    "n_accepted": 587,
-    "n_rejected": 68,
-    "n_attempted": 655
+    "n_accepted": 689,
+    "n_rejected": 73,
+    "n_attempted": 762
   },
   "DAY_COUNT_NAME": "Actual365Fixed",
   "CALENDAR_NAME": "UnitedStates.NYSE",

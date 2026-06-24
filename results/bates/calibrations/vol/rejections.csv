@@ -48,3 +48,5 @@ date,reason,detail,iv_rmse,n_maturities,n_strikes,n_cells
 2014-07-31,pegged,calibration rejected (boundary-pegged),0.009182005458862705,18.0,161.0,920.0
 2014-08-01,pegged,calibration rejected (boundary-pegged),0.0071907650261409896,17.0,150.0,877.0
 2014-08-04,pegged,calibration rejected (boundary-pegged),0.007245087550620394,17.0,146.0,706.0
+2014-10-15,pegged,calibration rejected (boundary-pegged),0.011713232873802689,20.0,183.0,1129.0
+2014-10-16,pegged,calibration rejected (boundary-pegged),0.011540372488597008,19.0,157.0,978.0

@@ -40,7 +40,7 @@ keep `CLAUDE.md` in sync with both.
   `UnderlyingOptionsTradesCalcsHanweck_*` files), a few thousand trading days attempted under the `vol`
   default. Accept-rate targets below are therefore stated as **proportions over the full set**, not "n of
   5"; the 2024-10-07..11 table is retained only as a worked diagnostic example of the pegging mechanism.
-- **Specification.** The delivered routine is stated formally in `manuscript/skew-calibration.tex` (model +
+- **Specification.** The delivered routine is stated formally in `skew-calibration.tex` (repo root; model +
   pricing operators, `S_ref`, `K*`, surface construction, price-space vs IV-space objectives, the
   boundary-pegging gate).
 - **Objective knob.** The in-engine LM objective is switchable via the `--OBJECTIVE {price,vol}` CLI
@@ -475,4 +475,4 @@ Heston analytic engine. Exact accept counts are in each run's `config_spec.json`
 
 **Still deferred (not yet done).** An optional **`nu`/`delta` bound widening** (e.g. -1.0 / 1.0) so
 rare-jump days find an interior optimum and the jump params stay interpretable. A Bates write-up section
-in `manuscript/skew-calibration.tex` is a separate document task.
+in `skew-calibration.tex` is a separate document task.

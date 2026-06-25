@@ -33,7 +33,7 @@ On any session that touches the code or the plan:
 
 Calibrate Heston (1993) stochastic-volatility parameters (`v0, kappa, theta, eta, rho`) to
 CBOE S&P 500 (SPX) intraday option trades, using QuantLib. `eta` is the vol-of-vol (QuantLib's
-`sigma`). The model SDE is documented in `manuscript/skew-calibration.tex`:
+`sigma`). The model SDE is documented in `skew-calibration.tex` (repo root):
 
 ```plain
 dX_t = (r - v_t/2) dt + sqrt(v_t)(rho dW_t + sqrt(1-rho^2) dB_t)
@@ -519,14 +519,22 @@ breaks a downstream stage:
   `nu`/`delta` bound widening remains open. See `PLAN.md`'s `Completed tasks` (Bates extension, PR #12).
 - The `data/__pycache__/` holds bytecode for deleted modules (`get_data`, `get_options`, ...) — ignore it.
 
-## Writing prose (`manuscript/skew-calibration.tex` and other `.tex` documents)
+## Writing prose (`skew-calibration.tex` and other `.tex` documents)
 
-When you write or edit prose in `manuscript/skew-calibration.tex` or any other `.tex` document here, write it the way a careful human author would, not the way an LLM defaults to. Concretely:
+When you write or edit prose in `skew-calibration.tex` (repo root) or any other `.tex` document here, write it the way a careful human author would, not the way an LLM defaults to. Concretely:
 
 - **Avoid the em dash (`—`) as a sentence connector.** It is the single clearest tell of machine-written prose, and the existing text overuses it. Prefer a period, a comma, a colon, or parentheses, and rephrase so the dash is not needed. Do not replace one em dash with another piece of dashy punctuation (en dash, double hyphen) doing the same job; restructure the sentence instead. (Genuine ranges like `12–31×` and `1…8192` keep their en dash/ellipsis — this is about prose connectors, not numerics.)
 - **Keep sentences short and digestible.** One idea per sentence. Break a long sentence into two or three rather than stacking clauses with dashes, semicolons, and nested parentheticals. If a sentence needs more than one comma-separated aside to parse, split it.
 - **Prefer plain, direct phrasing over ornate constructions.** Say "the GPU is faster" rather than "the GPU exhibits a marked performance advantage." Cut filler ("it is worth noting that", "importantly", "in order to"), hedging stacks, and rule-of-three flourishes that exist only for rhythm.
 - **Match the surrounding voice.** This is a technical paper: declarative, specific, quantitative. State the result and the number; let the data carry the emphasis instead of intensifiers.
 - **Read it back as a human.** Before finishing, reread each edited sentence aloud in your head. If it sounds like a generated abstract or could not have been said plainly by a person, rewrite it.
+
+**Calibration constants are single-sourced via macros (keep in sync with `config.py`).**
+`skew-calibration.tex` defines each surface/selection/gate constant once, near `% ---- tab:const`, as a
+pair of macros: `\Const<Role>Sym` (the math symbol) and `\Const<Role>Val` (the value), e.g.
+`\ConstMinMaturitySym`/`\ConstMinMaturityVal` for `MIN_DTM`. The prose, equations, the algorithm block,
+and Table~`tab:const` all reference these macros, never literal numbers. When you change a constant in
+`src/config.py` (or rename its symbol), update the matching `\Const…Val` (or `\Const…Sym`) macro in the
+**same** change, the same way CLAUDE.md and the config stay in lock-step.
 
 These rules apply to *new and edited* prose. Do not launch a sweeping em-dash-removal pass over untouched paragraphs unless asked, but do clean up the dashes and over-long sentences in any passage you are already editing.

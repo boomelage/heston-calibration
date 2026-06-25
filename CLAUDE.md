@@ -266,7 +266,10 @@ pooled, moneyness-normalised surface — not the old per-0.5-spot-bucket fits:
    intraday range. Each trade keeps its moneyness `m = strike / spot_row` but is re-struck to
    `K* = m * S_ref` and **snapped to the SPX 5-point grid** (`STRIKE_GRID`), so trades at different
    intraday spots share clean surface columns (`Kstar`).
-5. **Surface.** Rank maturities by traded volume (top `MAX_NT`=20); for each kept maturity take the
+5. **Surface.** Walk maturities in descending traded volume and keep one only if **both** wings carry
+   `>= MIN_NK`(2) distinct `Kstar` strikes (a single-strike wing cannot anchor a smile); stop once
+   `MAX_NT`=20 wing-qualifying maturities are collected, so the volume cap counts only maturities that
+   pass the wing gate (a thin-wing maturity no longer consumes a slot). For each kept maturity take the
    `MAX_NK`=40 nearest-money `Kstar` per wing (highest OTM puts, lowest OTM calls); `pivot_table`
    into a `Kstar`×maturity IV surface (`values='trade_iv'`). When several trades share a cell the
    **highest-volume** trade's IV is kept (`sel` sorted by `trade_size`, then `aggfunc='last'`), not the

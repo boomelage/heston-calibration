@@ -1,23 +1,83 @@
 date,reason,detail,iv_rmse,n_maturities,n_strikes,n_cells
-2012-01-30,pegged,calibration rejected (boundary-pegged),0.006669608198364214,8,103,327
-2012-02-07,pegged,calibration rejected (boundary-pegged),0.007115226109081222,10,102,306
-2012-02-15,pegged,calibration rejected (boundary-pegged),0.009302261169660903,7,110,347
-2012-03-14,pegged,calibration rejected (boundary-pegged),0.015710243276640293,9,109,368
-2012-03-16,pegged,calibration rejected (boundary-pegged),0.008361253917001198,8,93,252
-2012-04-02,iv_miss,calibration rejected (iv_rmse=0.0389 > 0.02),0.03894339280237344,9,122,364
-2012-05-04,pegged,calibration rejected (boundary-pegged),0.009304216988318544,12,110,427
-2012-06-08,iv_miss,calibration rejected (iv_rmse=0.0225 > 0.02),0.022495653574911314,11,116,373
-2012-06-12,pegged,calibration rejected (boundary-pegged),0.01146987126240573,12,119,408
-2012-07-06,pegged,calibration rejected (boundary-pegged),0.010620862333498437,13,101,394
-2012-08-01,pegged,calibration rejected (boundary-pegged),0.009470894407449837,10,96,366
-2012-08-13,pegged,calibration rejected (boundary-pegged),0.008385652319891882,11,92,335
-2012-09-10,iv_miss,calibration rejected (iv_rmse=0.0242 > 0.02),0.02416160682402582,12,100,365
-2012-09-13,pegged,calibration rejected (boundary-pegged),0.009601212713011993,11,116,488
-2012-09-14,pegged,calibration rejected (boundary-pegged),0.008838617619154814,11,105,406
-2012-09-20,pegged,calibration rejected (boundary-pegged),0.00816151486018215,8,104,351
-2012-09-27,pegged,calibration rejected (boundary-pegged),0.00973194377399272,13,120,460
-2012-09-28,pegged,calibration rejected (boundary-pegged),0.0059862944135774905,11,95,338
-2012-10-01,pegged,calibration rejected (boundary-pegged),0.009212253314062455,12,116,391
-2012-10-02,pegged,calibration rejected (boundary-pegged),0.007589880654750536,11,108,341
-2012-10-03,pegged,calibration rejected (boundary-pegged),0.005577140718345437,9,96,306
-2012-10-05,pegged,calibration rejected (boundary-pegged),0.00960739349823425,12,112,436
+2012-01-30,pegged,calibration rejected (boundary-pegged),0.006669608198364214,8.0,103.0,327.0
+2012-02-07,pegged,calibration rejected (boundary-pegged),0.007115226109081222,10.0,102.0,306.0
+2012-02-15,pegged,calibration rejected (boundary-pegged),0.009302261169660903,7.0,110.0,347.0
+2012-03-14,pegged,calibration rejected (boundary-pegged),0.015710243276640293,9.0,109.0,368.0
+2012-03-16,pegged,calibration rejected (boundary-pegged),0.008361253917001198,8.0,93.0,252.0
+2012-04-02,iv_miss,calibration rejected (iv_rmse=0.0389 > 0.02),0.03894339280237344,9.0,122.0,364.0
+2012-05-04,pegged,calibration rejected (boundary-pegged),0.009304216988318544,12.0,110.0,427.0
+2012-06-08,iv_miss,calibration rejected (iv_rmse=0.0225 > 0.02),0.022495653574911314,11.0,116.0,373.0
+2012-06-12,pegged,calibration rejected (boundary-pegged),0.01146987126240573,12.0,119.0,408.0
+2012-07-06,pegged,calibration rejected (boundary-pegged),0.010620862333498437,13.0,101.0,394.0
+2012-08-01,pegged,calibration rejected (boundary-pegged),0.009470894407449837,10.0,96.0,366.0
+2012-08-13,pegged,calibration rejected (boundary-pegged),0.008385652319891882,11.0,92.0,335.0
+2012-09-10,iv_miss,calibration rejected (iv_rmse=0.0242 > 0.02),0.02416160682402582,12.0,100.0,365.0
+2012-09-13,pegged,calibration rejected (boundary-pegged),0.009601212713011993,11.0,116.0,488.0
+2012-09-14,pegged,calibration rejected (boundary-pegged),0.008838617619154814,11.0,105.0,406.0
+2012-09-20,pegged,calibration rejected (boundary-pegged),0.00816151486018215,8.0,104.0,351.0
+2012-09-27,pegged,calibration rejected (boundary-pegged),0.00973194377399272,13.0,120.0,460.0
+2012-09-28,pegged,calibration rejected (boundary-pegged),0.0059862944135774905,11.0,95.0,338.0
+2012-10-01,pegged,calibration rejected (boundary-pegged),0.009212253314062455,12.0,116.0,391.0
+2012-10-02,pegged,calibration rejected (boundary-pegged),0.007589880654750536,11.0,108.0,341.0
+2012-10-03,pegged,calibration rejected (boundary-pegged),0.005577140718345437,9.0,96.0,306.0
+2012-10-05,pegged,calibration rejected (boundary-pegged),0.00960739349823425,12.0,112.0,436.0
+2012-10-19,pegged,calibration rejected (boundary-pegged),0.008819405828331269,10.0,109.0,440.0
+2012-10-31,pegged,calibration rejected (boundary-pegged),0.01079606879494681,12.0,110.0,394.0
+2012-11-02,pegged,calibration rejected (boundary-pegged),0.009725826636157163,12.0,117.0,463.0
+2012-11-14,pegged,calibration rejected (boundary-pegged),0.008209828487873506,14.0,138.0,589.0
+2012-11-27,pegged,calibration rejected (boundary-pegged),0.0069465546997601125,9.0,118.0,425.0
+2012-11-28,pegged,calibration rejected (boundary-pegged),0.008673116062295226,9.0,121.0,432.0
+2012-12-03,pegged,calibration rejected (boundary-pegged),0.0071267123724248335,10.0,117.0,414.0
+2012-12-06,pegged,calibration rejected (boundary-pegged),0.006532471812678698,10.0,102.0,375.0
+2012-12-07,iv_miss,calibration rejected (iv_rmse=0.0257 > 0.02),0.025729922473013214,11.0,108.0,403.0
+2012-12-18,pegged,calibration rejected (boundary-pegged),0.007419756383333147,10.0,116.0,410.0
+2012-12-19,pegged,calibration rejected (boundary-pegged),0.008057881887349206,10.0,116.0,379.0
+2012-12-20,pegged,calibration rejected (boundary-pegged),0.009480863603720286,11.0,116.0,401.0
+2013-01-18,no_trades,no trades after IV/DTM filter,,,,
+2013-02-13,no_trades,no trades after IV/DTM filter,,,,
+2013-02-21,pegged,calibration rejected (boundary-pegged),0.007772014408928443,12.0,118.0,528.0
+2013-02-28,pegged,calibration rejected (boundary-pegged),0.007227561230050119,12.0,123.0,462.0
+2013-04-04,pegged,calibration rejected (boundary-pegged),0.006438881666594053,15.0,113.0,394.0
+2013-04-05,pegged,calibration rejected (boundary-pegged),0.006730462302962024,14.0,120.0,510.0
+2013-04-15,pegged,calibration rejected (boundary-pegged),0.009214592865175498,12.0,150.0,546.0
+2013-04-17,pegged,calibration rejected (boundary-pegged),0.01049689205998703,15.0,139.0,517.0
+2013-06-05,pegged,calibration rejected (boundary-pegged),0.006690829918237211,13.0,144.0,586.0
+2013-06-06,pegged,calibration rejected (boundary-pegged),0.007743567745523145,14.0,147.0,646.0
+2013-06-11,pegged,calibration rejected (boundary-pegged),0.006473471945480964,12.0,138.0,461.0
+2013-07-17,pegged,calibration rejected (boundary-pegged),0.006451940250484186,12.0,106.0,347.0
+2013-09-30,pegged,calibration rejected (boundary-pegged),0.009070113190659741,11.0,125.0,465.0
+2013-10-10,pegged,calibration rejected (boundary-pegged),0.007794175957806978,11.0,135.0,530.0
+2013-10-15,pegged,calibration rejected (boundary-pegged),0.009748360742306927,10.0,116.0,405.0
+2013-10-21,pegged,calibration rejected (boundary-pegged),0.005560072002883818,11.0,95.0,375.0
+2013-12-02,pegged,calibration rejected (boundary-pegged),0.006435235700684775,11.0,109.0,396.0
+2013-12-12,pegged,calibration rejected (boundary-pegged),0.0064923025898379035,13.0,121.0,498.0
+2013-12-26,pegged,calibration rejected (boundary-pegged),0.006009689158271131,13.0,110.0,386.0
+2013-12-30,pegged,calibration rejected (boundary-pegged),0.0069940629533154055,14.0,97.0,343.0
+2013-12-31,pegged,calibration rejected (boundary-pegged),0.009389107467850911,13.0,106.0,384.0
+2014-01-02,pegged,calibration rejected (boundary-pegged),0.007410158356848112,15.0,130.0,551.0
+2014-01-03,pegged,calibration rejected (boundary-pegged),0.00714231015683343,15.0,118.0,490.0
+2014-01-27,pegged,calibration rejected (boundary-pegged),0.006736079827584526,16.0,146.0,741.0
+2014-01-28,pegged,calibration rejected (boundary-pegged),0.007530058058442871,16.0,137.0,556.0
+2014-01-29,pegged,calibration rejected (boundary-pegged),0.00861032802831077,14.0,135.0,614.0
+2014-02-04,pegged,calibration rejected (boundary-pegged),0.007094560838331312,15.0,145.0,661.0
+2014-02-24,pegged,calibration rejected (boundary-pegged),0.007749368601522334,15.0,121.0,610.0
+2014-02-25,pegged,calibration rejected (boundary-pegged),0.00978604474733828,17.0,126.0,522.0
+2014-07-10,pegged,calibration rejected (boundary-pegged),0.006086040609003557,15.0,146.0,620.0
+2014-07-17,pegged,calibration rejected (boundary-pegged),0.009946279359218749,16.0,143.0,694.0
+2014-07-18,pegged,calibration rejected (boundary-pegged),0.00590757133409365,12.0,134.0,555.0
+2014-07-31,pegged,calibration rejected (boundary-pegged),0.009423370895898581,18.0,161.0,920.0
+2014-08-01,pegged,calibration rejected (boundary-pegged),0.0077957718639664235,17.0,150.0,877.0
+2014-09-10,pegged,calibration rejected (boundary-pegged),0.006935294779522531,18.0,150.0,638.0
+2014-10-16,pegged,calibration rejected (boundary-pegged),0.012114978184537295,19.0,157.0,978.0
+2014-10-17,pegged,calibration rejected (boundary-pegged),0.008520621972310755,14.0,139.0,804.0
+2014-11-10,pegged,calibration rejected (boundary-pegged),0.005862175169809175,14.0,130.0,575.0
+2014-11-19,pegged,calibration rejected (boundary-pegged),0.010294498343080659,20.0,137.0,583.0
+2015-02-24,pegged,calibration rejected (boundary-pegged),0.006909756901111849,18.0,141.0,695.0
+2015-08-24,iv_miss,calibration rejected (iv_rmse=0.0370 > 0.02),0.03699645969639585,20.0,191.0,1376.0
+2015-09-21,iv_miss,calibration rejected (iv_rmse=0.0694 > 0.02),0.06936125041226984,20.0,188.0,1018.0
+2016-06-13,pegged,calibration rejected (boundary-pegged),0.01057811503212331,20.0,159.0,1058.0
+2016-06-14,pegged,calibration rejected (boundary-pegged),0.0074200298352401235,20.0,164.0,1058.0
+2016-06-15,pegged,calibration rejected (boundary-pegged),0.008620758317974316,20.0,144.0,916.0
+2016-07-13,pegged,calibration rejected (boundary-pegged),0.007994873189666936,20.0,158.0,866.0
+2016-08-11,pegged,calibration rejected (boundary-pegged),0.005961160043656508,20.0,146.0,813.0
+2016-09-14,iv_miss,calibration rejected (iv_rmse=0.0640 > 0.02),0.06395284172395613,19.0,163.0,971.0

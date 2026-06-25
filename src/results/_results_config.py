@@ -9,9 +9,11 @@ grid/plot parameters, grouped by the script that consumes it.
 
 Imported by ``surfaces/make_surface.py``, ``smiles/smiles.py`` and
 ``surfaces/plot_surfaces.py`` (each adds ``src/results`` to ``sys.path`` then
-``import results_config``).
+``import _results_config``).
 """
 import numpy as np
+import matplotlib.colors as _mcolors
+import matplotlib.pyplot as _plt
 
 # ------- shared across all results scripts
 
@@ -57,12 +59,12 @@ MATURITIES_DAYS = np.arange(start=60, stop=750, step=7).tolist()
 # Number of maturities drawn per figure. The plotted set always includes the lowest and highest
 # available maturity; the remaining NT-2 are spaced as equally as possible. Set NT >= the number of
 # available maturities, or NT = None, to draw them all.
-NT = 6
+NT = 5
 
 # Maturity window (calendar days) the displayed smiles are clipped to before the NT sparse pick.
 # Either bound may be None to disable it: TMIN=None drops the lower bound, TMAX=None the upper,
 # both None draws every available maturity.
-TMIN, TMAX = 0, 750
+TMIN, TMAX = 89, 750
 
 # Per-row maturity key: True draws a legend, False draws a colorbar.
 USE_LEGEND = True
@@ -79,19 +81,25 @@ MKTMONSTEP = 0.05
 # Moneyness step for the model smile lines (put_grid/call_grid resolution).
 SMILE_M_STEP = 0.005
 
-# Figure size (inches) for the two-panel smile figure, and the maturity colormap name. Each displayed
+# Figure size (inches) for the two-panel smile figure, and the maturity colormap. Each displayed
 # maturity is colored by its RANK (not its day-count value), so a qualitative colormap with distinct
 # categorical hues -- e.g. "tab10" (10 colors), "tab20" (20), "Set1", "Dark2" -- keeps adjacent
-# maturities easy to tell apart. A continuous map ("jet", "viridis") still works: it is sampled at
-# evenly spaced points by rank, but its neighboring hues are inherently closer.
+# maturities easy to tell apart. SMILE_CMAP may be a registered colormap name (a str) or a Colormap
+# object; _maturity_colors passes it through plt.get_cmap, which accepts both. A continuous map
+# ("jet", "viridis") still works: it is sampled at evenly spaced points by rank, but its neighboring
+# hues are inherently closer.
 SMILE_FIGSIZE = (8, 2.7)
-SMILE_CMAP = "tab10"
+# tab10 with its muted purple (index 4, #9467bd) swapped for black: the purple was too close to the
+# tab10 blue (index 0) to tell apart in the smiles.
+_tab10_colors = list(getattr(_plt.get_cmap("tab10"), "colors"))
+_tab10_colors[4] = "#000000"
+SMILE_CMAP = _mcolors.ListedColormap(_tab10_colors, name="tab10_noviolet")
 
 
 # ------- `surfaces/plot_surfaces.py` parameters
 
 # 3D view angle (elevation, azimuth) for the price-surface renders.
-SURFACE_ELEV, SURFACE_AZIM = 25, -60
+SURFACE_ELEV, SURFACE_AZIM = 25, -65
 
 # Figure size (inches) for each 3D surface render.
 SURFACE_FIGSIZE = (5.0, 4.0)

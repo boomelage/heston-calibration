@@ -1,7 +1,7 @@
 """Central tuning constants for the Heston calibration pipeline.
 
 Every model/calibration knob lives here so the orchestrator (`calibrator_prototype.py`), the engine
-(`calibrate_heston.py`), the OTM filter (`utils._prepare_options`) and the validator
+(`calibrate_heston.py`), the OTM filter (`prepare_surface._prepare_options`) and the validator
 (`validate_calibrations.py`) all read one source of truth. PLAN.md Phase 3 tunes these values
 (MIN_DTM, the box bounds, a Feller penalty, ...); editing one line here is the whole change.
 
@@ -16,11 +16,14 @@ from pricing._quantlib_config import (  # noqa: F401  (re-exported)
     day_count, calendar, DAY_COUNT_NAME, CALENDAR_NAME,
 )
 
-# ---- Surface selection / coverage (calibrator_prototype._select_surface / calibrate_by_day) ----
+# ---- Surface selection / coverage (prepare_surface._select_surface / calibrator_prototype.calibrate_by_day) ----
 # Pooling the whole day (one fit) lets us take more maturities than the old per-spot path.
 MAX_NT = 20          # maturities kept, ranked by traded volume (20 reaches ~485d; volume ranking
                      # caps a top-12 surface at ~394d even when MAX_DTM is larger)
 MAX_NK = 40          # strikes kept per wing (highest OTM puts, lowest OTM calls), nearest the money
+MIN_NK = 2      # min distinct K* strikes a wing must have for a maturity to be kept (both wings);
+                     # a single-strike wing cannot anchor a smile. Maturities failing this are skipped
+                     # before the MAX_NT volume cap, so the cap counts only wing-qualifying maturities
 STRIKE_GRID = 5.0    # SPX near-money strike increment; normalised K* is snapped to this grid
 MIN_DTM = 14         # drop ultra-short maturities: Heston fits them poorly and they drive
                      # eta/kappa to extremes (Feller-violating), polluting the pooled fit
@@ -30,8 +33,8 @@ MIN_STRIKES = 5      # require a real strike range
 MIN_CELLS = 12       # non-NaN surface cells required (target >= MIN_MATS x MIN_STRIKES)
 MAX_MOVE_PCT = 0.03  # intraday spot range above this flags the day (sticky-moneyness strained)
 
-# ---- OTM filter (utils._prepare_options) ----
-# Keep rows with FLOOR < ratio-moneyness < CUTOFF (see utils.df_moneyness). The CUTOFF drops near-ATM
+# ---- OTM filter (prepare_surface._prepare_options) ----
+# Keep rows with FLOOR < ratio-moneyness < CUTOFF (see _utils.df_moneyness). The CUTOFF drops near-ATM
 # rows (keeps only OTM); the FLOOR drops the deep-OTM tail. Ratio moneyness = e^-|log(K/S)|, so the
 # 0.6 floor keeps |log-moneyness| < ~0.51 (~40% OTM): it removes the lottery-ticket strikes (|lm| out
 # to ~3.3) whose extreme prices peg the fit to the bounds, while keeping the full tradeable wing

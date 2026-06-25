@@ -1,3 +1,4 @@
+import os
 import json
 import datetime
 import subprocess
@@ -27,43 +28,6 @@ def df_moneyness(df):
         df['strike_price'] / df['spot_price']
     )
 
-def _prepare_options(raw):
-    """Clean a raw CBOE trades frame and keep only OTM calls and puts.
-
-    Selects/renames the column subset, maps option_type C/P -> w call/put, computes calendar
-    `days_to_maturity` (>0 only), and keeps positive IV/spot/strike. Then keeps only the
-    out-of-the-money rows (`OTM_MONEYNESS_FLOOR < moneyness < OTM_MONEYNESS_CUTOFF`): OTM calls (strike
-    above spot), OTM puts (strike below spot), which together span both wings of the smile. The FLOOR
-    drops the deep-OTM lottery-ticket tail (its extreme prices peg the fit to the bounds). Returns the
-    cleaned snapshot with the helper `moneyness` column dropped. The calibrator calls this in-memory, so
-    it can build a day's surface straight from a raw trades file (there is no separate extraction script).
-    """
-    raw = raw[
-        [
-            'underlying_symbol', 'quote_datetime', 
-            'sequence_number', 
-            'root',
-            'expiration', 'strike', 'option_type', 'trade_size',
-            'trade_price',
-            'best_bid', 'best_ask', 'trade_iv', 'trade_delta', 'underlying_bid',
-        ]
-    ].copy()
-    df = raw.rename(columns={'strike':'strike_price','option_type':'w','underlying_bid':'spot_price'}).copy()
-    df['quote_datetime'] = pd.to_datetime(df['quote_datetime'])
-    df['expiration'] = pd.to_datetime(df['expiration'],format='%Y-%m-%d')
-    df['days_to_maturity'] = (df['expiration'] - df['quote_datetime']) / pd.Timedelta(days=1)
-    df['days_to_maturity'] = df['days_to_maturity'].astype(int)
-    df = df[df['days_to_maturity']>0]
-    df = df[df['spot_price']>0]
-    df = df[df['strike_price']>0]
-    df = df[df['trade_iv']>0].copy()
-    df['w'] = df['w'].replace({'C': 'call', 'P': 'put'})
-    df = df[['quote_datetime', 'strike_price', 'w', 'trade_size', 'trade_price','trade_iv', 'spot_price','days_to_maturity']]
-    df['moneyness'] = df_moneyness(df)
-    df = df[(df['moneyness'] > OTM_MONEYNESS_FLOOR) & (df['moneyness'] < OTM_MONEYNESS_CUTOFF)]
-    return df.drop(columns='moneyness').dropna().copy()
-
-
 def implied_vol(price, w, S, K, r, g, T):
     """Invert a Black price to an implied vol (vol points), dividend-consistent via the forward."""
     if not np.isfinite(price) or price <= 0 or T <= 0:
@@ -79,7 +43,7 @@ def implied_vol(price, w, S, K, r, g, T):
 
 
 # ---- Model-engine helpers (used by the results/ figure scripts: make_surface, plot_surfaces, smiles).
-# Moved here from the former src/results/surfaces/utils.py so there is one shared utils module. These
+# Moved here from the former src/results/surfaces/_utils.py so there is one shared _utils module. These
 # evaluate whatever QuantLib pricing engine they are handed -- Heston OR Bates, built by
 # build_model_engine -- so they are model-agnostic (the engine carries the params). Distinct from the
 # price-inversion `implied_vol` above: `model_implied_vol` PRICES a strike under the engine and then
@@ -184,3 +148,64 @@ def write_config_spec(model, objective, limit, n_accepted, n_rejected):
     path = config.spec_path(model, objective)
     path.write_text(json.dumps(spec, indent=2))
     return path
+
+def _file_date(p):
+    """The trailing _<date> token of a raw trades filename, e.g. '2024-10-15' from
+    'UnderlyingOptionsTradesCalcs_2024-10-15.csv'. Same string the per-day rows are keyed by, so it
+    matches the resume `processed_dates` set."""
+    b = os.path.basename(p)
+    return b[b.rfind('_') + 1:-4]
+
+
+# ---- Pure surface-selection helpers (used by the results/ figure scripts: smiles, ...). These are
+# config-free on purpose: the figure scripts pass their _results_config knobs (NT/TMIN/TMAX/MKTMONSTEP)
+# explicitly, so this module never imports _results_config and stays usable by the calibrator.
+
+def _normalize_dates(dates):
+    """Accept a single %Y-%m-%d date string or a list of them; return a list of strings."""
+    if isinstance(dates, str):
+        return [dates]
+    return [str(d) for d in dates]
+
+
+def _clip_maturities(T, tmin, tmax):
+    """Keep only maturities (in days) within the [tmin, tmax] window before sparse selection.
+    Either bound is optional: `tmin=None` removes the lower bound, `tmax=None` the upper, and
+    both `None` keeps every maturity. Applied to the candidate maturities (calibrated or the
+    MATURITIES_DAYS fallback) so the displayed smiles are restricted to the chosen tenor band."""
+    lo = -np.inf if tmin is None else tmin
+    hi = np.inf if tmax is None else tmax
+    return [t for t in sorted(T) if lo <= t <= hi]
+
+
+def _sparse_maturities(T, nt):
+    """Sparsely pick at most `nt` maturities from the sorted list `T`. Always keeps the lowest and
+    highest; the remaining nt-2 are spaced as equally as possible across the interior by indexing
+    `T` on an evenly spaced grid. `nt=None` (or nt >= len(T)) returns the full sorted list, i.e. draw
+    every available maturity."""
+    T = sorted(T)
+    if nt is None or nt >= len(T) or nt <= 0:
+        return T
+    if nt == 1:
+        return [T[0]]
+    idx = np.unique(np.linspace(0, len(T) - 1, nt).round().astype(int))
+    return [T[i] for i in idx]
+
+
+def _sparse_strikes(sub, step):
+    """Thin one wing's market points so their `moneyness` is spaced ~`step` apart (percentage terms).
+    Selection is done per maturity (`cmat`) so each smile keeps its own evenly spaced subset. From a
+    maturity's min moneyness we build a grid at min, min+step, min+2*step, ... up to its max, and for
+    each grid node keep the row whose moneyness is nearest. Deduping keeps the lowest and highest
+    available moneyness on each smile. `step=None` or `step<=0` (or an empty input) returns `sub`
+    unchanged, i.e. draw every point."""
+    if step is None or step <= 0 or sub.empty:
+        return sub
+    keep = []
+    for _, grp in sub.groupby('cmat'):
+        m = grp['moneyness'].to_numpy()
+        lo, hi = m.min(), m.max()
+        targets = np.arange(lo, hi + step / 2, step) if hi > lo else np.array([lo])
+        idx = np.unique(np.abs(m[:, None] - targets[None, :]).argmin(axis=0))
+        keep.append(grp.iloc[idx])
+    return pd.concat(keep, ignore_index=True)

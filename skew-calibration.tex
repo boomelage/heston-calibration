@@ -92,6 +92,25 @@
 \DeclareMathOperator{\med}{median}
 \DeclareMathOperator{\clip}{clip}
 
+% ---- tab:const calibration constants (single source of truth) ----
+% Each constant has a symbol macro (...Sym) and a value macro (...Val), named by ROLE so the
+% symbol or the value can be changed in one place and propagate to the prose, equations, the
+% algorithm, and Table~\ref{tab:const}. Keep these in sync with src/config.py.
+\newcommand{\ConstMinMaturitySym}{\tau_{\min}}           \newcommand{\ConstMinMaturityVal}{14}
+\newcommand{\ConstMaxMaturitySym}{\tau_{\max}}           \newcommand{\ConstMaxMaturityVal}{730}
+\newcommand{\ConstOtmFloorSym}{\underline{m}}            \newcommand{\ConstOtmFloorVal}{0.6}
+\newcommand{\ConstOtmCutoffSym}{\bar m}                  \newcommand{\ConstOtmCutoffVal}{0.98}
+\newcommand{\ConstMaxMoveSym}{R_{\max}}                  \newcommand{\ConstMaxMoveVal}{0.03}
+\newcommand{\ConstStrikeGridSym}{\Delta}                 \newcommand{\ConstStrikeGridVal}{5.0}
+\newcommand{\ConstMaxMaturitiesSym}{\bar N_t}            \newcommand{\ConstMaxMaturitiesVal}{20}
+\newcommand{\ConstMinWingStrikesSym}{\underline{n}_{k}}  \newcommand{\ConstMinWingStrikesVal}{2}
+\newcommand{\ConstMaxWingStrikesSym}{\bar{n}_{k}}        \newcommand{\ConstMaxWingStrikesVal}{40}
+\newcommand{\ConstMinMatsSym}{M_t}                       \newcommand{\ConstMinMatsVal}{3}
+\newcommand{\ConstMinStrikesSym}{M_k}                    \newcommand{\ConstMinStrikesVal}{5}
+\newcommand{\ConstMinCellsSym}{M_{\mathrm{cell}}}        \newcommand{\ConstMinCellsVal}{12}
+\newcommand{\ConstIvGateSym}{\varepsilon_{\mathrm{iv}}}  \newcommand{\ConstIvGateVal}{0.02}
+\newcommand{\ConstBoundTolSym}{b_{\mathrm{tol}}}         \newcommand{\ConstBoundTolVal}{10^{-3}}
+
 
 
 \author[R. Briciu]{Radu Briciu}
@@ -269,15 +288,15 @@
 		and falls as the strike moves out). The kept set is
 		\begin{equation}\label{eq:prefilter}
 			\mathcal{D}
-			= \bigl\{\, i \;:\; \sigma_i > 0,\ \ \tau_{\min} \le \tau_i \le \tau_{\max},\ \
-			  \underline{m} < \varrho_i < \bar m \,\bigr\}.
+			= \bigl\{\, i \;:\; \sigma_i > 0,\ \ \ConstMinMaturitySym \le \tau_i \le \ConstMaxMaturitySym,\ \
+			  \ConstOtmFloorSym < \varrho_i < \ConstOtmCutoffSym \,\bigr\}.
 		\end{equation}
-		The maturity floor $\tau_{\min}$ (Table~\ref{tab:const}) drops ultra-short maturities, which the
+		The maturity floor $\ConstMinMaturitySym$ (Table~\ref{tab:const}) drops ultra-short maturities, which the
 		diffusive Heston smile fits poorly and which otherwise drive $\eta,\kappa$ to Feller-violating
-		extremes that pollute the pooled fit; the ceiling $\tau_{\max}$ drops thin, stale long tenors.
-		The moneyness band keeps only out-of-the-money quotes: the cutoff $\bar m$ removes the near-ATM
-		rows, and the floor $\underline{m}$ removes the deep-OTM lottery-ticket tail
-		($\varrho_i<\underline{m}$, roughly $\lvert\ln(K_i/S_i)\rvert>0.51$), whose extreme prices peg the
+		extremes that pollute the pooled fit; the ceiling $\ConstMaxMaturitySym$ drops thin, stale long tenors.
+		The cutoff $\ConstOtmCutoffSym$ removes the near-ATM
+		rows, and the floor $\ConstOtmFloorSym$ removes the deep-OTM lottery-ticket tail
+		($\varrho_i<\ConstOtmFloorSym$, roughly $\lvert\ln(K_i/S_i)\rvert>0.51$), whose extreme prices peg the
 		fit to its bounds. Flooring that tail recovers acceptance and tightens the fit while keeping the
 		full tradeable wing.
 	
@@ -294,18 +313,18 @@
 		\begin{equation}\label{eq:highmove}
 			R \;=\; \frac{\max_{i} S_i}{\min_{i} S_i} - 1,
 			\qquad
-			\textsc{high\_move} \;=\; \mathbf{1}\{ R > R_{\max} \}.
+			\textsc{high\_move} \;=\; \mathbf{1}\{ R > \ConstMaxMoveSym \}.
 		\end{equation}
-		A flagged day ($R>R_{\max}$) is still calibrated and written, but the normalisation below
+		A flagged day ($R>\ConstMaxMoveSym$) is still calibrated and written, but the normalisation below
 		is recorded as strained (its $S_{\mathrm{ref}}$ should be treated with suspicion).
 	
 		\textbf{Moneyness normalisation and grid snap.} Each trade retains its moneyness at
 		trade time and is re-struck to the reference spot, then snapped to the SPX strike grid of
-		width $\Delta$:
+		width $\ConstStrikeGridSym$:
 		\begin{equation}\label{eq:kstar}
 			m_i = \frac{K_i}{S_i},
 			\qquad
-			K^\star_i \;=\; \Delta \cdot \round\!\left( \frac{m_i\, S_{\mathrm{ref}}}{\Delta} \right).
+			K^\star_i \;=\; \ConstStrikeGridSym \cdot \round\!\left( \frac{m_i\, S_{\mathrm{ref}}}{\ConstStrikeGridSym} \right).
 		\end{equation}
 		The rationale is sticky-moneyness: over a session the implied-volatility smile is
 		approximately stationary in $K/S$ rather than in the absolute strike. Re-striking by
@@ -317,25 +336,39 @@
 
 	\section{Surface construction}\label{sec:surface}
 		From the normalised trades we build a partial $K^\star \times \tau$ implied-volatility
-		surface, selecting the most liquid, nearest-the-money quotes.
+		surface, selecting the most liquid quotes nearest the money. The trades entering this stage
+		are already the pre-filtered set $\mathcal{D}$, so every candidate strike sits in the OTM
+		moneyness band $\ConstOtmFloorSym < \varrho_i < \ConstOtmCutoffSym$ of \eqref{eq:prefilter}. That band fixes
+		the reach of each wing: the cutoff $\ConstOtmCutoffSym$ sets the inner edge, the strikes closest to the
+		money, and the floor $\ConstOtmFloorSym$ sets the outer edge, where the deep-OTM tail is dropped.
+		``Nearest the money'' below therefore means just inside $\ConstOtmCutoffSym$, not at the money itself.
 	
-		\textbf{Maturity selection.} For each distinct maturity $\tau$ present in $\mathcal{D}$,
-		let $V(\tau)=\sum_{i\in\mathcal{D}:\,\tau_i=\tau} q_i$ be its traded volume. Keep the
-		$N_t$ highest-volume maturities,
+		\textbf{Maturity selection.} A maturity enters the surface only if it carries both wings.
+		For each distinct maturity $\tau$ present in $\mathcal{D}$, let $n_c(\tau)$ and $n_p(\tau)$ be
+		the number of distinct $K^\star$ on its call and put wings, and let
+		$V(\tau)=\sum_{i\in\mathcal{D}:\,\tau_i=\tau} q_i$ be its traded volume. Call $\tau$
+		\emph{admissible} when each wing carries at least $\ConstMinWingStrikesSym$ distinct strikes. Keep the $\ConstMaxMaturitiesSym$
+		highest-volume admissible maturities,
 		\begin{equation}
-			\mathcal{T} = \text{top-}N_t \text{ maturities by } V(\tau).
+			\mathcal{T} = \text{top-}\ConstMaxMaturitiesSym \text{ by } V(\tau)
+			\text{ among } \bigl\{\tau : n_c(\tau)\ge \ConstMinWingStrikesSym,\ n_p(\tau)\ge \ConstMinWingStrikesSym\bigr\}.
 		\end{equation}
+		The wing test precedes the volume cap. A maturity with a one-sided or single-strike wing is
+		discarded before the cap, rather than consuming one of its $\ConstMaxMaturitiesSym$ slots. The kept set falls
+		below $\ConstMaxMaturitiesSym$ only when fewer than $\ConstMaxMaturitiesSym$ maturities are admissible.
 	
 		\textbf{Strike selection (per maturity, per wing).} Within each kept maturity
 		$\tau\in\mathcal{T}$, separate calls ($w_i=+1$, OTM with $K^\star_i \gtrsim S_{\mathrm{ref}}$)
-		from puts ($w_i=-1$, OTM with $K^\star_i \lesssim S_{\mathrm{ref}}$) and keep the $n_k$
+		from puts ($w_i=-1$, OTM with $K^\star_i \lesssim S_{\mathrm{ref}}$) and keep the $\ConstMaxWingStrikesSym$
 		nearest-the-money distinct strikes on each wing:
 		\begin{equation}
 			\mathcal{K}_\tau \;=\;
-			\underbrace{\bigl\{\text{$n_k$ largest } K^\star \text{ among puts at } \tau\bigr\}}_{\text{put wing}}
+			\underbrace{\bigl\{\text{$\ConstMaxWingStrikesSym$ largest } K^\star \text{ among puts at } \tau\bigr\}}_{\text{put wing}}
 			\ \cup\
-			\underbrace{\bigl\{\text{$n_k$ smallest } K^\star \text{ among calls at } \tau\bigr\}}_{\text{call wing}} .
+			\underbrace{\bigl\{\text{$\ConstMaxWingStrikesSym$ smallest } K^\star \text{ among calls at } \tau\bigr\}}_{\text{call wing}} .
 		\end{equation}
+		The $\ConstMaxWingStrikesSym$ cap binds only where a wing carries more than $\ConstMaxWingStrikesSym$ distinct strikes inside the band;
+		otherwise the wing's outer edge is set by the floor $\ConstOtmFloorSym$ alone.
 	
 		\textbf{Pivot to a surface.} For each retained cell $(k,\tau)$ with $k\in\mathcal{K}_\tau$,
 		set the surface entry to the implied volatility of the \emph{highest-volume} trade in that
@@ -354,11 +387,11 @@
 		\textbf{Coverage requirement.} To keep the five-parameter fit identified we require a
 		genuinely two-dimensional surface:
 		\begin{equation}\label{eq:coverage}
-			\bigl|\{\tau : (\cdot,\tau)\in\mathcal{N}\}\bigr| \ge M_t,
+			\bigl|\{\tau : (\cdot,\tau)\in\mathcal{N}\}\bigr| \ge \ConstMinMatsSym,
 			\quad
-			\bigl|\{k : (k,\cdot)\in\mathcal{N}\}\bigr| \ge M_k,
+			\bigl|\{k : (k,\cdot)\in\mathcal{N}\}\bigr| \ge \ConstMinStrikesSym,
 			\quad
-			|\mathcal{N}| \ge M_{\mathrm{cell}} .
+			|\mathcal{N}| \ge \ConstMinCellsSym .
 		\end{equation}
 		A day failing \eqref{eq:coverage} (or with no usable maturities) is dropped: it
 		contributes no calibration and clears its stale diagnostics.
@@ -470,13 +503,13 @@
 
 	\section{Acceptance gate}\label{sec:gate}
 		$\Psi^\star$ is accepted only if it fits the surface tightly \emph{and} lies in the interior
-		of the box. Let the boundary-pegging predicate, with tolerance fraction $\delta$, be
+		of the box. Let the boundary-pegging predicate, with tolerance fraction $\ConstBoundTolSym$, be
 		\begin{equation}\label{eq:pegged}
 			\textsc{pegged}(\Psi)
 			= \bigvee_{j=1}^{\dim\Phi}
-			\Bigl[\ (\Psi_j - \ell_j) < \delta\,(h_j-\ell_j)
+			\Bigl[\ (\Psi_j - \ell_j) < \ConstBoundTolSym\,(h_j-\ell_j)
 			\ \ \vee\ \
-			(h_j - \Psi_j) < \delta\,(h_j-\ell_j) \ \Bigr].
+			(h_j - \Psi_j) < \ConstBoundTolSym\,(h_j-\ell_j) \ \Bigr].
 		\end{equation}
 		The disjunction runs over the $\dim\Phi$ diffusive coordinates for both models. Under Bates the three jump
 		coordinates $(\nu,\delta,\lambda)$ are exempt from the predicate: $\lambda\to0$ is a legitimate
@@ -487,12 +520,12 @@
 		The day is accepted iff
 		\begin{equation}\label{eq:accept}
 			\boxed{\;
-			J_{\mathrm{iv}}(\Psi^\star) \le \varepsilon_{\mathrm{iv}}
+			J_{\mathrm{iv}}(\Psi^\star) \le \ConstIvGateSym
 			\quad\text{and}\quad
 			\lnot\,\textsc{pegged}(\Psi^\star).
 			\;}
 		\end{equation}
-		The first clause is the IV-space gate ($\varepsilon_{\mathrm{iv}}\approx 2$ vol points). The
+		The first clause is the IV-space gate ($\ConstIvGateSym\approx 2$ vol points). The
 		second rejects boundary fits: a parameter resting on a bound is the optimizer hitting a wall,
 		not an identified value, so it is treated as a non-fit regardless of $J_{\mathrm{iv}}$. The
 		Feller quantity \eqref{eq:feller} is reported but never gates, since short-tenor SPX fits can
@@ -508,20 +541,66 @@
 		fit-quality failures.
 
 	\section{Output and diagnostics}\label{sec:output}
-		An accepted day yields one parameter row keyed by date,
-		\begin{equation}
-			\bigl(d,\ S_{\mathrm{ref}},\ r,\ g,\ \theta^\star,\kappa^\star,\rho^\star,\eta^\star,v_0^\star,\
-			\mathcal{F}(\Psi^\star),\ J_{\mathrm{iv}},\ J_{\mathrm{px}},\ \dots,\ R,\ \textsc{high\_move}\bigr),
+		Every attempted day produces output. Results are routed by model and objective into one directory,
+		$\texttt{results/}\langle\textit{model}\rangle\texttt{/calibrations/}\langle\textit{objective}\rangle\texttt{/}$,
+		so a Heston run never shares a file with a Bates run, nor an IV-space run with a price-space one.
+		That directory holds three artefacts: a parameter table of accepted days
+		(\texttt{calibrations.csv}), a rejection table of dropped days (\texttt{rejections.csv}), and a
+		folder of per-day repricing diagnostics (\texttt{calibration\_tests/}). The two tables partition the
+		attempted days. An accepted day writes one row to the parameter table and nothing to the rejection
+		table; a rejected day does the reverse. So the accept rate and the rejection breakdown of
+		\S\ref{sec:empirical} read straight off them.
+
+		\textbf{Accepted days: the parameter table.} An accepted day appends one row, keyed by the date
+		$d$, to \texttt{calibrations.csv}. The row carries the rate-stamped inputs, the fitted vector, and
+		fit and coverage diagnostics:
+		\begin{equation}\label{eq:accepted-row}
+		\begin{aligned}
+			\bigl(\,
+			&d;\ \ S_{\mathrm{ref}},\ r,\ g;\ \
+			\theta^\star,\ \kappa^\star,\ \rho^\star,\ \eta^\star,\ v_0^\star;\ \
+			\mathcal{F}(\Psi^\star); \\
+			&J_{\mathrm{iv}}(\Psi^\star),\ J_{\mathrm{px}}(\Psi^\star),\ |\mathcal{N}|;\ \
+			|\mathcal{T}|,\ \#\text{strikes},\ |\mathcal{N}|,\ \textstyle\sum_{i} q_i; \\
+			&\min_i S_i,\ \max_i S_i,\ R,\ \textsc{high\_move};\ \ t_{\mathrm{calc}}
+			\,\bigr).
+		\end{aligned}
 		\end{equation}
-		together with coverage counts $(|\mathcal{T}|, \#\text{strikes}, |\mathcal{N}|)$ and total
-		volume. Under Bates the row appends the three jump parameters $(\lambda^\star,\nu^\star,\delta^\star)$
-		after $v_0^\star$, and the repriced diagnostics carry a Bates price column in place of the Heston
-		one; everything else is identical. Outputs are routed per model and objective, so the Heston and
-		Bates rows never share a file. Because the calibration is once-daily, these rows accumulate into a
-		single file, regenerated each run from the accepted days. For repricing diagnostics each retained contract
-		is valued under $\Psi^\star$ at its \emph{original} $(S_i,K_i)$, not $(S_{\mathrm{ref}},K^\star)$,
-		since the structural parameters are spot-independent; this gives an honest comparison against
-		the actual trade price $P_i$.
+		The blocks are: the reference spot \eqref{eq:sref} and the day's rates; the fitted parameters
+		$\Psi^\star$ with their Feller quantity \eqref{eq:feller}; the two objective values \eqref{eq:obj-iv}
+		\eqref{eq:obj-price} and the helper count $|\mathcal{N}|$; the surface coverage (kept maturities,
+		distinct strikes, populated cells) and the day's total traded volume; the intraday spot range with
+		its flag \eqref{eq:highmove}; and $t_{\mathrm{calc}}$, the latest quote timestamp on the surface. A
+		boolean accept flag (always true in this file) is stored alongside. Under Bates the jump triple
+		$(\lambda^\star,\nu^\star,\delta^\star)$ is inserted after $v_0^\star$ and nothing else changes.
+		Because the calibration is once-daily, these rows accumulate into the one file, rewritten in date
+		order at the end of each run.
+
+		\textbf{Rejected days: the rejection table.} A day dropped at any stage appends one row, also keyed
+		by $d$, to \texttt{rejections.csv}, recording why:
+		\begin{equation}\label{eq:rejection-row}
+			\bigl(\,d;\ \textsc{reason},\ \textsc{detail};\ J_{\mathrm{iv}};\ |\mathcal{T}|,\ \#\text{strikes},\ |\mathcal{N}|\,\bigr).
+		\end{equation}
+		The \textsc{reason} is one of six categories, in pipeline order: \texttt{no\_trades} (nothing
+		survives the pre-filter \eqref{eq:prefilter}), \texttt{no\_rate} (no $r$ or $g$ on or before $d$),
+		\texttt{thin} (the coverage requirement \eqref{eq:coverage} fails), \texttt{pegged} (the fit clears
+		the IV gate but a diffusive parameter is boundary-pegged \eqref{eq:pegged}), \texttt{iv\_miss}
+		($J_{\mathrm{iv}}(\Psi^\star) > \ConstIvGateSym$), and \texttt{no\_fit} (no restart returned a finite
+		fit). \textsc{detail} is the human-readable string. The IV error and the coverage counts are filled
+		in where the day reached the stage that computes them, and left blank otherwise: a \texttt{thin} day
+		has coverage counts but no $J_{\mathrm{iv}}$, a \texttt{no\_trades} day has neither. The two tables
+		together cover every attempted day, so the pegged-versus-thin-versus-miss split is auditable
+		directly.
+
+		\textbf{Per-day repricing diagnostics.} Each accepted day also writes one file to
+		\texttt{calibration\_tests/}, holding the day's repriced surface contracts. One representative trade
+		per populated cell (the highest-volume one, matching the pivot \eqref{eq:pivot}) is valued under
+		$\Psi^\star$. The valuation uses each contract's \emph{original} $(S_i,K_i)$, not
+		$(S_{\mathrm{ref}},K^\star)$: the structural parameters are spot-independent, and the honest
+		comparison is against the actual trade. Each row records the original spot and strike, the snapped
+		$K^\star$, the fitted parameters, the market implied volatility $\sigma_i$, the Black price
+		\eqref{eq:black} at that vol, and the model price (the Heston price \eqref{eq:heston-price}, or a
+		Bates price column \eqref{eq:bates-cf} under Bates).
 
 	\section{Constants}\label{sec:constants}
 		\begin{table}[H]
@@ -529,28 +608,29 @@
 		\small
 		\begin{tabular}{llll}
 			\toprule
-			Symbol & Code name & Value & Role \\
+			\textbf{Symbol} & \textbf{Code name} & \textbf{Value} & \textbf{Role} \\
 			\midrule
-			$\tau_{\min}$        & \texttt{MIN\_DTM}        & $14$ days    & minimum maturity \\
-			$\tau_{\max}$        & \texttt{MAX\_DTM}        & $730$ days   & maximum maturity \\
-			$\underline{m}$ & \texttt{OTM\_MONEYNESS\_FLOOR} & $0.6$ & OTM ratio-moneyness band \\
-			$\bar m$ & \texttt{OTM\_MONEYNESS\_CUTOFF} & $0.6$ & OTM ratio-moneyness band \\
-			$R_{\max}$           & \texttt{MAX\_MOVE\_PCT}  & $0.03$       & intraday-range flag threshold \\
-			$\Delta$             & \texttt{STRIKE\_GRID}    & $5.0$        & SPX strike lattice for $K^\star$ snap \\
-			$N_t$                & \texttt{MAX\_NT}         & $20$         & maturities kept (by volume) \\
-			$n_k$                & \texttt{MAX\_NK}         & $40$         & strikes kept per wing \\
-			$M_t$                & \texttt{MIN\_MATS}       & $3$          & minimum maturities in surface \\
-			$M_k$                & \texttt{MIN\_STRIKES}    & $5$          & minimum strikes in surface \\
-			$M_{\mathrm{cell}}$  & \texttt{MIN\_CELLS}      & $12$         & minimum populated cells $|\mathcal{N}|$ \\
-			$\varepsilon_{\mathrm{iv}}$ & \texttt{IV\_RMSE\_ACCEPT} & $0.02$ & IV-space acceptance gate (vol pts) \\
-			$\delta$             & \texttt{BOUND\_TOL}      & $10^{-3}$    & boundary-pegging tolerance fraction \\
+			$\ConstMinMaturitySym$    & \texttt{MIN\_DTM}               & $\ConstMinMaturityVal$    & minimum days to maturity \\
+			$\ConstMaxMaturitySym$    & \texttt{MAX\_DTM}               & $\ConstMaxMaturityVal$    & maximum days to maturity \\
+			$\ConstOtmFloorSym$       & \texttt{OTM\_MONEYNESS\_FLOOR}  & $\ConstOtmFloorVal$       & minimum OTM ratio moneyness \\
+			$\ConstOtmCutoffSym$      & \texttt{OTM\_MONEYNESS\_CUTOFF} & $\ConstOtmCutoffVal$      & maximum OTM ratio moneyness \\
+			$\ConstMaxMoveSym$        & \texttt{MAX\_MOVE\_PCT}         & $\ConstMaxMoveVal$        & intraday-range flag threshold \\
+			$\ConstStrikeGridSym$     & \texttt{STRIKE\_GRID}           & $\ConstStrikeGridVal$     & SPX strike lattice for $K^\star$ snap \\
+			$\ConstMaxMaturitiesSym$  & \texttt{MAX\_NT}                & $\ConstMaxMaturitiesVal$  & maturities kept (by volume) \\
+			$\ConstMinWingStrikesSym$ & \texttt{MIN\_NK}                & $\ConstMinWingStrikesVal$ & minimum distinct strikes per wing \\
+			$\ConstMaxWingStrikesSym$ & \texttt{MAX\_NK}                & $\ConstMaxWingStrikesVal$ & strikes kept per wing \\
+			$\ConstMinMatsSym$        & \texttt{MIN\_MATS}              & $\ConstMinMatsVal$        & minimum maturities in surface \\
+			$\ConstMinStrikesSym$     & \texttt{MIN\_STRIKES}           & $\ConstMinStrikesVal$     & minimum strikes in surface \\
+			$\ConstMinCellsSym$       & \texttt{MIN\_CELLS}             & $\ConstMinCellsVal$       & minimum populated cells $|\mathcal{N}|$ \\
+			$\ConstIvGateSym$         & \texttt{IV\_RMSE\_ACCEPT}       & $\ConstIvGateVal$         & IV-space acceptance gate (vol pts) \\
+			$\ConstBoundTolSym$       & \texttt{BOUND\_TOL}             & $\ConstBoundTolVal$       & boundary-pegging tolerance fraction \\
 			\bottomrule
 		\end{tabular}
 		\vspace*{-0.8em}
 		\caption{Surface, selection, and gate constants.}\label{tab:const}
 		\end{table}
 		\vspace{-0.8em}
-		\begin{table}[h]
+		\begin{table}[H]
 		\centering
 		\small
 		\begin{tabular}{lccccc}
@@ -580,102 +660,102 @@
 		\label{tab:bounds}\label{tab:bates-bounds}
 		\end{table}
 
-	\section{Empirical findings}\label{sec:empirical}
-		All findings in this section are for the Heston model; a full-sample Bates run is left to later work
-		(\S\ref{sec:improvements}). We ran the routine over the full CBOE SPX trade history available to us,
-		$3{,}217$ trading days from 3~January~2012 to 15~October~2024. The figures below are for
-		the default IV-space objective \eqref{eq:obj-iv}. The price-space objective
-		\eqref{eq:obj-price} is the configurable alternative, discussed at the end of the section.
-		Of these days, $1{,}631$ ($50.7\%$) passed the acceptance gate \eqref{eq:accept} and
-		contribute a parameter row; the $1{,}586$ rejected days are logged with their cause.
-		The rejection split is dominated by boundary pegging: $1{,}467$ days
-		($92.5\%$ of rejections) are rejected for a pegged parameter, $116$ for an IV-space miss
-		($J_{\mathrm{iv}}>\varepsilon_{\mathrm{iv}}$), and $3$ for having no usable trades.
-		Pegging (almost always $\kappa\!\to\!20$ or $\rho\!\to\!-0.999$ hitting the box wall)
-		is therefore the binding constraint on the accept rate, not surface quality.
-		\\
-		\textbf{Fit quality.} On the accepted set the surface fit is excellent. The IV-space
-		error \eqref{eq:obj-iv} has a median of $0.80$ vol points (mean $0.84$, $90$th percentile
-		$1.15$, maximum $1.99$), so $J_{\mathrm{iv}}$ sits inside the $2$-vol-point gate on every
-		accepted day and the gate never binds in practice. Acceptance is governed by the no-pegging
-		clause alone. An independent repricing check (each contract valued under $\Phi^\star$ at its
-		\emph{original} $(S_i,K_i)$ and compared to the trade price) gives a per-day median relative
-		price error of $11.4\%$ with a $90$th percentile of $17.4\%$. Those figures are inflated by the
-		deep-OTM wings, whose near-zero prices make any absolute miss a large relative one. This is
-		exactly the effect that motivated gating in IV space rather than price space
-		(\S\ref{sec:gate}). A separate validator clears $1{,}623$ of $1{,}631$ accepted days
-		($99.5\%$); the $8$ hard failures are repricing-fit outliers, not parameter pathologies.
-		\\ 
-		\textbf{Parameter levels.} The accepted parameters are economically sensible and stable
-		across the 2012--2024 sample. The leverage correlation is consistently and strongly
-		negative, $\med\rho=-0.74$ (10th--90th percentile $[-0.81,-0.61]$), as equity-index
-		smiles require. Long-run variance $\med\theta=0.067$ ($\approx 25.8\%$ annualised vol) and
-		initial variance $\med v_0=0.026$ ($\approx 16.2\%$) bracket realistic SPX levels, with $v_0$
-		the lower of the two on the typical day. Mean reversion $\med\kappa=2.37$ sits in the usual
-		SPX range. The vol-of-vol is high, $\med\eta=1.34$ (10th--90th percentile $[0.79,1.84]$).
-		Because the gate rejects any boundary-pegged fit, the accepted set is pegging-free by
-		construction: no accepted day carries $\rho$ below $-0.99$ or reaches the $\kappa$ ceiling.
-		A clean interior set is what survives the gate, not evidence that pegging is solved on the
-		underlying population.
-		\\ 
-		\textbf{Feller condition is the standout caveat.} The gate does not test Feller, and these
-		fits violate it without exception: $\mathcal{F}(\Phi^\star)=2\kappa\theta-\eta^2<0$ on all
-		$1{,}631$ accepted days, with median $\mathcal{F}=-1.44$. The driver of the violation is the
-		large vol-of-vol relative to $\kappa\theta$. $\eta$ exceeds $1.5$ on $596$ days ($36.5\%$) and
-		approaches its $2.0$ cap (max $1.997$). A pinned $v_0$ or a degenerate $\kappa$ are rare, so
-		among the validator's soft flags Feller violation and an elevated $\eta$ are by far the most
-		common. Together they mark these fits as ones whose variance path can reach zero, even where
-		the surface fit itself is tight. The wide surface coverage is what lifts $\eta$ here: putting
-		the full OTM wings into the fit demands more vol-of-vol than a near-money fit, so both $\eta$
-		and the Feller violation run higher than under the narrower near-money calibration of earlier
-		drafts.
-		\\ 
-		\textbf{Comparison with the earlier price-space baseline.} An earlier draft reported the
-		price-space objective on a narrower surface (near-money strikes only, a higher maturity floor)
-		as the default. That run accepted $1{,}713$ of $3{,}215$ days ($53.3\%$) with a lower vol-of-vol
-		($\med\eta\approx0.89$, $\eta>1.5$ on $8.5\%$ of days) and Feller violated on $99.3\%$. Two
-		things changed the picture here. The default objective is now the IV-space residual, and the
-		surface coverage was widened to carry the full tradeable wing and longer maturities, with a
-		deep-OTM floor that drops the lottery-ticket tail. The widening is the larger effect. It removes
-		what looked like a systematic wing underfit: with the wings in the fit, the per-$\lvert\ln(K/S)\rvert$
-		residual is small and mixed in sign (overall RMSE $1.1$ vol points), so the near-money-only
-		calibration was extrapolating, not capturing an in-sample bias. The same widening raises $\eta$
-		and pushes Feller violation to every accepted day. The accept rate is little changed
-		($50.7\%$ against $53.3\%$), and pegging stays the dominant rejection cause under either setup.
-		\\
-		\textbf{Price-space as the alternative objective.} Switching the in-engine objective back to
-		price-space \eqref{eq:obj-price} changes only what each restart minimises, not how a day is
-		selected or gated (\S\ref{sec:objective}). The IV-space default weights the deep-OTM wings evenly
-		in vol points, whereas the price objective discounts them by their small prices. One consequence
-		is specific to the IV-space default: it no longer controls relative price, so the returned price
-		RMSE is large on the cheap wing cells (maximum $J_{\mathrm{px}}=120.8$, with $656$ days above
-		$0.2$). Those days are tight in vol points yet far off in relative price on a near-worthless wing
-		cell, which is why the gate runs in IV space.
+%	\section{Empirical findings}\label{sec:empirical}
+%		All findings in this section are for the Heston model; a full-sample Bates run is left to later work
+%		(\S\ref{sec:improvements}). We ran the routine over the full CBOE SPX trade history available to us,
+%		$3{,}217$ trading days from 3~January~2012 to 15~October~2024. The figures below are for
+%		the default IV-space objective \eqref{eq:obj-iv}. The price-space objective
+%		\eqref{eq:obj-price} is the configurable alternative, discussed at the end of the section.
+%		Of these days, $1{,}631$ ($50.7\%$) passed the acceptance gate \eqref{eq:accept} and
+%		contribute a parameter row; the $1{,}586$ rejected days are logged with their cause.
+%		The rejection split is dominated by boundary pegging: $1{,}467$ days
+%		($92.5\%$ of rejections) are rejected for a pegged parameter, $116$ for an IV-space miss
+%		($J_{\mathrm{iv}}>\ConstIvGateSym$), and $3$ for having no usable trades.
+%		Pegging (almost always $\kappa\!\to\!20$ or $\rho\!\to\!-0.999$ hitting the box wall)
+%		is therefore the binding constraint on the accept rate, not surface quality.
+%		\\
+%		\textbf{Fit quality.} On the accepted set the surface fit is excellent. The IV-space
+%		error \eqref{eq:obj-iv} has a median of $0.80$ vol points (mean $0.84$, $90$th percentile
+%		$1.15$, maximum $1.99$), so $J_{\mathrm{iv}}$ sits inside the $2$-vol-point gate on every
+%		accepted day and the gate never binds in practice. Acceptance is governed by the no-pegging
+%		clause alone. An independent repricing check (each contract valued under $\Phi^\star$ at its
+%		\emph{original} $(S_i,K_i)$ and compared to the trade price) gives a per-day median relative
+%		price error of $11.4\%$ with a $90$th percentile of $17.4\%$. Those figures are inflated by the
+%		deep-OTM wings, whose near-zero prices make any absolute miss a large relative one. This is
+%		exactly the effect that motivated gating in IV space rather than price space
+%		(\S\ref{sec:gate}). A separate validator clears $1{,}623$ of $1{,}631$ accepted days
+%		($99.5\%$); the $8$ hard failures are repricing-fit outliers, not parameter pathologies.
+%		\\ 
+%		\textbf{Parameter levels.} The accepted parameters are economically sensible and stable
+%		across the 2012--2024 sample. The leverage correlation is consistently and strongly
+%		negative, $\med\rho=-0.74$ (10th--90th percentile $[-0.81,-0.61]$), as equity-index
+%		smiles require. Long-run variance $\med\theta=0.067$ ($\approx 25.8\%$ annualised vol) and
+%		initial variance $\med v_0=0.026$ ($\approx 16.2\%$) bracket realistic SPX levels, with $v_0$
+%		the lower of the two on the typical day. Mean reversion $\med\kappa=2.37$ sits in the usual
+%		SPX range. The vol-of-vol is high, $\med\eta=1.34$ (10th--90th percentile $[0.79,1.84]$).
+%		Because the gate rejects any boundary-pegged fit, the accepted set is pegging-free by
+%		construction: no accepted day carries $\rho$ below $-0.99$ or reaches the $\kappa$ ceiling.
+%		A clean interior set is what survives the gate, not evidence that pegging is solved on the
+%		underlying population.
+%		\\ 
+%		\textbf{Feller condition is the standout caveat.} The gate does not test Feller, and these
+%		fits violate it without exception: $\mathcal{F}(\Phi^\star)=2\kappa\theta-\eta^2<0$ on all
+%		$1{,}631$ accepted days, with median $\mathcal{F}=-1.44$. The driver of the violation is the
+%		large vol-of-vol relative to $\kappa\theta$. $\eta$ exceeds $1.5$ on $596$ days ($36.5\%$) and
+%		approaches its $2.0$ cap (max $1.997$). A pinned $v_0$ or a degenerate $\kappa$ are rare, so
+%		among the validator's soft flags Feller violation and an elevated $\eta$ are by far the most
+%		common. Together they mark these fits as ones whose variance path can reach zero, even where
+%		the surface fit itself is tight. The wide surface coverage is what lifts $\eta$ here: putting
+%		the full OTM wings into the fit demands more vol-of-vol than a near-money fit, so both $\eta$
+%		and the Feller violation run higher than under the narrower near-money calibration of earlier
+%		drafts.
+%		\\ 
+%		\textbf{Comparison with the earlier price-space baseline.} An earlier draft reported the
+%		price-space objective on a narrower surface (near-money strikes only, a higher maturity floor)
+%		as the default. That run accepted $1{,}713$ of $3{,}215$ days ($53.3\%$) with a lower vol-of-vol
+%		($\med\eta\approx0.89$, $\eta>1.5$ on $8.5\%$ of days) and Feller violated on $99.3\%$. Two
+%		things changed the picture here. The default objective is now the IV-space residual, and the
+%		surface coverage was widened to carry the full tradeable wing and longer maturities, with a
+%		deep-OTM floor that drops the lottery-ticket tail. The widening is the larger effect. It removes
+%		what looked like a systematic wing underfit: with the wings in the fit, the per-$\lvert\ln(K/S)\rvert$
+%		residual is small and mixed in sign (overall RMSE $1.1$ vol points), so the near-money-only
+%		calibration was extrapolating, not capturing an in-sample bias. The same widening raises $\eta$
+%		and pushes Feller violation to every accepted day. The accept rate is little changed
+%		($50.7\%$ against $53.3\%$), and pegging stays the dominant rejection cause under either setup.
+%		\\
+%		\textbf{Price-space as the alternative objective.} Switching the in-engine objective back to
+%		price-space \eqref{eq:obj-price} changes only what each restart minimises, not how a day is
+%		selected or gated (\S\ref{sec:objective}). The IV-space default weights the deep-OTM wings evenly
+%		in vol points, whereas the price objective discounts them by their small prices. One consequence
+%		is specific to the IV-space default: it no longer controls relative price, so the returned price
+%		RMSE is large on the cheap wing cells (maximum $J_{\mathrm{px}}=120.8$, with $656$ days above
+%		$0.2$). Those days are tight in vol points yet far off in relative price on a near-worthless wing
+%		cell, which is why the gate runs in IV space.
+%		
+%		\subsection{Partial conclusions} 
+%			The objective is not the binding choice. Pegging is a structural
+%			degeneracy in the $(\kappa,\rho,\eta)$ skew subspace, and it survives a change of residual. The
+%			pooled SPX surface demands more skew than single-factor Heston can supply without driving one of
+%			$\kappa$ or $\rho$ to a corner, and the optimiser picks whichever corner. Acceptance therefore
+%			turns on the no-pegging clause, not on fit quality or on which residual is minimised. The levers
+%			that would move it are the identification fixes: anchoring $\kappa$, a soft Feller penalty, and
+%			liquidity weighting.
 		
-		\subsection{Partial conclusions} 
-			The objective is not the binding choice. Pegging is a structural
-			degeneracy in the $(\kappa,\rho,\eta)$ skew subspace, and it survives a change of residual. The
-			pooled SPX surface demands more skew than single-factor Heston can supply without driving one of
-			$\kappa$ or $\rho$ to a corner, and the optimiser picks whichever corner. Acceptance therefore
-			turns on the no-pegging clause, not on fit quality or on which residual is minimised. The levers
-			that would move it are the identification fixes: anchoring $\kappa$, a soft Feller penalty, and
-			liquidity weighting.
-		
-		\subsection{Avenues for improvement}\label{sec:improvements} 
-			Acceptance is near one half of attempted days, and Feller violation is now universal on the accepted 
-			set. The maturity floor has already been raised to $\tau_{\min}=14$ days and an objective wing-weighting 
-			has been wired but tested null; neither moved acceptance. The remaining levers attack the $(\kappa,\rho,\eta)$ 
-			degeneracy at its source. Fixing or anchoring $\kappa$ from a cross-day-robust estimate would break the 
-			$\kappa\!\leftrightarrow\!\rho$ trade-off so $\rho$ stops pegging. A soft Feller penalty in the restart-selection 
-			criterion, with a revisit of the $\eta$ cap, would curb the now-universal Feller violation. Warm-starting each day
-			from the previous day's accepted parameters would stabilise the search. The Levenberg--Marquardt
-			end criteria have not been tuned and are a further candidate.
-		
-			A full-sample Bates calibration is the other open item. The engine, bounds, and routing are in
-			place (\S\ref{sec:jumps}, Table~\ref{tab:bates-bounds}), and the jumps give the model a direct way
-			to carry the tail the single-factor vol-of-vol now overfits. Whether that relieves the
-			$(\kappa,\rho,\eta)$ degeneracy and the $\eta$-driven Feller violation across the full 2012--2024
-			sample is the question a full Bates run would settle.
+		\section{Avenues for improvement}\label{sec:improvements} 
+%			Acceptance is near one half of attempted days, and Feller violation is now universal on the accepted 
+%			set. The maturity floor has already been raised to $\ConstMinMaturitySym=\ConstMinMaturityVal$ days and an objective wing-weighting 
+%			has been wired but tested null; neither moved acceptance. The remaining levers attack the $(\kappa,\rho,\eta)$ 
+%			degeneracy at its source. Fixing or anchoring $\kappa$ from a cross-day-robust estimate would break the 
+%			$\kappa\!\leftrightarrow\!\rho$ trade-off so $\rho$ stops pegging. A soft Feller penalty in the restart-selection 
+%			criterion, with a revisit of the $\eta$ cap, would curb the now-universal Feller violation. Warm-starting each day
+%			from the previous day's accepted parameters would stabilise the search. The Levenberg--Marquardt
+%			end criteria have not been tuned and are a further candidate.
+%		
+%			A full-sample Bates calibration is the other open item. The engine, bounds, and routing are in
+%			place (\S\ref{sec:jumps}, Table~\ref{tab:bates-bounds}), and the jumps give the model a direct way
+%			to carry the tail the single-factor vol-of-vol now overfits. Whether that relieves the
+%			$(\kappa,\rho,\eta)$ degeneracy and the $\eta$-driven Feller violation across the full 2012--2024
+%			sample is the question a full Bates run would settle.
 		
 			Rough volatility is the natural next paradigm, but a separate one. Empirical realised variance is
 			well described by a fractional process with Hurst exponent $H\approx 0.1$ \citep{gatheral2018}, far
@@ -689,14 +769,14 @@
 			rough Bergomi \citep{bayer2016} prices by Monte Carlo. Multi-start calibration over thousands of
 			days is then out of reach without a surrogate pricer. There is also a tension with the present
 			surface: the rough skew is sharpest at the shortest maturities, exactly the tenors the pre-filter
-			drops at $\tau_{\min}=14$ days \eqref{eq:prefilter}. A fair test would re-admit the short end, build
+			drops at $\ConstMinMaturitySym=\ConstMinMaturityVal$ days \eqref{eq:prefilter}. A fair test would re-admit the short end, build
 			a rough-Heston pricer or a learned surrogate, and run on a pilot window rather than the full sample.
 			We leave it to separate work.
 		
 	\vfill
 	{\small
 		\bibliographystyle{plainnat}
-		\bibliography{refs-heston-calibration}
+		\bibliography{refs-skew-calibration.bib}
 	}
 	\vfill
 	\newpage
@@ -740,25 +820,27 @@
 			\caption{Per-day calibration}\label{alg:perday}
 			\begin{algorithmic}[1]
 				\REQUIRE day $d$ of OTM trades; rates $r(d),g(d)$; constants of Table~\ref{tab:const}
-				\STATE $\mathcal{D} \leftarrow \{ i : \sigma_i>0,\ \tau_i\ge\tau_{\min}\}$ \hfill (pre-filter \eqref{eq:prefilter})
+				\STATE $\mathcal{D} \leftarrow \{ i : \sigma_i>0,\ \tau_i\ge\ConstMinMaturitySym\}$ \hfill (pre-filter \eqref{eq:prefilter})
 				\IF{$r(d)$ or $g(d)$ undefined on/before $d$}
 				\STATE \textbf{return} $\varnothing$ \hfill (no rate)
 				\ENDIF
 				\STATE $S_{\mathrm{ref}} \leftarrow (\sum q_i S_i)/(\sum q_i)$; \\
 				$R \leftarrow \max_i S_i / \min_i S_i - 1$; \\
-				$\textsc{high\_move}\leftarrow \mathbf{1}\{R>R_{\max}\}$
-				\STATE $K^\star_i \leftarrow \Delta\,\round(m_i S_{\mathrm{ref}}/\Delta)$ with $m_i=K_i/S_i$ \hfill (re-strike \eqref{eq:kstar})
-				\STATE $\mathcal{T}\leftarrow$ top-$N_t$ maturities by volume;\ \ build $\mathcal{K}_\tau$ ($n_k$ per wing); \\ pivot to $\{\hat\sigma_{k,\tau}\}$, cells $\mathcal{N}$
+				$\textsc{high\_move}\leftarrow \mathbf{1}\{R>\ConstMaxMoveSym\}$
+				\STATE $K^\star_i \leftarrow \ConstStrikeGridSym\,\round(m_i S_{\mathrm{ref}}/\ConstStrikeGridSym)$ with $m_i=K_i/S_i$ \hfill (re-strike \eqref{eq:kstar})
+				\STATE $\mathcal{T}\leftarrow$ top-$\ConstMaxMaturitiesSym$ admissible maturities by volume ($\ge \ConstMinWingStrikesSym$ strikes per wing); \\
+				build $\mathcal{K}_\tau$ (maximum $\ConstMaxWingStrikesSym$ per wing); \\ 
+				pivot to $\{\hat\sigma_{k,\tau}\}$, cells $\mathcal{N}$
 				\IF{coverage \eqref{eq:coverage} fails}
 				\STATE clear stale diagnostics;\ \textbf{return} $\varnothing$
 				\ENDIF
-				\STATE $\hat v \leftarrow \clip(\med(\hat\sigma)^2,[10^{-3},0.25])$;\ \ build seeds $\mathcal{S}$ \eqref{eq:seeds}
+				\STATE $\hat v \leftarrow \clip(\med(\hat\sigma)^2,[10^{-3},0.25])$;\ \ build seeds $\mathcal{S}$ \hfill \eqref{eq:varproxy}~\eqref{eq:seeds}
 				\FOR{$s \in \mathcal{S}$}
 				\STATE $\widehat\Psi_s \leftarrow$ LM minimiser of $\sum_n(\varepsilon^{\mathrm{obj}}_n)^2$ on $\mathcal{B}$ from $s$ \hfill \eqref{eq:localproblem}
 				\STATE compute $J_{\mathrm{iv}}(\widehat\Psi_s)$ \hfill \eqref{eq:obj-iv}
 				\ENDFOR
 				\STATE $\Psi^\star \leftarrow \argmin_{s} J_{\mathrm{iv}}(\widehat\Psi_s)$ \hfill (select \eqref{eq:select})
-				\IF{$J_{\mathrm{iv}}(\Psi^\star) \le \varepsilon_{\mathrm{iv}}$ \AND $\lnot\,\textsc{pegged}(\Psi^\star)$}
+				\IF{$J_{\mathrm{iv}}(\Psi^\star) \le \ConstIvGateSym$ \AND $\lnot\,\textsc{pegged}(\Psi^\star)$}
 				\STATE write repriced diagnostics;\ \textbf{return} row$(d,S_{\mathrm{ref}},r,g,\Psi^\star,\mathcal{F},J_{\mathrm{iv}},J_{\mathrm{px}},\dots)$
 				\ELSE
 				\STATE clear stale diagnostics;\ \textbf{return} $\varnothing$ \hfill (rejected)

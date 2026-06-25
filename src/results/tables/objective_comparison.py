@@ -7,7 +7,7 @@ validation.csv) and writes a side-by-side metrics table to
 
 This is meant to be the single source of truth for the acceptance, fit-quality,
 parameter-level, and pathology figures quoted in CLAUDE.md, PLAN.md, and
-heston-calibration.tex. Re-run it after regenerating either objective and check
+manuscript/skew-calibration.tex. Re-run it after regenerating either objective and check
 the prose against it. Paths resolve from __file__, so it runs from any cwd.
 
     python src/results/tables/objective_comparison.py

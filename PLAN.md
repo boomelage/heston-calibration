@@ -5,35 +5,41 @@ This file tracks the work to make the calibrated parameters in `results/heston/c
 reasonable (the parameters describe a plausible SPX vol process). Keep it in sync with the code, and
 keep `CLAUDE.md` in sync with both.
 
+> **Numbers caveat (read first).** The four committed runs
+> (`results/{heston,bates}/calibrations/{vol,price}/`) are a **prior baseline pending regeneration**
+> under the new specification. The accept-rate, pegging, Feller, and `eta` figures quoted below describe
+> *that* baseline and are kept to document the qualitative mechanism, not as current truth. The exact
+> accepted/rejected split and the rejection breakdown for any committed run are in its `rejections.csv`
+> and the `_run` header of its `config_spec.json`; refresh the prose numbers from
+> `validate_calibrations.py` / `wing_residuals.py` after the re-run. The code, config knobs, and levers
+> described here are current.
+
 - **Phase 1 — input bugs (done).** Two bugs that corrupted what `calibrate_heston` was fed (stale
   rate lookup, strike-selection slips). See [Completed tasks](#completed-tasks).
 - **Phase 2 — identification & honesty (done).** Engine hardening (box bounds, multi-start,
   self-grading), one pooled calibration per trading day over a moneyness-normalised surface, and an
   IV-space acceptance gate. This fixed the per-bucket under-determination: the routine now produces
   one *identified*, cross-day-stable fit per day. See [Completed tasks](#completed-tasks).
-- **Phase 3 — acceptance (open, this plan).** The fits are good (median ~0.8 vol points) but a
-  **minority of days are accepted**. The current committed default (**`vol`** objective, widened config,
-  full sample of **3,217 days**) **accepts 1,631 (50.7%)**, short of the 60% target. The rest mostly peg a
-  skew parameter to its bound — confirmed, not presumed: `results/heston/calibrations/vol/rejections.csv`
-  enumerates **pegged 1467, iv_miss 116, no_trades 3** (pegging 92.5% of rejections). The accepted set is
-  peg-free only because the gate enforces it. A second issue: **all** accepted days have `feller < 0` (the
+- **Phase 3 — acceptance (open, this plan).** The fits are good (median ~1 vol point) but only a
+  **minority of days accept** (roughly half of the full `vol` sample), short of the 60% target. The rest
+  mostly peg a skew parameter to its bound — confirmed, not presumed: each run's `rejections.csv`
+  enumerates the cause, and **pegging is by far the dominant one**. The accepted set is peg-free only
+  because the gate enforces it. A second issue: essentially **all** accepted days have `feller < 0` (the
   gate doesn't reject on Feller) — Lever D.
   **Landed.** The default objective is now `vol` (`config.DEFAULT_OBJECTIVE`). Lever A (`MIN_DTM`=14), a
   coverage-widen (`MAX_NK`=40, `MAX_NT`=20, `MAX_DTM`=730), and an `OTM_MONEYNESS_FLOOR`=0.6 are all in;
   Lever B (objective wing-weighting) is **wired but tested null** and left default-off. With the wings now
-  in the fit, the full-sample per-`|log-moneyness|` residual is small and mixed-sign (overall RMSE ~0.011),
-  so the wing "underestimation" was largely a near-money extrapolation artefact, not an in-sample bias. The
-  widening lifts `eta` (median 1.34) and pushes Feller violation to 100% of accepted days. Pegging and
-  Feller remain the open issues (Levers C/D). See
-  [Current status](#current-status-why-good-fits-still-reject) and the
+  in the fit, the per-`|log-moneyness|` residual is small and mixed-sign, so the wing "underestimation"
+  was largely a near-money extrapolation artefact, not an in-sample bias. The widening lifts `eta` and
+  pushes Feller violation toward all accepted days. Pegging and Feller remain the open issues (Levers C/D).
+  See [Current status](#current-status-why-good-fits-still-reject) and the
   [Phase 3 plan](#phase-3-plan-improve-parameter-acceptance).
 
-- **Sample.** The calibration set is no longer the 5-day diagnostic week. `data/options/raw/` now
-  holds a multi-year SPX trade history (CBOE `UnderlyingOptionsTradesCalcs_*` from 2012 onward plus
-  Hanweck `UnderlyingOptionsTradesCalcsHanweck_*` files spanning 2013 and 2024), **3,217 trading days
-  attempted** (1,631 accepted under the `vol` default, 50.7%), spanning 2012-01-03..2024-10-15.
-  Accept-rate targets below are therefore stated as **proportions over the full set**, not "n of 5";
-  the 2024-10-07..11 table is retained only as a worked diagnostic example of the pegging mechanism.
+- **Sample.** The calibration set is no longer the 5-day diagnostic week. `data/options/raw/` holds a
+  multi-year SPX trade history (CBOE `UnderlyingOptionsTradesCalcs_*` from 2012 onward plus Hanweck
+  `UnderlyingOptionsTradesCalcsHanweck_*` files), a few thousand trading days attempted under the `vol`
+  default. Accept-rate targets below are therefore stated as **proportions over the full set**, not "n of
+  5"; the 2024-10-07..11 table is retained only as a worked diagnostic example of the pegging mechanism.
 - **Specification.** The delivered routine is stated formally in `manuscript/skew-calibration.tex` (model +
   pricing operators, `S_ref`, `K*`, surface construction, price-space vs IV-space objectives, the
   boundary-pegging gate).
@@ -44,19 +50,17 @@ keep `CLAUDE.md` in sync with both.
   acceptance gate always run off the IV-space RMSE, so the objective does not change how a day is chosen
   or accepted. `"vol"` is more expensive (a Black-vol inversion per residual per LM iteration) and can
   throw mid-search (caught per-restart). **Output routing follows the knob:** every run writes to
-  `results/heston/calibrations/<objective>/` — `calibrations.csv`, `rejections.csv`, `validation.csv`, and the
-  per-day `calibration_tests/` — so the two objectives land in separate directories and do not clobber
-  each other. **The committed default is now `vol`** (`results/heston/calibrations/vol/`): **3,217 attempted,
-  1,631 accepted (50.7%)**, split **pegged 1467 / iv_miss 116 / no_trades 3**, with the Feller/`eta`
-  shares quoted throughout this plan. The `price` objective remains selectable but its outputs are **not
-  committed on this branch**; the older narrow-config `price` baseline (3,215 attempted, 1,713 accepted
-  ≈53%, `MAX_NK`=8, `MIN_DTM`=29) lives on `master` and is **not** a controlled comparison — the coverage
-  differs. `src/results/tables/objective_comparison.py` builds a side-by-side metrics table when both
-  objectives are present on disk.
+  `results/<model>/calibrations/<objective>/` — `calibrations.csv`, `rejections.csv`, `validation.csv` (vol),
+  and the per-day `calibration_tests/` — so the two objectives land in separate directories and do not
+  clobber each other. **The default is now `vol`.** All four model×objective runs are committed on this
+  branch (`results/{heston,bates}/calibrations/{vol,price}/`) as a prior baseline pending regeneration;
+  read each run's `config_spec.json` `_run` header for its attempted/accepted/rejected split.
+  `src/results/tables/objective_comparison.py` builds a side-by-side metrics table when both objectives
+  are present on disk.
   The objective is confirmed **lever-adjacent, not a lever**: it changes what LM minimises but not the
   `(kappa, rho, eta)` degeneracy that pegs. One `vol`-specific artefact: it stops controlling relative
-  price, so the returned `rmse` blows up on cheap deep-OTM wing cells (max 120.8; 656 of 1631 accepted
-  days > 0.2). The identification levers (A–E) are required under either objective.
+  price, so the returned `rmse` blows up on cheap deep-OTM wing cells (a large share of accepted days
+  carry a relative-price `rmse` > 0.2). The identification levers (A–E) are required under either objective.
 
 Line numbers in any sketch below drift — match on code, not line numbers.
 
@@ -82,7 +86,7 @@ Line numbers in any sketch below drift — match on code, not line numbers.
 | Phase 2 — IV-space acceptance gate | `src/calibrate_heston.py` | medium | ✅ done |
 | Write-desync fix | `src/calibrator_prototype.py` | low | ✅ done |
 | **Phase 3 — resolve boundary pegging (raise accept rate)** | `src/calibrate_heston.py`, `src/config.py`, `src/_utils.py` | medium | ⏳ **open** (Lever A `MIN_DTM`=14 + coverage-widen + OTM floor landed; Lever B wired but tested null; C/D/E open) |
-| Bates (1996) extension — engine, model-namespaced routing, downstream | `src/calibrate_bates.py`, `src/_engine_common.py`, `src/config.py`, `src/pricing/` | high (schema) | ✅ done (pilot baseline; full multi-year run + `nu`/`delta` widening deferred) |
+| Bates (1996) extension — engine, model-namespaced routing, downstream | `src/calibrate_bates.py`, `src/_engine_common.py`, `src/config.py`, `src/pricing/` | high (schema) | ✅ done (full `vol`+`price` runs committed; `nu`/`delta` widening deferred) |
 
 **QuantLib 1.35 API facts** (confirmed in this environment; the plan relies on no non-existent calls):
 
@@ -105,39 +109,33 @@ Line numbers in any sketch below drift — match on code, not line numbers.
 
 ## Current status: why good fits still reject
 
-> **Scope note.** The numbers in this section are the **pre-widening `price`-objective baseline** (old
-> config: `MAX_NK`=8, `MIN_DTM`=29/7, full multi-year sample). Since then Lever A (`MIN_DTM`=14), a
-> coverage-widen, and an OTM floor have landed, Lever B was tested null, and the default objective is now
-> `vol` — see the Phase 3 plan. The pegging *mechanism* described here is unchanged; the **current
-> committed full-sample figures (`vol`, widened config: 3,217 attempted, 1,631 accepted, 50.7%) are in the
-> Phase 3 and Objective-knob bullets above**. The pre-widening `price` figures in this section are retained
-> as the historical baseline that motivated the levers. The worked `2024-10-07..11` table below remains a
-> valid illustration of the degeneracy.
+> **Scope note.** The figures in this section are an **earlier baseline** retained to motivate the levers;
+> they predate the current config and the planned re-run (see the numbers caveat at the top of the file).
+> Since then Lever A (`MIN_DTM`=14), a coverage-widen, and an OTM floor have landed, Lever B was tested
+> null, and the default objective is now `vol` — see the Phase 3 plan. The pegging *mechanism* described
+> here is unchanged. The worked `2024-10-07..11` table below remains a valid illustration of the degeneracy.
 
-**Full-set update (pre-widening baseline — Phase 2 engine over the long sample).** A
-multi-year run **attempted 3215 trading days and accepted only 1713 (~53%)**, just under the 60% target.
-Crucially, `calibrations.csv` holds **only accepted days**, and the gate (`_on_boundary`) rejects any
-boundary-pegged fit — so its 0 pegged `kappa`/`rho` is **tautological**, *not* evidence the pegging is
-fixed. The 1502 rejected days are dropped before write, but their cause is now logged to
-`results/heston/calibrations/price/rejections.csv` (`reason` ∈ `no_trades/no_rate/thin/pegged/iv_miss/no_fit`), so the
-pegged-vs-thin split is no longer presumed but **measured**: **pegged 1398, iv_miss 103, no_trades 1**
-(thin/no_rate/no_fit 0). Pegging is thus confirmed the dominant cause — 1398 of 1502 rejections (93%),
-43% of all attempted days — and the open lever. What the long run *also* reveals — because the gate
-never tests it — is **Feller** in the accepted population: `feller < 0` on 1701/1713 (99%) accepted days
-and `eta > 1.5` on ~8.5% (146 days, max ≈1.99). For reference the accepted-day param spreads are `kappa`
-mean ≈2.73 / median ≈2.19, `rho` mean ≈−0.77, IV-RMSE median 0.0048 — but read these as "what passes the
-gate", not "the calibrator no longer pegs". Feller is Lever D; pegging is Levers A–C/E, all still open.
+**Full-set update (earlier baseline — Phase 2 engine over the long sample).** A multi-year run accepted
+**only about half** of attempted trading days, just under the 60% target. Crucially, `calibrations.csv`
+holds **only accepted days**, and the gate (`_on_boundary`) rejects any boundary-pegged fit — so its 0
+pegged `kappa`/`rho` is **tautological**, *not* evidence the pegging is fixed. The rejected days are
+dropped before write, but their cause is logged to `rejections.csv`
+(`reason` ∈ `no_trades/no_rate/thin/pegged/iv_miss/no_fit`), so the pegged-vs-thin split is no longer
+presumed but **measured**: pegging is by far the dominant cause and the open lever. What the long run
+*also* reveals — because the gate never tests it — is **Feller** in the accepted population: `feller < 0`
+on nearly every accepted day, with a minority at `eta > 1.5`. Read the accepted-day param spreads as
+"what passes the gate", not "the calibrator no longer pegs". Feller is Lever D; pegging is Levers A–C/E,
+all still open.
 
 **Per-cell IV selection (latest-trade → highest-volume).** When several trades land in one
 (`K*`, maturity) surface cell, the pivot now keeps the **highest-volume** trade's IV (sort `sel` by
 `trade_size`, then `aggfunc='last'`) rather than the chronologically last — the heaviest print is the
-least microstructure-noisy and is consistent with the volume-weighted `S_ref`. A full re-sweep shows
-this is a near-no-op at the population level: accept rate 1713/3215 (53.3%) versus the latest-trade
-run's 1699 (~53%), with the param distributions, Feller-violation share, and IV-RMSE all unchanged
-within noise. That is expected — a per-cell tie-break among trades that mostly agree does not touch the
-`(kappa, rho, eta)` skew degeneracy that drives the pegging. The next variant to test is a
-**volume-weighted mean** IV per cell (uses every trade in the cell, not one print); on `high_move` days
-it blends IVs across intraday spots, so watch those.
+least microstructure-noisy and is consistent with the volume-weighted `S_ref`. A full re-sweep showed
+this is a near-no-op at the population level: accept rate, param distributions, Feller-violation share,
+and IV-RMSE all unchanged within noise. That is expected — a per-cell tie-break among trades that mostly
+agree does not touch the `(kappa, rho, eta)` skew degeneracy that drives the pegging. The next variant
+to test is a **volume-weighted mean** IV per cell (uses every trade in the cell, not one print); on
+`high_move` days it blends IVs across intraday spots, so watch those.
 
 The pegging mechanism is clearest on a small, hand-checked slice, so the worked example below is the
 `2024-10-07..11` week (5 trading days; `python src/calibrator_prototype.py`, best-fit params shown
@@ -298,10 +296,11 @@ issue" bullet and the Done criteria below in the **same** change as whichever le
    move those metrics is reverted, not kept.
 3. Update `CLAUDE.md` in the **same** change as whichever lever lands (boundary-pegging bullet, any
    new knob or behaviour), and tick the Done criterion here.
-4. **Runtime.** The driver runs **every** raw file (no slice). At the widened coverage a full `vol`
-   run over the ~3,217-day sample takes a few hours (multi-start LM, ~1,500 cells/day, 8 parallel jobs).
-   For fast lever iteration, develop on a temporary slice of `files` in `calibrator_prototype.main`, then
-   confirm a lever on the full set (slice removed) before committing the metrics.
+4. **Runtime.** The driver runs **every** raw file unless `--LIMIT N` is given. At the widened coverage a
+   full `vol` run over the multi-year sample takes a few hours (multi-start LM, ~1,500 cells/day; worker
+   count is `--MAX_JOBS`, default `cpu_count//4`). For fast lever iteration use `--LIMIT N` (or a temporary
+   slice of `files` in `calibrator_prototype.main`), then confirm a lever on the full set before committing
+   the metrics.
 
 ## Done criteria
 
@@ -316,14 +315,15 @@ issue" bullet and the Done criteria below in the **same** change as whichever le
       (`theta` 0.029–0.031, `v0` 0.007–0.026, `eta` 0.8–1.5) versus the old cross-bucket `theta`
       0.037 → 11.93 swing; genuine fit ~0.7–1.0 vol points.
 - [ ] **Phase 3 — acceptance (open):** ≥ 60% of the full multi-year set's days accept with no pegged
-      bound, `eta < 1.5`, Feller mostly satisfied, `theta`/`v0` unchanged. **Current committed default**
-      (`vol`, widened config, full sample of 3,217 days): **1,631 accepted (50.7%)** — short of target;
-      `results/heston/calibrations/vol/rejections.csv` split **pegged 1467 (92.5%), iv_miss 116, no_trades 3**;
-      Feller `< 0` on **all 1,631** accepted days, `eta > 1.5` on **36.5%** (median `eta` 1.34). **Landed:**
-      default objective `vol`, Lever A (`MIN_DTM`=14), coverage-widen (`MAX_NK`=40/`MAX_NT`=20/`MAX_DTM`=730),
-      `OTM_MONEYNESS_FLOOR`=0.6; Lever B wired default-off (tested null). The wing residual is now small and
-      mixed-sign (RMSE ~0.011), but acceptance is still ~half and Feller violation is now universal, so
-      Levers C/D (anchor `kappa`, soft Feller penalty + revisit the `eta` cap) are the open work.
+      bound, `eta < 1.5`, Feller mostly satisfied, `theta`/`v0` unchanged. **Current baseline** (`vol`,
+      widened config): only about **half** of attempted days accept — short of target; the dominant
+      rejection cause is pegging (see each run's `rejections.csv`), Feller `< 0` on essentially all accepted
+      days, and a minority sit at `eta > 1.5`. **Landed:** default objective `vol`, Lever A (`MIN_DTM`=14),
+      coverage-widen (`MAX_NK`=40/`MAX_NT`=20/`MAX_DTM`=730), `OTM_MONEYNESS_FLOOR`=0.6; Lever B wired
+      default-off (tested null). The wing residual is now small and mixed-sign, but acceptance is still
+      ~half and Feller violation is near-universal, so Levers C/D (anchor `kappa`, soft Feller penalty +
+      revisit the `eta` cap) are the open work. (Exact figures pending the planned re-run; see the numbers
+      caveat at the top.)
 
 ---
 
@@ -464,15 +464,15 @@ comparison**, which needs both result sets on disk at once — hence routing is 
   `build_model_engine(row, calc_date, model)` dispatcher; the pricing/inversion helpers were already
   engine-agnostic.
 
-**Pilot result (committed Bates baseline).** A 100-day pilot (`--LIMIT 100`, 2024-05-23..2024-10-15,
-`results/bates/calibrations/vol/`) accepted **94/100** vs Heston **63/100** on the same window (+31 days,
-36 of them Heston-rejected days the jumps rescued from pegging). On the 58 days both accept, Bates
-IV-RMSE is **35% tighter** (median 0.0043 vs 0.0067, better on all 58) and median **`eta` halves**
-(1.17 → 0.52: jumps absorb the tail the Heston vol-of-vol was overfitting). Feller barely moves (still
-< 0 on 56/58). Jumps behaved as designed: `lambda_` median 0.065, 31/94 near-zero (Heston collapse); the
-weakly-identified `nu`/`delta` park on their bounds (gate-exempt), a sign those two bounds are tight.
+**Bates result (committed full runs).** Both `vol` and `price` full multi-year Bates runs are committed
+(`results/bates/calibrations/{vol,price}/`) as part of the prior baseline pending regeneration. Against
+Heston on the same days Bates **accepts more** (the jumps rescue days Heston rejected for pegging), fits
+**tighter** in IV-RMSE, and roughly **halves median `eta`** (jumps absorb the tail the Heston vol-of-vol
+was overfitting). Feller barely moves (still violated). Jumps behave as designed: many days collapse to
+near-zero `lambda_` (pure Heston), and the weakly-identified `nu`/`delta` park on their bounds
+(gate-exempt), a sign those two bounds are tight. The `BatesEngine` is ~4.5× slower per day than the
+Heston analytic engine. Exact accept counts are in each run's `config_spec.json`; refresh after the re-run.
 
-**Still deferred (not yet done).** A **full multi-year Bates run** for a committed baseline (the
-`BatesEngine` is ~4.5× slower per day, ~7 h for the full sample), and an optional **`nu`/`delta` bound
-widening** (e.g. -1.0 / 1.0) so rare-jump days find an interior optimum and the jump params stay
-interpretable. A Bates write-up section in `manuscript/skew-calibration.tex` is a separate document task.
+**Still deferred (not yet done).** An optional **`nu`/`delta` bound widening** (e.g. -1.0 / 1.0) so
+rare-jump days find an interior optimum and the jump params stay interpretable. A Bates write-up section
+in `manuscript/skew-calibration.tex` is a separate document task.

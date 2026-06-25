@@ -1,15 +1,15 @@
 
 \textbf{Bates model prices} produced by the market\!\,\footnote{
-The fit uses 418 calibration cells across 13 maturities and 123 strikes,
-backed by 280,247 contracts of traded volume.
-The reference spot was $S_{\mathrm{ref}} = 1500.3753$,
-priced under a risk-free rate of 0.14\% and a dividend rate of 2.13\%.
-The intraday spot range was 0.56\%.
-Fit quality is 0.36 vol points of implied-volatility RMSE,
-with a relative-price RMSE of 0.1217.
+The fit uses 653 calibration cells across 18 maturities and 118 strikes,
+backed by 267,772 contracts of traded volume.
+The reference spot was $S_{\mathrm{ref}} = 2120.0581$,
+priced under a risk-free rate of 0.19\% and a dividend rate of 1.97\%.
+The intraday spot range was 0.33\%.
+Fit quality is 0.27 vol points of implied-volatility RMSE,
+with a relative-price RMSE of 0.1063.
 The Feller condition violates at this calibration,
-with $2\kappa\theta - \eta^2 = -0.074$.
-} 
+with $2\kappa\theta - \eta^2 = -0.215$.
+}
 calibrated pricing operator:
 \begin{center}
     $C_{\mathrm{Bates}}(\Theta^{\star}; S,K,\tau,w)$~\eqref{eq:bates-cf}~\eqref{eq:accept}.
@@ -18,12 +18,12 @@ calibrated pricing operator:
     \begin{center}
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/bates/surfaces/plots/tex/price_surface_puts.eps}
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/bates/surfaces/plots/tex/price_surface_calls.eps}
-        \caption{Bates option prices for $S_{\mathrm{ref}}$ 1500.3753 on January 25, 2013 with $\Theta^{\star} = (0.0615,\ 0.5521,\ 0.3767,\ -0.7631,\ 0.0103, \ 0.0723, \ -0.2699, \ 0.3295)$: puts wing (left) and calls wing (right).}
-        \label{Fig:bates-wings}
+        \caption{Bates option prices for $S_{\mathrm{ref}}$ 2120.0581 on May 15, 2015 with $\Theta^{\star} = (0.0582,\ 1.1934,\ 0.5949,\ -0.86,\ 0.0111, \ 0.0397, \ -0.3142, \ 0.3879)$: puts wing (left) and calls wing (right).}
+        \label{fig:bates-wings}
     \end{center}
     \begin{center}
         \includegraphics[width=9cm,keepaspectratio=true]{results/bates/surfaces/plots/tex/smile_surface.eps}
-        \caption{\emph{Out of the money} implied volatilites from Figure~\ref{Fig:bates-wings}}
+        \caption{\emph{Out of the money} implied volatilites from Figure~\ref{fig:bates-wings}}
     \end{center}
 \end{figure}
 

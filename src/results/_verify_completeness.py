@@ -38,7 +38,7 @@ from _utils import _file_date
 from config import calib_paths
 from _results_config import MODEL, OBJECTIVE
 
-CALIBRATIONS_FILE, REJECTIONS_FILE, TESTS = calib_paths(MODEL, OBJECTIVE)
+
 
 
 def _raw_dates():
@@ -58,7 +58,16 @@ def _result_dates(path):
     return df["date"].astype(str).tolist()
 
 
-def main():
+def main(model=None, objective=None):
+    """Audit that a run's calibrations.csv + rejections.csv partition the raw trading days cleanly.
+
+    `model`/`objective` default to the `_results_config` switches when None, so a notebook can audit a
+    different (model, objective) without editing `_results_config`. Read-only. Prints the report and
+    returns 0 if no discrepancy was found, else 1 (usable as a CLI exit code).
+    """
+    model = model or MODEL
+    objective = objective or OBJECTIVE
+    CALIBRATIONS_FILE, REJECTIONS_FILE, TESTS = calib_paths(model, objective)
     raw_dates = _raw_dates()
     calib_dates = _result_dates(CALIBRATIONS_FILE)
     reject_dates = _result_dates(REJECTIONS_FILE)
@@ -110,7 +119,7 @@ def main():
     duplicate = sorted(set(duplicate))
 
     # ---- report ----
-    print(f"model={MODEL}  objective={OBJECTIVE}")
+    print(f"model={model}  objective={objective}")
     print(f"raw dir:        {RAW}")
     print(f"calibrations:   {CALIBRATIONS_FILE}")
     print(f"rejections:     {REJECTIONS_FILE}")

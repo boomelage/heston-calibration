@@ -17,7 +17,9 @@ Out:  results/price_surface_calls.eps, price_surface_puts.eps, price_surface_bot
 import numpy as np
 import pandas as pd
 import matplotlib
-matplotlib.use('Agg')               # headless: write files, never open a window
+# NB: do not force the 'Agg' backend at import time -- that would override an interactive backend
+# (e.g. ipympl's 'widget') a notebook selects with `%matplotlib widget` before importing this module.
+# The CLI (__main__) selects 'Agg' itself for headless file writing.
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # registers the '3d' projection; also the ax type below
 from pathlib import Path
@@ -39,12 +41,6 @@ for _p in (str(HERE), str(SRC), str(RESULTS_CODE)):
 from _results_config import (  # type: ignore
     MODEL, OBJECTIVE, PLOT_RCPARAMS, SURFACE_ELEV, SURFACE_AZIM, SURFACE_FIGSIZE)
 from config import calib_paths  # type: ignore
-MODEL_LABEL = MODEL.capitalize()
-SURFACES = RESULTS / MODEL / "surfaces"                 # data/figure dir at repo/results/<model>/surfaces
-SURFACE_CSV = SURFACES / "data" / "example_surface.csv"
-DAY_RESULTS = SURFACES / "data" / "day_results.pkl"
-TEXDIR = SURFACES / "plots" / "tex"
-TEXDIR.mkdir(parents=True, exist_ok=True)
 
 # Match the default LaTeX font (Computer Modern serif) so the axis text blends with the surrounding
 # document. Uses matplotlib's bundled Computer Modern (cmr10) -- no LaTeX/usetex toolchain required.
@@ -52,9 +48,17 @@ plt.rcParams.update(PLOT_RCPARAMS)
 ELEV, AZIM = SURFACE_ELEV, SURFACE_AZIM
 
 
-def plot_surface(grid, out_path, title=None, invert_K=False, invert_T=False, AZIM_ADJUST=0.0,
-                 xlabel=r'moneyness ($K/S$)', zlabel=r'price'):
-    """Draw one moneyness x maturity x z surface (grid: index=moneyness, columns=maturity_days)."""
+def _texdir(model):
+    """Figure/tex output dir for a model: repo/results/<model>/surfaces/plots/tex."""
+    return RESULTS / model / "surfaces" / "plots" / "tex"
+
+
+def plot_surface(grid, out_path=None, title=None, invert_K=False, invert_T=False, AZIM_ADJUST=0.0,
+                 xlabel=r'moneyness ($K/S$)', zlabel=r'price', save=True, show=False):
+    """Draw one moneyness x maturity x z surface (grid: index=moneyness, columns=maturity_days).
+
+    Returns the Figure. Saves an EPS to `out_path` only when `save` and `out_path` are set; closes the
+    figure afterwards unless `show` (so a notebook keeps it live to render, e.g. under ipympl)."""
 
     strikes = grid.index.to_numpy(dtype=float)
     maturities = grid.columns.to_numpy(dtype=float) / 365.0      # days -> years, like the example
@@ -91,14 +95,21 @@ def plot_surface(grid, out_path, title=None, invert_K=False, invert_T=False, AZI
         ax.set_title(title)
     # fig.colorbar(surf, shrink=0.5, aspect=5)
     fig.tight_layout()
-    # pad_inches: bbox_inches='tight' under-counts the rotated 3D z-axis label in mplot3d and crops
-    # it off (the smile view rotates the z-axis title out past the tight box); the pad keeps it in.
-    fig.savefig(out_path, format='eps', bbox_inches='tight', pad_inches=0.2)
-    plt.close(fig)
-    print(f"wrote {out_path.name}")
+    if save and out_path is not None:
+        # pad_inches: bbox_inches='tight' under-counts the rotated 3D z-axis label in mplot3d and
+        # crops it off (the smile view rotates the z-axis title out past the tight box); the pad keeps
+        # it in.
+        fig.savefig(out_path, format='eps', bbox_inches='tight', pad_inches=0.2)
+        print(f"wrote {out_path.name}")
+    if not show:
+        plt.close(fig)
+    return fig
 
 
-def write_otm_TeX(spot, date, params, market, fit):
+def write_surfaces_TeX(spot, date, params, market, fit, model=None, texdir=None):
+    model = model or MODEL
+    model_label = model.capitalize()
+    texdir = texdir or _texdir(model)
 
     TeX = \
 r"""
@@ -112,7 +123,7 @@ Fit quality is <ivrmse> vol points of implied-volatility RMSE,
 with a relative-price RMSE of <rmse>.
 The Feller condition <fellersign> at this calibration,
 with $2\kappa\theta - \eta^2 = <feller>$.
-} 
+}
 calibrated pricing operator:
 \begin{center}
     <operator>~\eqref{eq:accept}.
@@ -122,11 +133,11 @@ calibrated pricing operator:
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/price_surface_puts.eps}
         \includegraphics[width=6.25cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/price_surface_calls.eps}
         \caption{<MODEL_LABEL> option prices for $S_{\mathrm{ref}}$ <spot> on <date> with <parameters>: puts wing (left) and calls wing (right).}
-        \label{Fig:<MODEL>-wings}
+        \label{fig:<MODEL>-wings}
     \end{center}
     \begin{center}
         \includegraphics[width=9cm,keepaspectratio=true]{results/<MODEL>/surfaces/plots/tex/smile_surface.eps}
-        \caption{\emph{Out of the money} implied volatilites from Figure~\ref{Fig:<MODEL>-wings}}
+        \caption{\emph{Out of the money} implied volatilites from Figure~\ref{fig:<MODEL>-wings}}
     \end{center}
 \end{figure}
 
@@ -134,20 +145,20 @@ calibrated pricing operator:
 
     hestonparams = r'$\Phi^{\star} = (<theta>,\ <kappa>,\ <eta>,\ <rho>,\ <v0>)$'
     batesparams = r'$\Theta^{\star} = (<theta>,\ <kappa>,\ <eta>,\ <rho>,\ <v0>, \ <lambda>, \ <nu>, \ <delta>)$'
-    paramstr = hestonparams if MODEL == 'heston' else batesparams
+    paramstr = hestonparams if model == 'heston' else batesparams
     paramstr = paramstr.replace('<theta>', str(round(params['theta'], 4)))
     paramstr = paramstr.replace('<kappa>', str(round(params['kappa'], 4)))
     paramstr = paramstr.replace('<eta>', str(round(params['eta'], 4)))
     paramstr = paramstr.replace('<rho>', str(round(params['rho'], 4)))
     paramstr = paramstr.replace('<v0>', str(round(params['v0'], 4)))
-    if MODEL == 'bates':
+    if model == 'bates':
         paramstr = paramstr.replace('<lambda>', str(round(params['lambda_'], 4)))
         paramstr = paramstr.replace('<nu>', str(round(params['nu'], 4)))
         paramstr = paramstr.replace('<delta>', str(round(params['delta'], 4)))
     hestoneq = r'$C_{\mathrm{H}}(\Phi^{\star}; S,K,\tau,w)$~\eqref{eq:heston-price}'
     bateseq = r'$C_{\mathrm{Bates}}(\Theta^{\star}; S,K,\tau,w)$~\eqref{eq:bates-cf}'
     TeX = TeX.replace('<parameters>', paramstr)
-    TeX = TeX.replace('<operator>', hestoneq if MODEL == 'heston' else bateseq)
+    TeX = TeX.replace('<operator>', hestoneq if model == 'heston' else bateseq)
     TeX = TeX.replace('<spot>', str(spot))
     TeX = TeX.replace('<date>', str(date.strftime(r"%B %d, %Y")))
     TeX = TeX.replace('<r>', f"{market['risk_free_rate']*100:.2f}")
@@ -165,13 +176,14 @@ calibrated pricing operator:
         r' The intraday range exceeded the 3\% threshold, so treat $S_{\mathrm{ref}}$ with caution.'
         if fit['high_move'] else '')
     # Model-namespace the figure include paths and the caption label (Heston / Bates).
-    TeX = TeX.replace('<MODEL>', str(MODEL))
-    TeX = TeX.replace('<MODEL_LABEL>', str(MODEL_LABEL))
+    TeX = TeX.replace('<MODEL>', str(model))
+    TeX = TeX.replace('<MODEL_LABEL>', str(model_label))
 
-    tex_path = TEXDIR / r"surfaces.tex"
+    texdir.mkdir(parents=True, exist_ok=True)
+    tex_path = texdir / r"surfaces.tex"
     tex_path.write_text(TeX)
 
-def otm_grid(df, side):
+def price_grid(df, side):
     surface = df[df['w'] == side].copy()
     surface['moneyness'] = np.where(
         surface['w'] == 'call',
@@ -192,25 +204,53 @@ def smile_for(df):
                   ((surface['w'] == 'call') & (surface['moneyness'] > 0))]
     return otm.pivot(index='moneyness', columns='maturity_days', values='implied_vol')
     
-def main():
-    from make_surface import make_surface  # type: ignore (MODEL/OBJECTIVE imported at module top)
-    CALIBRATIONS_FILE = calib_paths(MODEL, OBJECTIVE)[0]
-    cal = pd.read_csv(CALIBRATIONS_FILE)
-    cal = cal.sort_values(by='iv_rmse',ascending=True).reset_index(drop=True)
+def main(model=None, objective=None, target_date=None, save=True, show=False):
+    """Render the puts/calls/smile OTM surfaces for one calibrated day.
 
-    target_date = cal['date'][0]
-    df, day_results = make_surface(target_date=target_date)
+    `model`/`objective` default to the `_results_config` switches when None (pass them to inspect a
+    different run). `target_date` picks the day (default: the lowest-IV-RMSE day). `save=True` writes
+    the three EPS + surfaces.tex under results/<model>/surfaces/plots/tex/; `save=False` skips disk.
+    `show=True` leaves the figures open (does not close them) so the caller can render them; the
+    rendering itself is the caller's job (see inspect.ipynb). Returns `(figs, day_results)` where
+    `figs` is a dict keyed 'calls'/'puts'/'smile'.
+    """
+    from make_surface import make_surface  # type: ignore
+    model = model or MODEL
+    objective = objective or OBJECTIVE
+    texdir = _texdir(model)
+    if save:
+        texdir.mkdir(parents=True, exist_ok=True)
+
+    calibrations_file = calib_paths(model, objective)[0]
+    cal = pd.read_csv(calibrations_file)
+    cal = cal.sort_values(by='iv_rmse', ascending=True).reset_index(drop=True)
+    if target_date is None:
+        target_date = cal['date'][0]
+
+    df, day_results = make_surface(target_date=target_date, model=model, objective=objective)
     date = day_results['date']
     spot = day_results['spot']
     params = day_results['params']
     market = day_results['market']
     fit = day_results['fit']
 
-    plot_surface(otm_grid(df, 'call'), TEXDIR / "price_surface_calls.eps", invert_K=True)
-    plot_surface(otm_grid(df, 'put'), TEXDIR / "price_surface_puts.eps", invert_K=True)
-    plot_surface(smile_for(df), TEXDIR / "smile_surface.eps", AZIM_ADJUST=-10, invert_T=True,
-                 xlabel=r'log-moneyness ($\ln(K/S)$)', zlabel=r'implied volatility ($\sigma^{\mathrm{mod}}$)')
-    write_otm_TeX(spot, date, params, market, fit)
+    figs = {
+        'calls': plot_surface(price_grid(df, 'call'), texdir / "price_surface_calls.eps",
+                              invert_K=True, xlabel=r"moneyness ($S/K$)", zlabel="call price",
+                              save=save, show=show),
+        'puts': plot_surface(price_grid(df, 'put'), texdir / "price_surface_puts.eps",
+                             invert_K=True, zlabel="put price", save=save, show=show),
+        'smile': plot_surface(smile_for(df), texdir / "smile_surface.eps", AZIM_ADJUST=-10,
+                              invert_T=True, xlabel=r'log-moneyness ($\ln(K/S)$)',
+                              zlabel=r'implied volatility ($\sigma^{\mathrm{mod}}$)',
+                              save=save, show=show),
+    }
     
+    if save:
+        write_surfaces_TeX(spot, date, params, market, fit, model=model, texdir=texdir)
+        
+    return figs, day_results
+
 if __name__ == "__main__":
+    matplotlib.use('Agg')   # headless: write files, never open a window
     main()

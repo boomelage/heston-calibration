@@ -99,7 +99,7 @@ SMILE_CMAP = _mcolors.ListedColormap(_tab10_colors, name="tab10_noviolet")
 # ------- `surfaces/plot_surfaces.py` parameters
 
 # 3D view angle (elevation, azimuth) for the price-surface renders.
-SURFACE_ELEV, SURFACE_AZIM = 25, -60
+SURFACE_ELEV, SURFACE_AZIM = 25, -65
 
 # Figure size (inches) for each 3D surface render.
 SURFACE_FIGSIZE = (5.0, 4.0)

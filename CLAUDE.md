@@ -176,9 +176,20 @@ calibrated params in `calibrations.csv` and overlays the market scatter straight
 `calibration_tests/` file (the exact contracts the day was fit on, market IV in the `volatility`
 column). A missing tests file drops the scatter (model lines only over `MATURITIES_DAYS`); a missing
 `calibrations.csv` row is a hard error. They resolve `REPO = Path(__file__).parents[2]` and read calibrations from / write figures into
-the **repo-level** `results/<model>/` tree, and share the QuantLib helpers (`build_model_engine` ->
+the **repo-level** `results/<model>/` tree, and share helpers across **two** modules. The
+**model-agnostic, config-free** helpers live in `src/_utils.py` (so the calibrator can use them and
+that module never imports `_results_config`): the QuantLib helpers (`build_model_engine` ->
 `build_heston_engine`/`build_bates_engine`, plus the engine-agnostic `model_price`,
-`model_implied_vol`) in `src/_utils.py`. They are **model-aware**: `MODEL`/`OBJECTIVE` plus every
+`model_implied_vol`) and the pure surface-selection helpers (`_normalize_dates`, `_clip_maturities`,
+`_sparse_maturities`, `_sparse_strikes` — the last formerly `_sparse_market_strikes`; all take their
+window/count/step explicitly, no `_results_config` defaults). The **results-layer** helpers that *do*
+read `_results_config` knobs or the `results/<model>/` tree live in `src/results/_results_utils.py`
+(which may import `_results_config`): `load_calibrations_by_date` (the date-indexed calibrations.csv
+load shared by `smiles.py` + `make_surface.py`), `build_day_engine` (the engine + Black-inversion
+process build, the single home of that construction, also shared by both), `_load_test_scatter`,
+`_maturity_colors`, and `_day_from_row`. (`make_surface.py`'s richer `day_results` dict is kept
+separate from `_day_from_row` on purpose: it carries extra `fit` fields `plot_surfaces.py` consumes.)
+They are **model-aware**: `MODEL`/`OBJECTIVE` plus every
 plotting/grid knob for `make_surface.py`, `plot_surfaces.py` and `smiles.py` live in **one** file,
 `src/results/_results_config.py`. The two top-level graders `validate_calibrations.py` and
 `wing_residuals.py` also import `MODEL`/`OBJECTIVE` from `_results_config` (each script adds `src/results`
@@ -192,6 +203,20 @@ Bates jump triple in `day_results['params']`, and `smiles.py` shows it in the pe
 (`objective_comparison.py` needs *both* a price and a vol run for the chosen model on disk.) Run e.g.
 `python src/results/surfaces/plot_surfaces.py` then `python src/results/smiles/smiles.py` after a
 calibration to refresh the paper's figures.
+
+**Importable for notebooks (`inspect.ipynb`).** Each of these scripts' entry points takes optional
+`model=None, objective=None` (defaulting to the `_results_config` switches when None, so a notebook can
+pass a different pair without editing `_results_config`) and resolves all `(model, objective)`-dependent
+state **inside** the call rather than at import. The CLI/`__main__` path is unchanged (no args ->
+`_results_config` defaults). The writing scripts also take `save=True` (set `save=False` to skip every
+disk write and just return/print); the plot scripts (`plot_surfaces.main`, `smiles.main`,
+`make_surface.make_surface`) take `show=False` (set `show=True` to keep the figures live for inline
+rendering, e.g. under `%matplotlib widget`/ipympl) and **return** their figures (`plot_surfaces.main` ->
+`(figs_dict, day_results)`, `smiles.main` -> `{tag: Figure}`); the graders return their frames
+(`validate_calibrations.main` -> per-day report DataFrame, `wing_residuals.main` -> `(df, tables)`,
+`_verify_completeness.main` -> 0/1). `plot_surfaces.py` no longer forces the `Agg` backend at import
+(it selects `Agg` only under `__main__`), so a notebook's interactive backend survives the import.
+`inspect.ipynb` enables `%autoreload 2` so edits to these modules take effect without a kernel restart.
 
 ## Pipeline architecture
 

@@ -14,6 +14,7 @@ if [ -d "$SCRIPT_DIR" ]; then
         ! -name "LICENSE" \
         ! -name ".gitignore" \
         ! -name ".gitattributes" \
+        ! -name "*.ipynb" \
         -delete
 
     echo "Cleanup complete"

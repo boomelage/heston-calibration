@@ -1,6 +1,7 @@
 results/*.pdf
 results/*.tex
 .DS_Store
+.vscode
 
 # ----- Large per-day option data: keep folders, ignore contents (see README.md / CLAUDE.md) -----
 # raw CBOE trade files ~80-90 MB/day (near GitHub's 100 MB/file limit). The calibrator reads these
@@ -93,6 +94,7 @@ target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
+.virtual_documents
 
 # IPython
 profile_default/

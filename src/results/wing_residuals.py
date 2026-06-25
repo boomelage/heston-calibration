@@ -48,19 +48,24 @@ ABS_LM_EDGES = [0.0, 0.02, 0.04, 0.07, 0.12, 0.20, np.inf]
 DTM_EDGES = [0, 45, 90, 180, 10000]
 
 
-def _tests_dir(objective):
-    return RESULTS / MODEL / "calibrations" / objective / "calibration_tests"
+def _tests_dir(model, objective):
+    return RESULTS / model / "calibrations" / objective / "calibration_tests"
 
 
-def load_residuals(objective=OBJECTIVE):
+def load_residuals(objective=None, model=None):
     """Invert every repriced contract's model price (heston/bates column) to a Black IV and return the residual frame.
 
     Columns: date, days_to_maturity, w, spot_price, strike_price, lm (signed ln K/S), abs_lm,
     market_iv, model_iv, resid (= model_iv - market_iv). Rows whose inversion failed are dropped.
+
+    `model`/`objective` default to the `_results_config` switches when None, so a notebook can pass
+    its own pair without touching `_results_config`.
     """
-    files = sorted(_tests_dir(objective).glob("*.csv"))
+    model = model or MODEL
+    objective = objective or OBJECTIVE
+    files = sorted(_tests_dir(model, objective).glob("*.csv"))
     if not files:
-        raise SystemExit(f"no calibration_tests files under {_tests_dir(objective)}")
+        raise SystemExit(f"no calibration_tests files under {_tests_dir(model, objective)}")
     frames = []
     for f in files:
         df = pd.read_csv(f)
@@ -68,7 +73,7 @@ def load_residuals(objective=OBJECTIVE):
         df["model_iv"] = [
             implied_vol(p, w, S, K, r, g, t)
             for p, w, S, K, r, g, t in zip(
-                df[MODEL], df["w"], df["spot_price"], df["strike_price"],
+                df[model], df["w"], df["spot_price"], df["strike_price"],
                 df["risk_free_rate"], df["dividend_rate"], T,
             )
         ]
@@ -94,8 +99,9 @@ def _agg(df, by):
     return out
 
 
-def summarize(df):
+def summarize(df, objective=None):
     """Print the three stratified residual tables and return them as a dict of frames."""
+    objective = objective or OBJECTIVE
     df = df.copy()
     df["lm_bucket"] = pd.cut(df["lm"], LM_EDGES)
     df["abs_bucket"] = pd.cut(df["abs_lm"], ABS_LM_EDGES)
@@ -108,7 +114,7 @@ def summarize(df):
     pd.options.display.float_format = "{:+.4f}".format
     n_days = df["date"].nunique()
     print(f"\n=== residual = model_iv - market_iv (vol points); - = model UNDER ===")
-    print(f"    {len(df)} contracts across {n_days} days, objective={OBJECTIVE}\n")
+    print(f"    {len(df)} contracts across {n_days} days, objective={objective}\n")
 
     print("--- by signed log-moneyness ln(K/S)  (puts<0, calls>0; exposes wing asymmetry) ---")
     print(by_signed.to_string())
@@ -123,9 +129,18 @@ def summarize(df):
     return {"signed": by_signed, "abs": by_abs, "maturity": by_mat}
 
 
-def main():
-    df = load_residuals(OBJECTIVE)
-    summarize(df)
+def main(model=None, objective=None):
+    """Load the residual frame and print/return the stratified tables.
+
+    `model`/`objective` default to the `_results_config` switches when None. Returns
+    `(df, tables)`: the per-contract residual frame and the dict of bucket frames from `summarize`,
+    so a notebook can reuse them without re-reading the files.
+    """
+    model = model or MODEL
+    objective = objective or OBJECTIVE
+    df = load_residuals(objective=objective, model=model)
+    tables = summarize(df, objective=objective)
+    return df, tables
 
 
 if __name__ == "__main__":

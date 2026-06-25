@@ -21,6 +21,9 @@ from pricing._quantlib_config import (  # noqa: F401  (re-exported)
 MAX_NT = 20          # maturities kept, ranked by traded volume (20 reaches ~485d; volume ranking
                      # caps a top-12 surface at ~394d even when MAX_DTM is larger)
 MAX_NK = 40          # strikes kept per wing (highest OTM puts, lowest OTM calls), nearest the money
+MIN_NK = 2      # min distinct K* strikes a wing must have for a maturity to be kept (both wings);
+                     # a single-strike wing cannot anchor a smile. Maturities failing this are skipped
+                     # before the MAX_NT volume cap, so the cap counts only wing-qualifying maturities
 STRIKE_GRID = 5.0    # SPX near-money strike increment; normalised K* is snapped to this grid
 MIN_DTM = 14         # drop ultra-short maturities: Heston fits them poorly and they drive
                      # eta/kappa to extremes (Feller-violating), polluting the pooled fit

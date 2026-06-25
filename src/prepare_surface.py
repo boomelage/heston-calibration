@@ -8,6 +8,7 @@ from config import (
     MAX_NT, MAX_NK,
     OTM_MONEYNESS_FLOOR, OTM_MONEYNESS_CUTOFF,
     MIN_DTM, MAX_DTM, MAX_MOVE_PCT, STRIKE_GRID,
+    MIN_NK
 )
 
 class PreparedDay(NamedTuple):
@@ -114,25 +115,29 @@ def prepare_surface(df):
 def _select_surface(df):
     """Pick the day's calibration surface in moneyness-normalised (K*) strike space.
 
-    The trades are OTM calls and puts spanning both wings (see `_prepare_options`). Top MAX_NT
-    maturities by traded volume; within each, the MAX_NK nearest-the-money strikes per wing on K*
-    (already centred on S_ref): the highest OTM puts (below spot) and the lowest OTM calls (above
-    spot). Returns the selected snapshot rows with original strike/spot retained for repricing, or
+    The trades are OTM calls and puts spanning both wings (see `_prepare_options`). Walk maturities in
+    descending traded volume and keep a maturity only if BOTH wings carry at least MIN_NK distinct
+    K* strikes (a single-strike wing cannot anchor a smile); within each kept maturity take the MAX_NK
+    nearest-the-money strikes per wing on K* (already centred on S_ref): the highest OTM puts (below
+    spot) and the lowest OTM calls (above spot). Stop once MAX_NT qualifying maturities are collected,
+    so the volume cap is applied to the maturities that survive the wing gate (not consumed by ones that
+    fail it). Returns the selected snapshot rows with original strike/spot retained for repricing, or
     None if no maturity qualifies. The public `select_surface` wrapper turns that None into a
     `SkipDay("thin", ...)`.
     """
     byt = df.groupby('days_to_maturity')
     vol_by_t = byt['trade_size'].sum().sort_values(ascending=False)
-    T = np.sort(vol_by_t.index[:MAX_NT]).tolist()
 
     selected = []
-    for t in T:
+    for t in vol_by_t.index:
         dft = byt.get_group(t)
         cK = np.sort(dft.loc[dft['w'] == 'call', 'Kstar'].unique())
         pK = np.sort(dft.loc[dft['w'] == 'put', 'Kstar'].unique())
-        if len(cK) > 1 and len(pK) > 1:
+        if len(cK) >= MIN_NK and len(pK) >= MIN_NK:
             keep = list(pK[-min(len(pK), MAX_NK):]) + list(cK[:min(len(cK), MAX_NK)])
             selected.append(dft[dft['Kstar'].isin(keep)])
+            if len(selected) >= MAX_NT:
+                break
     if not selected:
         return None
     return pd.concat(selected, ignore_index=True)
@@ -140,7 +145,7 @@ def _select_surface(df):
 def select_surface(df):
     """Pick the day's surface and pivot it to a Kstar x maturity IV matrix.
 
-    Wraps `_select_surface` (top-volume maturities x nearest-money strikes per wing). Raises
+    Wraps `_select_surface` (top-volume wing-qualifying maturities x nearest-money strikes per wing). Raises
     `SkipDay("thin", "no usable maturities")` when no maturity qualifies. Otherwise returns
     `(sel, surf)`: `sel` is the selected snapshot rows sorted by ascending trade_size (the order the
     pivot's `aggfunc='last'` keeps the highest-volume trade per cell, and the same frame the

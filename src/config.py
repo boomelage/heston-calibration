@@ -156,9 +156,12 @@ def calib_paths(model, objective):
 
     Uniform layout: results/<model>/calibrations/<objective>/ holds calibrations.csv, rejections.csv
     and the per-day calibration_tests/ directory. No model is special-cased.
+
+    Pure path resolution -- it does NOT create the directory. Read-only callers (validators, the
+    figure scripts, a `save=False` notebook run) can resolve a path without leaving an empty tree on
+    disk. Every writer mkdirs its own output dir before writing (e.g. the calibrator's TESTS.mkdir).
     """
     base = RESULTS / model / "calibrations" / objective
-    base.mkdir(parents=True, exist_ok=True)
     return (base / "calibrations.csv",
             base / "rejections.csv",
             base / "calibration_tests")
@@ -171,9 +174,11 @@ def spec_path(model, objective):
     the spec file does not shift that contract. `calibrator_prototype` writes this JSON each run; any
     downstream script (e.g. the figure/table builders) can load it to recover the exact knobs a run
     used without hard-coding values.
+
+    Pure path resolution -- it does NOT create the directory (see `calib_paths`). `_utils.write_config_spec`
+    mkdirs the parent before writing.
     """
     base = RESULTS / model / "calibrations" / objective
-    base.mkdir(parents=True, exist_ok=True)
     return base / "config_spec.json"
 
 

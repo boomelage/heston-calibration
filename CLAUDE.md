@@ -303,10 +303,21 @@ pooled, moneyness-normalised surface — not the old per-0.5-spot-bucket fits:
    run. **Resume is automatic** (see the dedicated paragraph below): the end-of-run write **merges** this
    run's rows with whatever the files already held (dedup by date, this run wins), so old rows are never
    clobbered; on a fresh run the existing frames are empty and the merge reduces to the prior date-sorted
-   rewrite. An empty merged set **removes** its file. **Ctrl-C does not abort**: a `KeyboardInterrupt`
-   stops the loop and falls through to the end-of-run block, so the authoritative date-sorted
-   `calibrations.csv` + `rejections.csv` + `config_spec.json` are still written (merged with prior rows)
-   from the days completed so far. The end-of-run writes go through `_write_blocking`: if the target file is
+   rewrite. An empty merged set **removes** its file. **Ctrl-C is a two-stage graceful interrupt.** The
+   **first** press requests a graceful stop: a shared stop flag (a `multiprocessing` `Manager().Event()`
+   the workers poll) keeps any **not-yet-started** day from beginning, but every **in-flight** worker is
+   allowed to run to completion and write its row, so no day is left half-done (this is the point: with
+   the default `cpu_count//4` workers, an interrupt no longer abandons the ~`MAX_JOBS` days mid-fit). The
+   workers **ignore `SIGINT`** (`calibrate_by_day` sets `SIG_IGN` when invoked with a `stop_event`, but
+   only in a real worker subprocess -- it gates on `multiprocessing.parent_process()` so the inline
+   `MAX_JOBS=1` case, which joblib runs in the main process, does not clobber the main handler and stays
+   interruptible), so the console Ctrl-C cannot kill a running fit; the Manager server ignores it too
+   (`_ignore_sigint` initializer) so the flag survives. The skipped days are left for the next resume. The
+   **second** press warns and **force-aborts**, abandoning whatever is still in flight. Either way
+   execution falls through to the end-of-run block, so the authoritative date-sorted `calibrations.csv` +
+   `rejections.csv` + `config_spec.json` are still written (merged with prior rows) from the days completed
+   so far. (The first-press handler sets the flag and prints without raising; only the second press raises
+   a `KeyboardInterrupt` to tear the pool down.) The end-of-run writes go through `_write_blocking`: if the target file is
    **locked** (e.g. open in Excel) the write raises `PermissionError`, and instead of crashing the run
    prompts with `input()` ("press Enter to retry") and retries until it succeeds. The mid-run
    incremental flush is best-effort by contrast: a momentary lock there is warned and skipped (the row

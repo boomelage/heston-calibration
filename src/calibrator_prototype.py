@@ -23,10 +23,14 @@ coverage counts and the intraday spot range). It is APPENDED INCREMENTALLY as ea
 (streamed back via joblib's `return_as="generator_unordered"` and written from the single main
 process, so the file is readable mid-run in worker-completion order), then REWRITTEN SORTED BY DATE
 once the run finishes -- so the finished artefact still holds the accepted days, date-sorted, exactly
-as before. Ctrl-C (KeyboardInterrupt) does not abort: it stops the loop and still writes the
-authoritative calibrations.csv + config_spec.json from the days completed so far. The end-of-run
-writes wait-and-retry if the target file is locked (e.g. open in Excel), prompting for Enter rather
-than crashing.
+as before. Ctrl-C is a TWO-STAGE graceful interrupt: the FIRST press requests a graceful stop -- no
+not-yet-started day begins (a shared stop flag the workers poll), but every in-flight worker is allowed
+to RUN TO COMPLETION and its row is written, so no day is left half-done (the workers ignore SIGINT, so
+the console Ctrl-C cannot kill an in-flight fit). The remaining days are left for the next resume. A
+SECOND press warns and force-aborts, abandoning whatever is still in flight. Either way execution falls
+through to the end-of-run block and writes the authoritative calibrations.csv + rejections.csv +
+config_spec.json from the days completed so far. The end-of-run writes wait-and-retry if the target
+file is locked (e.g. open in Excel), prompting for Enter rather than crashing.
 
 RESUME. A run AUTOMATICALLY continues a previous one when EITHER calibrations.csv OR rejections.csv
 already exists. Both files are appended incrementally as days complete, so an interrupted run may have
@@ -56,11 +60,17 @@ removes its file.
 import os
 import sys
 import json
+import signal
 import argparse
-import pandas as pd
 import numpy as np
+import pandas as pd
+import multiprocessing
 from pathlib import Path
+from joblib import Parallel, delayed
+from multiprocessing.managers import SyncManager
+
 pd.options.display.float_format = '{:.5f}'.format
+
 
 SRC = Path(__file__).parent.resolve()
 DATA = SRC.parent / "data"
@@ -88,6 +98,13 @@ from config import (
 _ENGINES = {"heston": calibrate_heston, "bates": calibrate_bates}
 _EXTRA_PARAMS = {"heston": [], "bates": ["lambda_", "nu", "delta"]}
 _PRICE_COL = {"heston": "heston", "bates": "bates"}
+
+
+def _ignore_sigint():
+    """Make a child process ignore Ctrl-C. Used as the multiprocessing Manager server's initializer so
+    a console Ctrl-C cannot tear the manager down (the default manager server exits on KeyboardInterrupt,
+    which would break the shared stop-flag the workers poll). Module-level so it survives spawn pickling."""
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
 
 if str(DATA) not in sys.path:
     sys.path.insert(0, str(DATA))
@@ -162,7 +179,34 @@ def _skip_day(test_path, reason, detail, iv_rmse=np.nan,
             'n_maturities': n_maturities, 'n_strikes': n_strikes, 'n_cells': n_cells}
 
 
-def calibrate_by_day(filepath, OBJECTIVE, MODEL):
+def calibrate_by_day(filepath, OBJECTIVE, MODEL, stop_event=None):
+    # Graceful-interrupt cooperation. Active only when run under the orchestrator, which always passes
+    # stop_event; direct callers (notebooks/tests) pass None and are untouched. Two things happen:
+    #   1. The worker IGNORES Ctrl-C. On Windows a console Ctrl-C is delivered to every process in the
+    #      group, which would otherwise kill an in-flight calibration mid-fit. SIG_IGN persists for the
+    #      life of the reused worker; the main process keeps the real handler and owns the graceful-stop
+    #      logic (see main()), so the only way to interrupt a running fit is the second Ctrl-C there.
+    #   2. If a graceful stop has been requested, a day that has NOT yet started is skipped (returns no
+    #      row -> neither accepted nor rejected -> re-run on the next resume). In-flight days are already
+    #      past this check and finish normally, which is the whole point: their rows still get written.
+    if stop_event is not None:
+        # Ignore Ctrl-C, but ONLY in a real worker subprocess. Under MAX_JOBS=1 joblib has no worker:
+        # it runs this task INLINE in the main process, where setting SIG_IGN would clobber the
+        # orchestrator's own two-stage Ctrl-C handler and make the whole run uninterruptible.
+        # parent_process() is None only in the main process, so it cleanly distinguishes the two
+        # (a loky worker returns its parent). In the inline (MAX_JOBS=1) case the main handler stays
+        # installed, so the graceful/force-abort logic still works -- the stop-flag check below does the
+        # rest (the current day finishes, later days no-op).
+        if multiprocessing.parent_process() is not None:
+            try:
+                signal.signal(signal.SIGINT, signal.SIG_IGN)
+            except (ValueError, OSError):
+                pass  # not the worker's main thread (shouldn't happen under loky); harmless to skip
+        try:
+            if stop_event.is_set():
+                return None
+        except Exception:
+            pass  # manager unreachable; fall through and calibrate this day normally
     # Per-day tests file: the directory depends on (MODEL, OBJECTIVE) (results/<model>/calibrations/
     # <objective>/calibration_tests/, or the legacy results/calibrations/<objective>/ for heston);
     # validate_calibrations.py rebuilds the identical name from the same rule. Derive the date from the
@@ -358,9 +402,8 @@ def main():
 
     # joblib's default loky backend spawns processes; on Windows the children re-import this module,
     # so the driver MUST live behind `if __name__ == "__main__"` (via main()) -- otherwise each worker
-    # re-runs the Parallel call below and recursively spawns process pools.
-    from joblib import Parallel, delayed
-    
+    # re-runs the Parallel call below and recursively spawns process pools. (Parallel/delayed and
+    # SyncManager are imported at module top; only the Parallel CALL must stay behind the guard.)
     accepted, rejected = [], []
     # Both calibrations.csv and rejections.csv are appended incrementally as days complete, so each is
     # readable mid-run (in worker-completion order). On a fresh run the first flush for each file
@@ -370,13 +413,45 @@ def main():
     # gets its header from this run's first matching row.
     cal_header_written = CALIBRATIONS_FILE.exists()
     rej_header_written = REJECTIONS_FILE.exists()
-    # Ctrl-C stops the loop but does NOT abort: we fall through to the end-of-run block and still
-    # write the authoritative calibrations.csv + rejections.csv + config_spec.json from the days
-    # completed so far. Columns are identical across a (MODEL, OBJECTIVE) run, so a header written from
-    # the first row stays valid for the rest; the flush is best-effort and lock-tolerant (_append_row).
+
+    # ---- Two-stage graceful Ctrl-C ----
+    # A run uses up to MAX_JOBS worker processes, each calibrating one day. On a console Ctrl-C the
+    # naive behaviour abandons every IN-FLIGHT day (the workers are killed mid-fit), so days earlier
+    # than the last one written are left half-done and must be recomputed on resume. Instead:
+    #   FIRST Ctrl-C  -> request a graceful stop. We set a SHARED stop flag (a Manager().Event(), visible
+    #                    to the workers) so no not-yet-started day begins, and we DO NOT raise -- the
+    #                    result generator keeps draining, so every in-flight worker runs to completion and
+    #                    its row is written. The workers ignore SIGINT (see calibrate_by_day), so the
+    #                    console Ctrl-C cannot kill an in-flight fit. Remaining days return instantly as
+    #                    no-ops and are left for the next resume.
+    #   SECOND Ctrl-C -> warn and force-abort: restore the default handler and raise, which tears the
+    #                    pool down and abandons whatever is still in flight. Execution falls through to the
+    #                    end-of-run block below, which STILL rewrites the authoritative calibrations.csv /
+    #                    rejections.csv / config_spec.json from the days completed so far (unchanged logic).
+    # The Manager server itself ignores SIGINT (_ignore_sigint initializer) so the shared flag survives.
+    mgr = SyncManager()
+    mgr.start(_ignore_sigint)
+    stop_event = mgr.Event()
+    interrupts = {"n": 0}
+    default_sigint = signal.getsignal(signal.SIGINT)
+
+    def _on_sigint(signum, frame):
+        interrupts["n"] += 1
+        if interrupts["n"] == 1:
+            stop_event.set()
+            print("\nKeyboardInterrupt: graceful stop requested. Starting no new days and waiting for "
+                  "the in-flight worker(s) to finish (their rows WILL be written). "
+                  "Press Ctrl-C again to force-abort.", flush=True)
+        else:
+            signal.signal(signal.SIGINT, default_sigint)
+            print("\nSecond KeyboardInterrupt: force-abort. Abandoning in-flight worker(s); writing the "
+                  "days completed so far...", flush=True)
+            raise KeyboardInterrupt
+
+    signal.signal(signal.SIGINT, _on_sigint)
     try:
         for r in Parallel(n_jobs=args.MAX_JOBS, return_as="generator_unordered")(
-                delayed(calibrate_by_day)(f, args.OBJECTIVE, args.MODEL) for f in files):
+                delayed(calibrate_by_day)(f, args.OBJECTIVE, args.MODEL, stop_event) for f in files):
             if r is None:
                 continue
             if 'reason' in r:
@@ -386,8 +461,17 @@ def main():
                 accepted.append(r)
                 cal_header_written = _append_row(r, CALIBRATIONS_FILE, cal_header_written)
     except KeyboardInterrupt:
-        print(f"\nKeyboardInterrupt: stopping after {len(accepted)} accepted / {len(rejected)} "
-              f"rejected day(s); finishing writes...")
+        # Reached only on the SECOND Ctrl-C (force-abort); the first press never raises.
+        print(f"force-abort after {len(accepted)} accepted / {len(rejected)} rejected day(s); "
+              f"finishing writes...", flush=True)
+    finally:
+        signal.signal(signal.SIGINT, default_sigint)
+        mgr.shutdown()
+
+    if interrupts["n"] == 1:
+        # Graceful stop ran to a clean drain (no second press): the in-flight days were all collected.
+        print(f"graceful stop complete: {len(accepted)} accepted / {len(rejected)} rejected day(s) this "
+              f"run; the remaining days were left for the next resume.", flush=True)
 
     # Merge this run's rows with whatever the resumed files already held (empty frames on a fresh run),
     # dedupe by date (this run's row wins if a date somehow recurs), and rewrite sorted by date. On a

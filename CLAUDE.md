@@ -33,8 +33,9 @@ dv_t = kappa(theta - v_t) dt + eta sqrt(v_t) dW_t
 
 A **Bates (1996) variant** is also supported (Heston stochastic vol + Merton lognormal jumps: the five
 Heston params plus jump intensity `lambda_`, mean log-jump `nu`, log-jump std `delta`). It is selected
-by the `--MODEL {heston,bates}` flag (default `heston`) and runs through the same orchestrator; engine
-`src/calibrate_bates.py`. Its design and pilot results are in `PLAN.md` (Bates extension, PR #12).
+by the `--MODEL {heston,bates}` flag (default `heston`) and runs through the same orchestrator and the
+same engine (`src/_calibration_engine.py`, dispatched on the model name). Its design and pilot results
+are in `PLAN.md` (Bates extension, PR #12).
 
 Treat the current scripts as a working prototype, not a clean design: the workflow is convoluted and
 over-reliant on passing intermediate CSVs between stages with hard-coded column names (see README).
@@ -56,16 +57,21 @@ over-reliant on passing intermediate CSVs between stages with hard-coded column 
 The pipeline is three stages; run scripts directly (no build/lint/test tooling).
 
 **Single-sourced config.** All model/calibration constants live in `src/config.py` — tune there, not in
-the modules: surface-coverage knobs, box bounds, the acceptance gate, the OTM filter floor/cutoff, the
-wing-weight knobs, the seed grid, the Bates bounds/seed, and the Phase-3 mitigation levers
-(`HESTON_INTEGRATION`/`BATES_INTEGRATION`, `FELLER_PENALTY`/`FELLER_SEED_TEMPLATE`,
-`PARAM_ANCHOR_WEIGHT`/`PARAM_ANCHOR_LOOKBACK`, `WING_WEIGHT_FLOOR`). The QuantLib **date conventions**
+the modules: surface-coverage knobs, the acceptance gate, the OTM filter floor/cutoff, the wing-weight
+knobs, the seed grid, and the Phase-3 mitigation levers (`HESTON_INTEGRATION`/`BATES_INTEGRATION`,
+`FELLER_PENALTY`/`FELLER_SEED_TEMPLATE`, `PARAM_ANCHOR_WEIGHT`/`PARAM_ANCHOR_LOOKBACK`,
+`WING_WEIGHT_FLOOR`). **Per-model parameters live in one registry, `config.MODELS`** (keyed by model
+name): each entry declares `params_order` (QuantLib `model.params()` order), `ctor_order` (process
+constructor order, for seeds), the box `bounds`, the derived `low`/`high`, the pegging `gate_names`
+subset, and the Bates `jump_seed`. The private `_model` builder derives `low`/`high` so the order is
+declared once; `MODELS` is plain data that `as_dict()` captures for the run snapshot. The QuantLib **date conventions**
 (`Actual365Fixed` day count, `UnitedStates.NYSE` calendar) live in `src/pricing/_quantlib_config.py`
 (`day_count(name=None)`/`calendar(name=None)`, named choices `DAY_COUNT_NAME`/`CALENDAR_NAME`) and are
 **re-exported by `config`**, so `config.day_count`/`config.calendar` keep working as the facade.
 
-**QuantLib construction is centralized** in `src/pricing/_quantlib_utils.py` (`_quantlib_utils`): both
-engines build their `HestonProcess`/`BatesProcess` via `_qu.heston_process`/`_qu.bates_process`;
+**QuantLib construction is centralized** in `src/pricing/_quantlib_utils.py` (`_quantlib_utils`): the
+engine builds its `HestonProcess`/`BatesProcess` via `_qu.heston_process`/`_qu.bates_process` (selected
+by the per-model wiring in `_calibration_engine`);
 `_utils.build_heston_engine`/`build_bates_engine` are thin wrappers over
 `_qu._heston_engine`/`_qu._bates_engine` (which return `(engine, s_handle, ts_r, ts_g, day_count)`); and
 `vanilla_pricer` prices through `_qu._{heston,mc_heston,bates}_engine` + `_qu._european_option`. A
@@ -127,7 +133,8 @@ same file). The scripts:
   its own `MODEL`; needs both a price and a vol run on disk for the chosen model).
 - Read-only graders at the `src/results/` top level (each adds `src/results` to `sys.path`, reads
   `MODEL`/`OBJECTIVE` from `_results_config`): `validate_calibrations.py` (grades `calibrations.csv` +
-  `calibration_tests/`; under bates grades against `BATES_BOUNDS` and flags the jump triple),
+  `calibration_tests/`; under bates grades against the Bates bounds (`config.MODELS["bates"]["bounds"]`)
+  and flags the jump triple),
   `wing_residuals.py` (residual-by-moneyness), `calibration_diagnostics.py` (the Phase-3-lever grading
   instrument — call-wing curvature mismatch `d_curv_call`/`call_convex_frac`, wing-oscillation
   `osc_frac`, kappa-floor proximity / `pegged_rate` by year; writes `diagnostics.csv`),
@@ -153,9 +160,9 @@ disk writes); plot scripts (`plot_surfaces.main`, `smiles.main`, `make_surface.m
 only under `__main__`, so a notebook's interactive backend survives the import. `inspect.ipynb` enables
 `%autoreload 2`.
 
-There is no single-test command (no tests). To exercise just an engine, import `calibrate_heston(vol_matrix,
-s, r, g, objective="vol")` from `src/calibrate_heston.py` (or `calibrate_bates(...)`, same signature) with
-a strike×maturity IV DataFrame. `objective` selects the in-engine LM objective; the orchestrator passes
+There is no single-test command (no tests). To exercise just an engine, import `calibrate(model, vol_matrix,
+s, r, g, objective="vol")` from `src/_calibration_engine.py` (`model` ∈ `heston, bates`) with a
+strike×maturity IV DataFrame. `objective` selects the in-engine LM objective; the orchestrator passes
 its `OBJECTIVE` constant through.
 
 ## Pipeline architecture
@@ -206,8 +213,8 @@ For each raw file it does **one calibration per trading day** over a pooled, mon
    When several trades share a cell the **highest-volume** trade's IV is kept (`sel` sorted by
    `trade_size`, then `aggfunc='last'`). Require `>= MIN_MATS`(3) maturities, `>= MIN_STRIKES`(5) strikes,
    `>= MIN_CELLS`(12) non-NaN cells.
-6. Call the selected engine **once for the whole day** — `_ENGINES[MODEL]`, i.e.
-   `calibrate_heston(surface, S_ref, r, g)` or `calibrate_bates(...)`. The engine **rejects** fits it
+6. Call the engine **once for the whole day** — `calibrate(MODEL, surface, S_ref, r, g)`
+   (`_calibration_engine`, dispatched on the model name). The engine **rejects** fits it
    cannot trust (returns `None` params — see Stage 3), printing whether the rejection was a thin surface,
    an IV-RMSE miss, or a **boundary-pegged** param.
 7. **On accept** `calibrate_by_day` *returns* the day's **one row keyed by date** (`S_ref` as
@@ -258,14 +265,18 @@ basename across model/objective — already separated by directory), `<date>` sl
 `validate_calibrations.py` rebuilds the identical path from the same `calib_paths` rule, so the two stay
 in lock-step.
 
-**Stage 3 — calibration engine (`src/calibrate_heston.py`).** Pure function `calibrate_heston(vol_matrix,
-s, r, g) -> dict`. Builds a QuantLib `HestonProcess` (via `_qu.heston_process`) / `HestonModel` with an
-`AnalyticHestonEngine` and one `HestonModelHelper` per non-NaN surface cell (maturity as `Period(days,
-Days)`, `config.calendar()` = NYSE, `Date.todaysDate()` as eval date — immaterial under the flat-forward
-curves built by `_qu._term_structures` on `config.day_count()` = `Actual365Fixed`). Then:
+**Stage 3 — calibration engine (`src/_calibration_engine.py`).** Pure function `calibrate(model,
+vol_matrix, s, r, g) -> dict`, one engine for both models. `_resolve_spec(model)` pairs the
+`config.MODELS[model]` parameter data with a per-model `_WIRING` entry (the live QuantLib builders
+`make_process`/`make_model`/`make_engine`) into a cached `ModelSpec`; the rest is model-agnostic. It
+builds the process/model/engine (Heston: `HestonProcess`/`HestonModel`/`AnalyticHestonEngine`; Bates:
+`BatesProcess`/`BatesModel`/`BatesEngine`) and one `HestonModelHelper` per non-NaN surface cell (maturity
+as `Period(days, Days)`, `config.calendar()` = NYSE, `Date.todaysDate()` as eval date — immaterial under
+the flat-forward curves built by `_qu._term_structures` on `config.day_count()` = `Actual365Fixed`). Then:
 
-1. **Multiple restarts:** for each starting point in a data-seeded grid (`_seed_grid`), calibrate with
-   Levenberg–Marquardt under **box bounds** (`ql.NonhomogeneousBoundaryConstraint(LOW, HIGH)`), keep the
+1. **Multiple restarts:** for each starting point in a data-seeded grid (`_engine_common._seed_grid`,
+   name→value seed dicts), calibrate with Levenberg–Marquardt under **box bounds**
+   (`ql.NonhomogeneousBoundaryConstraint(spec.low, spec.high)`), keep the
    fit with the lowest **IV-space RMSE**. The LM objective is switchable via `objective` (`_ERR` maps it
    to the helper error type): `"vol"` (`ImpliedVolError`, default) or `"price"` (`RelativePriceError`).
    This changes only what each restart minimises; selection and the gate always use IV-RMSE. `"vol"` is
@@ -288,14 +299,15 @@ curves built by `_qu._term_structures` on `config.day_count()` = `Actual365Fixed
    *by construction*, so a clean `kappa`/`rho` in `calibrations.csv` is not evidence pegging is solved (see
    Known issues).
 
-Returns `{theta, kappa, eta, rho, v0, feller, iv_rmse, rmse, n_helpers, accepted}` with `feller =
-2*kappa*theta - eta**2` for an accepted fit; a rejected fit returns params/`feller` as `None` but keeps
-`iv_rmse`/`rmse`/`n_helpers`/`accepted=False`. **Param order matters:** `model.params()` returns
-`[theta, kappa, eta, rho, v0]`. Bounds live in `config.py` as `BOUNDS`; `LOW`/`HIGH` derive as
-`[BOUNDS[p][L/H] for p in PARAM_ORDER]` with `PARAM_ORDER = ("theta","kappa","eta","rho","v0")` declaring
-that order in exactly one place. The engine imports `LOW`/`HIGH`/`IV_RMSE_ACCEPT`/the seed-grid
-template/`WING_WEIGHT_GAIN`/the optimizer args (`LM_ARGS`, `END_CRITERIA_ARGS`) from `config.py`; only
-the `_ERR` string→QuantLib-enum map stays in `calibrate_heston.py`.
+Returns the fitted params keyed by name in `spec.params_order` (`dict(zip(spec.params_order,
+model.params()))`) plus `feller = 2*kappa*theta - eta**2`, `iv_rmse`, `rmse`, `n_helpers`, `accepted`; a
+rejected fit nulls the params/`feller` but keeps `iv_rmse`/`rmse`/`n_helpers`/`accepted=False`. **Param
+order matters:** the orders are declared once per model in `config.MODELS` — `params_order` (QuantLib
+`model.params()` order, e.g. Heston `("theta","kappa","eta","rho","v0")`) drives `low`/`high`, the unpack
+and the anchor names; `ctor_order` drives the seeds. The engine imports
+`IV_RMSE_ACCEPT`/`WING_WEIGHT_GAIN`/the optimizer args (`LM_ARGS`, `END_CRITERIA_ARGS`) from `config.py`
+and reads the per-model `bounds`/orders/`jump_seed` from `config.MODELS`; only the `_ERR`
+string→QuantLib-enum map and the `_WIRING` builders stay in `_calibration_engine.py`.
 
 **Restart-selection score (Phase-3 levers, all default-off so the baseline reproduces byte-for-byte).**
 Each restart is ranked by `iv_rmse_sel + FELLER_PENALTY*_feller_violation(params) +
@@ -305,28 +317,30 @@ unweighted IV-RMSE**. `FELLER_PENALTY` (Lever D) biases toward Feller-compliant 
 the two-pass `--PRIOR_FROM` workflow; `WING_WEIGHT_GAIN < 0` (Lever G) de-emphasises the wings, clamped
 positive by `WING_WEIGHT_FLOOR`. See `PLAN.md` for the lever rationale and sweep findings.
 
-**Shared engine helpers (`src/_engine_common.py`).** Model-agnostic helpers factored out so the Heston
-and Bates engines reuse identical logic and cannot drift: `_on_boundary(params, low, high)` (takes its
-`low`/`high` so a caller can gate a parameter subset — Bates gates only the 5 Heston params), `_seed_var`,
-`_wing_weight`, `_iv_rmse`, `_feller_violation(params)` (Feller shortfall `max(0, eta² − 2·kappa·theta)`
-from a `params()` vector), and `_anchor_distance(params, anchor, names, bounds)` (span-normalised squared
-distance to a prior-day anchor). Behaviour-neutral for Heston (committed `vol` numbers reproduce to full
-float precision).
+**Shared engine helpers (`src/_engine_common.py`).** Model-agnostic, QuantLib-free helpers the single
+engine builds on: `_on_boundary(params, low, high)` (takes its `low`/`high` so a caller can gate a
+parameter subset — Bates gates only the 5 Heston params via `spec.gate_names`), `_seed_var`,
+`_seed_grid(vol_matrix, jump_seed=None)` (the restart grid as name→value dicts; appends the Bates jump
+seed when given), `_anchor_seed(anchor, ctor_order)` (the warm-start dict, or None), `_wing_weight`,
+`_iv_rmse`, `_feller_violation(params)` (Feller shortfall `max(0, eta² − 2·kappa·theta)` from a
+`params()` vector), and `_anchor_distance(params, anchor, names, bounds)` (span-normalised squared
+distance to a prior-day anchor). Behaviour-neutral vs the former two engines (committed `vol` numbers
+reproduce to full float precision).
 
-**Stage 3b — Bates engine (`src/calibrate_bates.py`).** Same shape as `calibrate_heston`, swapping
-`HestonProcess`/`HestonModel`/`AnalyticHestonEngine` for `BatesProcess`/`BatesModel`/`BatesEngine`. The
-helper stays `ql.HestonModelHelper` (there is **no `ql.BatesHelper`** in QuantLib 1.35); only the attached
-pricing engine is a `BatesEngine`. Returns a **superset** of the Heston dict (same keys plus `lambda_, nu,
-delta`), read unchanged by the orchestrator. **THREE distinct orderings (confirmed live, do not
-conflate):** (1) `BatesModel.params()` returns `[theta, kappa, eta, rho, v0, nu, delta, lambda]` —
-driving `BATES_PARAM_ORDER`/`BATES_LOW`/`BATES_HIGH` and the unpack; (2) the `BatesProcess(...)`
-constructor takes `(..., v0, kappa, theta, eta, rho, lambda, nu, delta)`, driving the seed expansion;
-(3) `vanp.bates_price(...)`/`df_bates_price` arg order (handled in `src/pricing`). `feller` stays the
-Heston-diffusion quantity (jumps do not enter it; reported, never gates). **Acceptance gate:** IV-RMSE ≤
-`IV_RMSE_ACCEPT` and no **Heston** param pegged — the check runs on `params[:5]` only; the jump triple is
-**exempt** (`lambda≈0` is a legitimate Heston collapse, and `nu`/`delta` are unidentified when
-`lambda≈0`). Bates bounds/seed are `BATES_BOUNDS`/`BATES_LOW`/`BATES_HIGH`/`BATES_JUMP_SEED` in
-`config.py`.
+**Stage 3b — Bates specifics (same engine).** `--MODEL bates` runs the same `calibrate`; the `bates`
+`_WIRING` swaps `HestonProcess`/`HestonModel`/`AnalyticHestonEngine` for
+`BatesProcess`/`BatesModel`/`BatesEngine`. The helper stays `ql.HestonModelHelper` (there is **no
+`ql.BatesHelper`** in QuantLib 1.35); only the attached pricing engine is a `BatesEngine`. The result
+dict is a **superset** of the Heston one (same keys plus `lambda_, nu, delta`), read unchanged by the
+orchestrator. **THREE distinct orderings (declared in `config.MODELS["bates"]`, confirmed live, do not
+conflate):** (1) `params_order` = `BatesModel.params()` = `[theta, kappa, eta, rho, v0, nu, delta,
+lambda]` — drives `low`/`high` and the unpack; (2) `ctor_order` = `BatesProcess(..., v0, kappa, theta,
+eta, rho, lambda, nu, delta)` — drives the seed/jump expansion; (3) `vanp.bates_price(...)`/`df_bates_price`
+arg order (handled in `src/pricing`). `feller` stays the Heston-diffusion quantity (jumps do not enter
+it; reported, never gates). **Acceptance gate:** IV-RMSE ≤ `IV_RMSE_ACCEPT` and no **Heston** param
+pegged — the gate runs on `spec.gate_names` (the five Heston params) only; the jump triple is **exempt**
+(`lambda≈0` is a legitimate Heston collapse, and `nu`/`delta` are unidentified when `lambda≈0`). The
+Bates `bounds`/`gate_names`/`jump_seed` live in `config.MODELS["bates"]`.
 
 ## DataFrame column contracts (the "hard-coded names" the README warns about)
 
@@ -364,7 +378,7 @@ gotchas:
 - **Output routing must stay in lock-step.** The calibrator and `validate_calibrations.py` build the
   `results/<model>/calibrations/<objective>/` paths from the **same** `config.calib_paths` rule; if they
   drift the validator stops finding the tests files. The validator is model-aware (`MODEL`/`OBJECTIVE`
-  from `_results_config`); under bates it grades against `BATES_BOUNDS` and flags the jump triple.
+  from `_results_config`); under bates it grades against the Bates bounds and flags the jump triple.
 - **Moneyness normalisation assumes sticky-moneyness** (IV ~stationary in `K/S` over a session). Mild on
   normal days (~1% intraday range), strained on large-move days, which are flagged `high_move` (range >
   `MAX_MOVE_PCT`=3%) and still written — treat their `S_ref` with suspicion. Snapping `Kstar` to the
@@ -387,7 +401,8 @@ gotchas:
   lever is the CF-integration accuracy (`HESTON_INTEGRATION`/`BATES_INTEGRATION`). See `PLAN.md` (Levers
   D/F).
 - **Bates runs end-to-end and is committed for all objectives.** `--MODEL bates` runs the full pipeline
-  (engine `src/calibrate_bates.py`, `df_bates_price` in `src/pricing`, routing to `results/bates/...`).
+  (the unified engine `src/_calibration_engine.py` with the `bates` wiring, `df_bates_price` in
+  `src/pricing`, routing to `results/bates/...`).
   Against Heston on the same days it accepts more, fits tighter in IV-RMSE, and roughly halves `eta`
   (jumps absorb the tail); Feller stays violated. The weakly-identified `nu`/`delta` park on their bounds
   (gate-exempt); `validate_calibrations.py` surfaces this as suspicious-tier flags under bates. A `nu`/`delta`

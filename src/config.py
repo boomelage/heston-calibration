@@ -52,54 +52,83 @@ OTM_MONEYNESS_CUTOFF = 0.98
 OTM_MONEYNESS_FLOOR = 0.6
 
 
-# ---- Engine: box bounds (calibrate_heston) ----
-# PARAM_ORDER is QuantLib's model.params() order; LOW/HIGH are derived from it so the order is
-# declared exactly once. rho upper kept slightly positive (equity leverage => negative) but not
-# forced; eta capped at 2.0 (SPX vol-of-vol ~0.3-1.2).
-PARAM_ORDER = ("theta", "kappa", "eta", "rho", "v0")
-BOUNDS = {
-    "theta": (1e-4, 1.0),
-    "kappa": (1e-2, 20.0),
-    "eta":   (1e-2, 2.0),
-    "rho":   (-0.999, 0.5),
-    "v0":    (1e-4, 1.0),
-}
-LOW = [BOUNDS[p][0] for p in PARAM_ORDER]
-HIGH = [BOUNDS[p][1] for p in PARAM_ORDER]
-
-# ---- Engine: Bates box bounds (calibrate_bates) ----
-# Bates = Heston + Merton lognormal jumps: three extra params lambda (jumps/yr), nu (mean log-jump),
-# delta (log-jump std). BATES_PARAM_ORDER is QuantLib's BatesModel.params() order, CONFIRMED live by
-# building a model with distinct sentinels: the first five follow HestonModel.params()
-# (theta,kappa,eta,rho,v0), then the jump triple appends as (nu, delta, lambda) -- NOT (lambda,nu,delta),
-# and the first five are NOT the constructor order. Get this wrong and bounds land on the wrong params.
-# The five Heston ranges are reused; jump bounds are equity-skew priors (jumps skew down, so nu allows
-# more negative room). lambda floor is exactly 0 so the fit can collapse to pure Heston.
-# CURVATURE LEVER (PLAN.md Phase 3 Lever 4, Problem 1). The lognormal jumps add convexity to the smile,
-# and the diagnostic (src/results/calibration_diagnostics.py) shows the model call wing is too convex on
+# ---- Engine: model parameter registry (box bounds, orders, seeds) ----
+# Each model's parameter metadata is declared ONCE here, in config.MODELS, and consumed uniformly by the
+# engine (_calibration_engine), the orchestrator and the validators -- no per-model variable names. The
+# private `_model` builder derives low/high from the bounds so the parameter order is declared exactly
+# once; `_model` is JSON-skipped (underscore + callable), while MODELS itself is plain data
+# (tuples/lists/floats/None) that config.as_dict() captures for the run snapshot.
+#
+# THREE orderings, all distinct (conflating them mis-bounds the fit):
+#   - params_order: QuantLib model.params() order. Drives bounds/low/high, the result unpack and the
+#     anchor-distance names. Heston (theta,kappa,eta,rho,v0); Bates appends the jump triple as
+#     (nu,delta,lambda_) -- CONFIRMED live by building a model with distinct sentinels. It is NOT
+#     (lambda,nu,delta), and the first five are NOT the constructor order.
+#   - ctor_order: the *Process* constructor order, used to build seed / warm-start vectors. Heston
+#     (v0,kappa,theta,eta,rho); Bates appends (lambda_,nu,delta).
+#   - the pricing-helper arg order (kappa,theta,rho,eta,v0[,lambda_,nu,delta]) lives in pricing/.
+#
+# rho upper kept slightly positive (equity leverage => negative) but not forced; eta capped at 2.0 (SPX
+# vol-of-vol ~0.3-1.2). The five Heston ranges are reused for Bates; the jump bounds are equity-skew
+# priors (jumps skew down, so nu allows more negative room), and the lambda floor is exactly 0 so the fit
+# can collapse to pure Heston. gate_names lists the params the acceptance gate rejects on when pegged:
+# all five for Heston, the five Heston params for Bates (the jump triple is gate-exempt -- lambda~0 is a
+# legitimate Heston collapse, and nu/delta are unidentified when lambda~0).
+#
+# CURVATURE LEVER (PLAN.md Phase 3 Lever 4, Problem 1): the Bates lognormal jumps add smile convexity,
+# and the diagnostic (src/results/calibration_diagnostics.py) shows the model call wing too convex on
 # ~87% of days. Tightening the delta (log-jump std) upper bound caps how much wing curvature the jumps
-# can manufacture; sweep delta's upper 0.5 -> {0.25, 0.15} (and optionally narrow nu) and grade with the
+# can manufacture; sweep delta's upper 0.5 -> {0.25, 0.15} (optionally narrow nu) and grade with the
 # diagnostic's d_curv_call / call_convex_frac. Left at the original 0.5 so the committed baseline is
 # unchanged; this is a sweep target, not a default change.
-BATES_PARAM_ORDER = ("theta", "kappa", "eta", "rho", "v0", "nu", "delta", "lambda_")
-BATES_BOUNDS = {
-    "theta":   (1e-4, 1.0),
-    "kappa":   (1e-2, 20.0),
-    "eta":     (1e-2, 2.0),
-    "rho":     (-0.999, 0.5),
-    "v0":      (1e-4, 1.0),
-    "nu":      (-0.5, 0.2),
-    "delta":   (1e-3, 0.5),
-    "lambda_": (0.0, 5.0),
+def _model(params_order, ctor_order, bounds, gate_names=None, jump_seed=None):
+    """Assemble one model's parameter spec; low/high derived from `bounds` in params_order order."""
+    return {
+        "params_order": params_order,
+        "ctor_order": ctor_order,
+        "bounds": bounds,
+        "low": [bounds[p][0] for p in params_order],
+        "high": [bounds[p][1] for p in params_order],
+        "gate_names": gate_names if gate_names is not None else params_order,
+        "jump_seed": jump_seed,
+    }
+
+
+MODELS = {
+    "heston": _model(
+        params_order=("theta", "kappa", "eta", "rho", "v0"),
+        ctor_order=("v0", "kappa", "theta", "eta", "rho"),
+        bounds={
+            "theta": (1e-4, 1.0),
+            "kappa": (1e-2, 20.0),
+            "eta":   (1e-2, 2.0),
+            "rho":   (-0.999, 0.5),
+            "v0":    (1e-4, 1.0),
+        },
+    ),
+    "bates": _model(
+        params_order=("theta", "kappa", "eta", "rho", "v0", "nu", "delta", "lambda_"),
+        ctor_order=("v0", "kappa", "theta", "eta", "rho", "lambda_", "nu", "delta"),
+        bounds={
+            "theta":   (1e-4, 1.0),
+            "kappa":   (1e-2, 20.0),
+            "eta":     (1e-2, 2.0),
+            "rho":     (-0.999, 0.5),
+            "v0":      (1e-4, 1.0),
+            "nu":      (-0.5, 0.2),
+            "delta":   (1e-3, 0.5),
+            "lambda_": (0.0, 5.0),
+        },
+        gate_names=("theta", "kappa", "eta", "rho", "v0"),
+        # (lambda, nu, delta) in BatesProcess constructor order, appended to each Heston seed row (restart
+        # count stays 6). lambda near zero so each restart starts from "almost no jumps" and grows them
+        # only if they help; nu slightly negative (down-jump).
+        jump_seed=(0.1, -0.1, 0.1),
+    ),
 }
-BATES_LOW = [BATES_BOUNDS[p][0] for p in BATES_PARAM_ORDER]
-BATES_HIGH = [BATES_BOUNDS[p][1] for p in BATES_PARAM_ORDER]
-# One fixed jump seed appended to each Heston seed row (restart count stays 6). lambda near zero so the
-# fit can start from "almost no jumps" and grow them only if they help; nu slightly negative (down-jump).
-BATES_JUMP_SEED = (0.1, -0.1, 0.1)   # (lambda, nu, delta) in BatesProcess constructor order
 
 # ---- Models ----
-MODEL_NAMES = ("heston", "bates")
+MODEL_NAMES = tuple(MODELS)   # ("heston", "bates"), derived from the registry above
 DEFAULT_MODEL = "heston"
 
 # ---- Engine: in-engine LM objective ----
@@ -170,7 +199,7 @@ FELLER_PENALTY = 0.0
 # the last N accepted days (a smoother, more robust prior). The selection IV-RMSE is ~0.005, so a unit
 # anchor deviation of a full bound-span is huge: start PARAM_ANCHOR_WEIGHT small (~0.001-0.01) and grade
 # day-to-day stability with src/results/calibration_diagnostics.py before trusting it.
-PARAM_ANCHOR_WEIGHT = 0.01
+PARAM_ANCHOR_WEIGHT = 0.0
 PARAM_ANCHOR_LOOKBACK = 5
 
 # ---- Engine: optimizer (Levenberg-Marquardt + EndCriteria) ----

@@ -83,8 +83,7 @@ from pricing.vanilla_pricer import vanilla_pricer
 vanp = vanilla_pricer()
 from _utils import write_config_spec, _file_date
 from prepare_surface import prepare_surface, select_surface, SkipDay
-from calibrate_heston import calibrate_heston
-from calibrate_bates import calibrate_bates
+from _calibration_engine import calibrate
 import config
 from config import (
     MIN_MATS, MIN_STRIKES, MIN_CELLS,
@@ -98,10 +97,11 @@ _ANCHOR_PARAMS = ("theta", "kappa", "eta", "rho", "v0", "lambda_", "nu", "delta"
 # Sentinel for the bare `--PRIOR_FROM` flag (no path given): anchor to the run's OWN calibrations.csv.
 _PRIOR_SELF = "__SELF__"
 
-# Per-model engine, the extra Bates parameter columns, and the repriced model-price column name.
-# Heston keeps its 5 params and the `heston` price column; Bates appends (lambda_, nu, delta) and writes
-# a `bates` column priced by the Bates wrapper. Everything else in the day routine is model-agnostic.
-_ENGINES = {"heston": calibrate_heston, "bates": calibrate_bates}
+# The extra Bates parameter columns and the repriced model-price column name. Heston keeps its 5 params
+# and the `heston` price column; Bates appends (lambda_, nu, delta) and writes a `bates` column priced by
+# the Bates wrapper. The engine itself is model-agnostic: _calibration_engine.calibrate(MODEL, ...)
+# dispatches on the model name via config.MODELS. These two maps stay literal -- they are CSV/pricing
+# presentation contracts (the CSV order is rho-before-eta, matching no single config order).
 _EXTRA_PARAMS = {"heston": [], "bates": ["lambda_", "nu", "delta"]}
 _PRICE_COL = {"heston": "heston", "bates": "bates"}
 
@@ -277,7 +277,7 @@ def calibrate_by_day(filepath, OBJECTIVE, MODEL, stop_event=None, anchor=None):
 
     # ONE calibration for the whole day (hardened engine). `anchor` (Lever 5) is the prior-day params
     # for cross-day regularisation, or None (default / Pass 1), in which case the engine is unchanged.
-    res = _ENGINES[MODEL](surf, S_ref, r, g, objective=OBJECTIVE, anchor=anchor)
+    res = calibrate(MODEL, surf, S_ref, r, g, objective=OBJECTIVE, anchor=anchor)
     print(f"{pd.Timestamp(date).date()}  S_ref={S_ref:.1f}  cells={n_cells}  "
           f"iv_rmse={res['iv_rmse']}  price_rmse={res['rmse']}  accepted={res['accepted']}")
 

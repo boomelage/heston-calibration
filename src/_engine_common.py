@@ -11,6 +11,7 @@ import numpy as np
 from config import (
     IV_ACC, IV_MAXEVAL, IV_LO, IV_HI,
     SEED_VAR_FALLBACK, SEED_VAR_LO, SEED_VAR_HI,
+    SEED_GRID_TEMPLATE, FELLER_SEED_TEMPLATE, FELLER_PENALTY,
     WING_WEIGHT_GAIN, WING_WEIGHT_POWER, WING_WEIGHT_SCALE, WING_WEIGHT_FLOOR,
 )
 
@@ -46,8 +47,8 @@ def _feller_violation(params):
 def _anchor_distance(params, anchor, names, bounds):
     """Span-normalised squared distance of a model.params() vector from a prior-day `anchor` dict.
 
-    `params` is the fitted vector, `names` its matching parameter names (PARAM_ORDER for Heston,
-    BATES_PARAM_ORDER for Bates), `bounds` the box dict. Only names present (and non-None) in `anchor`
+    `params` is the fitted vector, `names` its matching parameter names (the model's params_order from
+    config.MODELS), `bounds` the box dict. Only names present (and non-None) in `anchor`
     contribute, so a caller can anchor a subset (e.g. the five Heston params, leaving the noisy jump
     triple free). Each term is ((param - prior) / bound_span) ** 2, so every parameter contributes on a
     comparable 0..1 scale. Zero when the fit equals the prior. Used by the cross-day regularisation
@@ -73,6 +74,43 @@ def _seed_var(vol_matrix):
     vols = vols[np.isfinite(vols)]
     var = float(np.median(vols)) ** 2 if vols.size else SEED_VAR_FALLBACK
     return min(max(var, SEED_VAR_LO), SEED_VAR_HI)
+
+
+def _seed_grid(vol_matrix, jump_seed=None):
+    """A small, deterministic set of restart starting points, seeded from the surface's own level.
+
+    Each restart is a {name: value} dict (so the engine builds the process by NAME, not by a fragile
+    positional order). The five Heston entries are v0/kappa/theta/eta/rho with v0=var*v0_mult and
+    theta=var*theta_mult; the Feller-compliant rows are appended only when FELLER_PENALTY > 0, so with
+    the penalty off the grid (and the committed baseline) is unchanged. When `jump_seed` = (lambda, nu,
+    delta) is given (Bates) it is appended to every row so each restart starts from "almost no jumps";
+    None (Heston) leaves the five Heston params alone. Shared by both models via _calibration_engine.
+    """
+    var = _seed_var(vol_matrix)
+    template = SEED_GRID_TEMPLATE + (FELLER_SEED_TEMPLATE if FELLER_PENALTY > 0.0 else [])
+    seeds = []
+    for v0_mult, kappa, theta_mult, eta, rho in template:
+        seed = {"v0": var * v0_mult, "kappa": kappa, "theta": var * theta_mult, "eta": eta, "rho": rho}
+        if jump_seed is not None:
+            lam, nu, delta = jump_seed
+            seed.update({"lambda_": lam, "nu": nu, "delta": delta})
+        seeds.append(seed)
+    return seeds
+
+
+def _anchor_seed(anchor, ctor_order):
+    """A warm-start restart at the prior-day params as a {name: value} dict, or None.
+
+    Reads exactly the `ctor_order` names (the process-constructor params) from the `anchor` dict, so the
+    returned dict has the same keys a `_seed_grid` row carries and the engine consumes it uniformly.
+    Returns None if any required name is missing/unparseable, so a partial or Heston-only prior simply
+    contributes no warm seed (matching the old per-engine behaviour). Used only when the cross-day anchor
+    is active (config.PARAM_ANCHOR_WEIGHT > 0 and a prior supplied).
+    """
+    try:
+        return {name: float(anchor[name]) for name in ctor_order}
+    except (KeyError, TypeError, ValueError):
+        return None
 
 
 def _wing_weight(k, s):

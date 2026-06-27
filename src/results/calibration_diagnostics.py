@@ -55,10 +55,9 @@ NEAR_FLOOR_FRAC = 0.05
 
 
 def _bounds(model):
-    """(param_order, BOUNDS dict) for the model, from config (single source of the box)."""
-    if model == "bates":
-        return config.BATES_PARAM_ORDER, config.BATES_BOUNDS
-    return config.PARAM_ORDER, config.BOUNDS
+    """(param_order, bounds dict) for the model, from config.MODELS (single source of the box)."""
+    spec = config.MODELS[model]
+    return spec["params_order"], spec["bounds"]
 
 
 def _quad(lm, iv):

@@ -258,7 +258,7 @@ from the diagnostic. Risk: low.
 
 **Lever G — jump-curvature + wing de-emphasis (Problem 1: call wing too convex). [IMPLEMENTED,
 default-off / sweep.]** The diagnostic shows the model call wing is too convex on ~87% of days. Two
-knobs: tighten `BATES_BOUNDS["delta"]` upper (0.5 → {0.25, 0.15}) so the lognormal jumps manufacture
+knobs: tighten `config.MODELS["bates"]["bounds"]["delta"]` upper (0.5 → {0.25, 0.15}) so the lognormal jumps manufacture
 less wing curvature (a sweep, not a default change — 0.15 already pushes some Bates days past the gate,
 0.25 looks like the sweet spot); and `WING_WEIGHT_GAIN < 0` (now allowed, clamped to
 `WING_WEIGHT_FLOOR`) to **de-emphasise** the wings so near-linear days are not forced to bend. Measure:
@@ -515,6 +515,16 @@ comparison**, which needs both result sets on disk at once — hence routing is 
   gained `build_bates_engine` + the
   `build_model_engine(row, calc_date, model)` dispatcher; the pricing/inversion helpers were already
   engine-agnostic.
+
+**Later refactor (engine unification, post-PR-#12).** `calibrate_heston.py` and `calibrate_bates.py` were
+merged into a single `src/_calibration_engine.py` (`calibrate(model, vol_matrix, s, r, g)`, dispatched on
+the model name via a cached per-model `ModelSpec` = `config.MODELS[model]` data + a `_WIRING` entry of the
+live QuantLib builders). The per-model parameter data (the old `PARAM_ORDER`/`BOUNDS`/`LOW`/`HIGH` and
+`BATES_PARAM_ORDER`/`BATES_BOUNDS`/`BATES_LOW`/`BATES_HIGH`/`BATES_JUMP_SEED`) moved into one
+`config.MODELS` registry, and `_seed_grid`/`_anchor_seed` moved into `_engine_common.py` (now name→value
+dicts). Behaviour is byte-identical (committed `vol` numbers reproduce to full float precision). The
+references above to the two engine files and the flat config names are historical; see CLAUDE.md for the
+current structure.
 
 **Bates result (committed full runs).** Both `vol` and `price` full multi-year Bates runs are committed
 (`results/bates/calibrations/{vol,price}/`) as part of the prior baseline pending regeneration. Against

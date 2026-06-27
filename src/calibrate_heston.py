@@ -30,14 +30,17 @@ import pandas as pd
 import QuantLib as ql
 
 from config import (
-    LOW, HIGH, IV_RMSE_ACCEPT,
+    LOW, HIGH, BOUNDS, PARAM_ORDER, IV_RMSE_ACCEPT,
     DEFAULT_OBJECTIVE, SEED_GRID_TEMPLATE,
-    WING_WEIGHT_GAIN,
+    WING_WEIGHT_GAIN, FELLER_PENALTY, FELLER_SEED_TEMPLATE,
+    PARAM_ANCHOR_WEIGHT,
     LM_ARGS, END_CRITERIA_ARGS,
     calendar as _calendar,
 )
 # Model-agnostic helpers shared with calibrate_bates.py (factored out so the two engines can't drift).
-from _engine_common import _on_boundary, _seed_var, _wing_weight, _iv_rmse
+from _engine_common import (
+    _on_boundary, _seed_var, _wing_weight, _iv_rmse, _feller_violation, _anchor_distance,
+)
 # Single home of the QuantLib process/term-structure construction (constructor arg order, day count).
 from pricing._quantlib_utils import _quantlib_utils
 _qu = _quantlib_utils()
@@ -58,11 +61,16 @@ _FAIL = {k: None for k in ("theta", "kappa", "eta", "rho", "v0", "feller", "rmse
 
 
 def _seed_grid(vol_matrix):
-    """A small, deterministic set of starting points, seeded from the surface's own level."""
+    """A small, deterministic set of starting points, seeded from the surface's own level.
+
+    The Feller-compliant seeds are appended only when FELLER_PENALTY > 0, so with the penalty off the
+    grid (and the committed baseline) is unchanged.
+    """
     var = _seed_var(vol_matrix)
+    template = SEED_GRID_TEMPLATE + (FELLER_SEED_TEMPLATE if FELLER_PENALTY > 0.0 else [])
     # expand each template row into (v0, kappa, theta, eta, rho) -- HestonProcess constructor order
     return [(var * v0_mult, kappa, var * theta_mult, eta, rho)
-            for v0_mult, kappa, theta_mult, eta, rho in SEED_GRID_TEMPLATE]
+            for v0_mult, kappa, theta_mult, eta, rho in template]
 
 
 def _calibrate_once(start, surface, s, r_ts, g_ts, S_handle, constraint, error_type, objective):
@@ -74,7 +82,9 @@ def _calibrate_once(start, surface, s, r_ts, g_ts, S_handle, constraint, error_t
     v0, kappa, theta, eta, rho = start
     process = _qu.heston_process(r_ts, g_ts, S_handle, kappa, theta, rho, eta, v0)
     model = ql.HestonModel(process)
-    engine = ql.AnalyticHestonEngine(model)
+    # CF-integration accuracy is config.HESTON_INTEGRATION, applied in one place (_quantlib_utils) so
+    # the fit, the calibration_tests repricing and the IV inversion all integrate identically.
+    engine = _qu.heston_engine_for(model)
 
     # Wing weights only meaningful in vol space: "price" already up-weights the cheap wings via the
     # price denominator, so stacking a wing weight there double-counts (see config.py / PLAN Lever B).
@@ -116,7 +126,20 @@ def _calibrate_once(start, surface, s, r_ts, g_ts, S_handle, constraint, error_t
     return list(model.params()), iv_rmse_sel, iv_rmse_gate, price_rmse, len(helpers)
 
 
-def calibrate_heston(vol_matrix, s, r, g, objective=DEFAULT_OBJECTIVE) -> dict:
+def _anchor_seed(anchor):
+    """A warm-start restart at the prior-day params (HestonProcess constructor order), or None.
+
+    Returns (v0, kappa, theta, eta, rho) built from the anchor dict, or None if any required key is
+    missing -- so a malformed/partial prior simply contributes no warm seed.
+    """
+    try:
+        return (float(anchor["v0"]), float(anchor["kappa"]), float(anchor["theta"]),
+                float(anchor["eta"]), float(anchor["rho"]))
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def calibrate_heston(vol_matrix, s, r, g, objective=DEFAULT_OBJECTIVE, anchor=None) -> dict:
     error_type = _ERR[objective]
     calculation_date = ql.Date.todaysDate()
     ql.Settings.instance().evaluationDate = calculation_date
@@ -124,10 +147,24 @@ def calibrate_heston(vol_matrix, s, r, g, objective=DEFAULT_OBJECTIVE) -> dict:
     S_handle = _qu._spot_handle(s)
     constraint = ql.NonhomogeneousBoundaryConstraint(ql.Array(LOW), ql.Array(HIGH))
 
-    # best ranked by iv_rmse_sel (wing-weighted, the objective LM saw); the gate uses iv_rmse_gate
-    # (unweighted). With wing weighting off the two are identical, so ranking/gating are unchanged.
+    # Cross-day anchor (Lever 5): active only when a prior is supplied AND PARAM_ANCHOR_WEIGHT > 0.
+    # It adds a warm-start seed at the prior params and a Tikhonov term to the selection score. Off by
+    # default (anchor=None), so the seed grid and ranking are exactly the committed baseline.
+    use_anchor = anchor is not None and PARAM_ANCHOR_WEIGHT > 0.0
+    seeds = list(_seed_grid(vol_matrix))
+    if use_anchor:
+        warm = _anchor_seed(anchor)
+        if warm is not None:
+            seeds.append(warm)
+
+    # best ranked by a selection score = iv_rmse_sel + FELLER_PENALTY * Feller-violation +
+    # PARAM_ANCHOR_WEIGHT * anchor-distance (wing-weighted IV-RMSE the objective LM saw, plus the
+    # optional soft Feller and cross-day-anchor biases); the gate uses iv_rmse_gate (unweighted). With
+    # wing weighting off, FELLER_PENALTY=0 and no anchor the score is iv_rmse_gate, so ranking/gating
+    # are unchanged from the committed baseline.
     best = None  # (params, iv_rmse_sel, iv_rmse_gate, price_rmse, n_helpers)
-    for start in _seed_grid(vol_matrix):
+    best_score = np.inf
+    for start in seeds:
         try:
             params, iv_rmse_sel, iv_rmse_gate, price_rmse, n_helpers = _calibrate_once(
                 start, vol_matrix, s, r_ts, g_ts, S_handle, constraint, error_type, objective)
@@ -135,7 +172,11 @@ def calibrate_heston(vol_matrix, s, r, g, objective=DEFAULT_OBJECTIVE) -> dict:
             continue
         if not np.isfinite(iv_rmse_sel):
             continue
-        if best is None or iv_rmse_sel < best[1]:
+        score = iv_rmse_sel + FELLER_PENALTY * _feller_violation(params)
+        if use_anchor:
+            score += PARAM_ANCHOR_WEIGHT * _anchor_distance(params, anchor, PARAM_ORDER, BOUNDS)
+        if score < best_score:
+            best_score = score
             best = (params, iv_rmse_sel, iv_rmse_gate, price_rmse, n_helpers)
 
     if best is None:

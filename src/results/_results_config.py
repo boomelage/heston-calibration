@@ -64,7 +64,7 @@ NT = 5
 # Maturity window (calendar days) the displayed smiles are clipped to before the NT sparse pick.
 # Either bound may be None to disable it: TMIN=None drops the lower bound, TMAX=None the upper,
 # both None draws every available maturity.
-TMIN, TMAX = 89, 750
+TMIN, TMAX = 0, 1500
 
 # Per-row maturity key: True draws a legend, False draws a colorbar.
 USE_LEGEND = True

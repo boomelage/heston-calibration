@@ -89,8 +89,14 @@ import config
 from config import (
     MIN_MATS, MIN_STRIKES, MIN_CELLS,
     IV_RMSE_ACCEPT, OBJECTIVE_NAMES, MODEL_NAMES, calib_paths, spec_path,
-    DEFAULT_MODEL, DEFAULT_OBJECTIVE
+    DEFAULT_MODEL, DEFAULT_OBJECTIVE, PARAM_ANCHOR_LOOKBACK,
 )
+
+# Parameter columns a prior calibrations.csv can supply as a cross-day anchor (Lever 5). Heston rows
+# carry the first five; Bates rows add the jump triple. _build_anchor keeps whichever are present.
+_ANCHOR_PARAMS = ("theta", "kappa", "eta", "rho", "v0", "lambda_", "nu", "delta")
+# Sentinel for the bare `--PRIOR_FROM` flag (no path given): anchor to the run's OWN calibrations.csv.
+_PRIOR_SELF = "__SELF__"
 
 # Per-model engine, the extra Bates parameter columns, and the repriced model-price column name.
 # Heston keeps its 5 params and the `heston` price column; Bates appends (lambda_, nu, delta) and writes
@@ -131,6 +137,31 @@ def _objective_paths(model, objective):
     validate_calibrations.py rebuilds the same directory from the same rule, so the two stay in lock-step.
     """
     return calib_paths(model, objective)
+
+
+def _build_anchor(prior_sorted, date_str, lookback):
+    """The cross-day anchor (Lever 5) for `date_str`: prior accepted params from `prior_sorted`, or None.
+
+    `prior_sorted` is a Pass-1 calibrations.csv loaded and sorted ascending by the 'date' string column
+    (date strings compare chronologically). The anchor is drawn from the accepted days STRICTLY BEFORE
+    `date_str`: lookback==1 uses the single most recent prior day; lookback>1 uses the per-parameter
+    MEDIAN of the last `lookback` prior days (a smoother, more robust prior). Returns a {param: value}
+    dict over whichever of _ANCHOR_PARAMS the prior file carries, or None when no prior day exists or no
+    prior is supplied. The static prior (a finished file, not this run's live rows) keeps Pass 2
+    parallelism-safe -- every day's anchor is fixed up front, with no day-to-day dependency.
+    """
+    if prior_sorted is None or prior_sorted.empty:
+        return None
+    cols = [c for c in _ANCHOR_PARAMS if c in prior_sorted.columns]
+    if not cols:
+        return None
+    before = prior_sorted[prior_sorted["date"] < date_str]
+    if before.empty:
+        return None
+    window = before.tail(max(1, int(lookback)))
+    vals = window[cols].median(numeric_only=True) if len(window) > 1 else window[cols].iloc[-1]
+    out = {c: float(vals[c]) for c in cols if pd.notna(vals[c])}
+    return out or None
 
 
 def _write_blocking(action, target):
@@ -179,7 +210,7 @@ def _skip_day(test_path, reason, detail, iv_rmse=np.nan,
             'n_maturities': n_maturities, 'n_strikes': n_strikes, 'n_cells': n_cells}
 
 
-def calibrate_by_day(filepath, OBJECTIVE, MODEL, stop_event=None):
+def calibrate_by_day(filepath, OBJECTIVE, MODEL, stop_event=None, anchor=None):
     # Graceful-interrupt cooperation. Active only when run under the orchestrator, which always passes
     # stop_event; direct callers (notebooks/tests) pass None and are untouched. Two things happen:
     #   1. The worker IGNORES Ctrl-C. On Windows a console Ctrl-C is delivered to every process in the
@@ -244,7 +275,9 @@ def calibrate_by_day(filepath, OBJECTIVE, MODEL, stop_event=None):
             n_maturities=n_mats, n_strikes=n_strikes, n_cells=n_cells,
         )
 
-    res = _ENGINES[MODEL](surf, S_ref, r, g, objective=OBJECTIVE)   # ONE calibration for the whole day (hardened engine)
+    # ONE calibration for the whole day (hardened engine). `anchor` (Lever 5) is the prior-day params
+    # for cross-day regularisation, or None (default / Pass 1), in which case the engine is unchanged.
+    res = _ENGINES[MODEL](surf, S_ref, r, g, objective=OBJECTIVE, anchor=anchor)
     print(f"{pd.Timestamp(date).date()}  S_ref={S_ref:.1f}  cells={n_cells}  "
           f"iv_rmse={res['iv_rmse']}  price_rmse={res['rmse']}  accepted={res['accepted']}")
 
@@ -324,6 +357,14 @@ def main():
                         help="If >0, calibrate only the LIMIT most recent trading days (by date). 0 = all.")
     parser.add_argument("--MAX_JOBS", type=int, default=max(1, os.cpu_count() // 4),
                         help="Number of threads to use at one (one day's calibration per thread) (1//4 of available threads by default)")
+    parser.add_argument("--PRIOR_FROM", type=str, nargs="?", const=_PRIOR_SELF, default=None,
+                        help="Anchor each day to a prior calibrations.csv (Lever 5 cross-day "
+                             "regularisation; needs config.PARAM_ANCHOR_WEIGHT > 0). Pass a PATH to an "
+                             "explicit Pass-1 file, or use the BARE FLAG (--PRIOR_FROM with no value) to "
+                             "anchor to this run's OWN calibrations.csv when it is present. The bare flag "
+                             "composes with resume: already-calibrated days are skipped, and each new day "
+                             "anchors to the earlier days already in the file. Read-only and static, so "
+                             "the run stays parallel-safe. Omit for a normal (no-anchor) run.")
     args = parser.parse_args()
 
     CALIBRATIONS_FILE, REJECTIONS_FILE, TESTS = _objective_paths(args.MODEL, args.OBJECTIVE)
@@ -400,6 +441,38 @@ def main():
         files = files[-args.LIMIT:]
     files = pd.Series(files).reset_index(drop=True)
 
+    # ---- Cross-day anchor source (Lever 5) ----
+    # Resolve where the anchor prior comes from. --PRIOR_FROM <path> uses an explicit Pass-1 file; the
+    # bare flag (_PRIOR_SELF) uses THIS run's own calibrations.csv when present -- which composes with
+    # resume: the already-done days are skipped (filtered out of `files` above) and each NEW day anchors
+    # to the earlier days already in the file. A bare flag with no file yet (fresh run) simply yields no
+    # prior -> no anchor, so the first pass runs normally. We load the chosen file ONCE (sorted ascending
+    # by date) and precompute each day's anchor up front, so the per-task arg is just that day's small
+    # {param: value} dict (cheap to pickle) rather than the whole prior frame. The anchor only bites if
+    # PARAM_ANCHOR_WEIGHT > 0; we warn if a prior is supplied but the weight is 0 (almost always a
+    # forgotten config edit).
+    if args.PRIOR_FROM == _PRIOR_SELF:
+        prior_path = CALIBRATIONS_FILE if CALIBRATIONS_FILE.exists() else None
+        if prior_path is None:
+            print("--PRIOR_FROM flag set but no calibrations.csv present yet; running without an anchor "
+                  "(this is Pass 1 -- re-run with the flag to anchor later days to it).")
+    elif args.PRIOR_FROM:
+        prior_path = Path(args.PRIOR_FROM)
+    else:
+        prior_path = None
+
+    prior_sorted = None
+    if prior_path is not None:
+        prior_sorted = pd.read_csv(prior_path)
+        prior_sorted["date"] = prior_sorted["date"].astype(str)
+        prior_sorted = prior_sorted.sort_values("date").reset_index(drop=True)
+        if config.PARAM_ANCHOR_WEIGHT <= 0.0:
+            print("WARNING: --PRIOR_FROM supplied but config.PARAM_ANCHOR_WEIGHT == 0, so the anchor "
+                  "has NO effect. Set PARAM_ANCHOR_WEIGHT > 0 to enable cross-day regularisation.")
+        print(f"anchoring to {len(prior_sorted)} prior day(s) from {prior_path} "
+              f"(lookback={PARAM_ANCHOR_LOOKBACK}, weight={config.PARAM_ANCHOR_WEIGHT})")
+    anchors = [_build_anchor(prior_sorted, _file_date(f), PARAM_ANCHOR_LOOKBACK) for f in files]
+
     # joblib's default loky backend spawns processes; on Windows the children re-import this module,
     # so the driver MUST live behind `if __name__ == "__main__"` (via main()) -- otherwise each worker
     # re-runs the Parallel call below and recursively spawns process pools. (Parallel/delayed and
@@ -451,7 +524,8 @@ def main():
     signal.signal(signal.SIGINT, _on_sigint)
     try:
         for r in Parallel(n_jobs=args.MAX_JOBS, return_as="generator_unordered")(
-                delayed(calibrate_by_day)(f, args.OBJECTIVE, args.MODEL, stop_event) for f in files):
+                delayed(calibrate_by_day)(f, args.OBJECTIVE, args.MODEL, stop_event, a)
+                for f, a in zip(files, anchors)):
             if r is None:
                 continue
             if 'reason' in r:

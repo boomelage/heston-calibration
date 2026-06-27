@@ -30,14 +30,17 @@ import pandas as pd
 import QuantLib as ql
 
 from config import (
-    BATES_LOW, BATES_HIGH, BATES_JUMP_SEED, IV_RMSE_ACCEPT,
+    BATES_LOW, BATES_HIGH, BATES_BOUNDS, BATES_PARAM_ORDER, BATES_JUMP_SEED, IV_RMSE_ACCEPT,
     DEFAULT_OBJECTIVE, SEED_GRID_TEMPLATE,
-    WING_WEIGHT_GAIN,
+    WING_WEIGHT_GAIN, FELLER_PENALTY, FELLER_SEED_TEMPLATE,
+    PARAM_ANCHOR_WEIGHT,
     LM_ARGS, END_CRITERIA_ARGS,
     calendar as _calendar,
 )
 # Model-agnostic helpers shared with calibrate_heston.py (factored out so the two engines can't drift).
-from _engine_common import _on_boundary, _seed_var, _wing_weight, _iv_rmse
+from _engine_common import (
+    _on_boundary, _seed_var, _wing_weight, _iv_rmse, _feller_violation, _anchor_distance,
+)
 # Single home of the QuantLib process/term-structure construction (constructor arg order, day count).
 from pricing._quantlib_utils import _quantlib_utils
 _qu = _quantlib_utils()
@@ -63,8 +66,10 @@ def _seed_grid(vol_matrix):
     """
     var = _seed_var(vol_matrix)
     lam, nu, delta = BATES_JUMP_SEED
+    # Feller-compliant seeds appended only when FELLER_PENALTY > 0 (baseline unchanged otherwise).
+    template = SEED_GRID_TEMPLATE + (FELLER_SEED_TEMPLATE if FELLER_PENALTY > 0.0 else [])
     return [(var * v0_mult, kappa, var * theta_mult, eta, rho, lam, nu, delta)
-            for v0_mult, kappa, theta_mult, eta, rho in SEED_GRID_TEMPLATE]
+            for v0_mult, kappa, theta_mult, eta, rho in template]
 
 
 def _calibrate_once(start, surface, s, r_ts, g_ts, S_handle, constraint, error_type, objective):
@@ -77,7 +82,9 @@ def _calibrate_once(start, surface, s, r_ts, g_ts, S_handle, constraint, error_t
     v0, kappa, theta, eta, rho, lambda_, nu, delta = start
     process = _qu.bates_process(r_ts, g_ts, S_handle, kappa, theta, rho, eta, v0, lambda_, nu, delta)
     model = ql.BatesModel(process)
-    engine = ql.BatesEngine(model)
+    # CF-integration accuracy is config.BATES_INTEGRATION, applied in one place (_quantlib_utils) so
+    # the fit, the calibration_tests repricing and the IV inversion all integrate identically.
+    engine = _qu.bates_engine_for(model)
 
     # Wing weights only meaningful in vol space (see config.py / PLAN Lever B); default-off (GAIN=0).
     apply_wing = (objective == "vol") and (WING_WEIGHT_GAIN > 0.0)
@@ -115,7 +122,21 @@ def _calibrate_once(start, surface, s, r_ts, g_ts, S_handle, constraint, error_t
     return list(model.params()), iv_rmse_sel, iv_rmse_gate, price_rmse, len(helpers)
 
 
-def calibrate_bates(vol_matrix, s, r, g, objective=DEFAULT_OBJECTIVE) -> dict:
+def _anchor_seed(anchor):
+    """A warm-start restart at the prior-day params (BatesProcess constructor order), or None.
+
+    Returns (v0, kappa, theta, eta, rho, lambda, nu, delta) from the anchor dict, or None if any key is
+    missing -- so a Heston-only or partial prior simply contributes no warm seed.
+    """
+    try:
+        return (float(anchor["v0"]), float(anchor["kappa"]), float(anchor["theta"]),
+                float(anchor["eta"]), float(anchor["rho"]),
+                float(anchor["lambda_"]), float(anchor["nu"]), float(anchor["delta"]))
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def calibrate_bates(vol_matrix, s, r, g, objective=DEFAULT_OBJECTIVE, anchor=None) -> dict:
     error_type = _ERR[objective]
     calculation_date = ql.Date.todaysDate()
     ql.Settings.instance().evaluationDate = calculation_date
@@ -123,8 +144,23 @@ def calibrate_bates(vol_matrix, s, r, g, objective=DEFAULT_OBJECTIVE) -> dict:
     S_handle = _qu._spot_handle(s)
     constraint = ql.NonhomogeneousBoundaryConstraint(ql.Array(BATES_LOW), ql.Array(BATES_HIGH))
 
+    # Cross-day anchor (Lever 5): active only with a supplied prior AND PARAM_ANCHOR_WEIGHT > 0; off by
+    # default so the seed grid and ranking are the committed baseline. The anchor distance spans all
+    # eight BATES_PARAM_ORDER names present in the prior (jumps included if the prior carries them).
+    use_anchor = anchor is not None and PARAM_ANCHOR_WEIGHT > 0.0
+    seeds = list(_seed_grid(vol_matrix))
+    if use_anchor:
+        warm = _anchor_seed(anchor)
+        if warm is not None:
+            seeds.append(warm)
+
+    # Ranked by score = iv_rmse_sel + FELLER_PENALTY * Feller-violation + PARAM_ANCHOR_WEIGHT *
+    # anchor-distance (see calibrate_heston). The Feller violation is computed on the FIVE Heston params
+    # (params[:3] = theta,kappa,eta); jumps do not enter Feller. FELLER_PENALTY=0, no anchor, and wing
+    # weighting off reproduces the committed baseline exactly.
     best = None  # (params, iv_rmse_sel, iv_rmse_gate, price_rmse, n_helpers)
-    for start in _seed_grid(vol_matrix):
+    best_score = np.inf
+    for start in seeds:
         try:
             params, iv_rmse_sel, iv_rmse_gate, price_rmse, n_helpers = _calibrate_once(
                 start, vol_matrix, s, r_ts, g_ts, S_handle, constraint, error_type, objective)
@@ -132,7 +168,11 @@ def calibrate_bates(vol_matrix, s, r, g, objective=DEFAULT_OBJECTIVE) -> dict:
             continue
         if not np.isfinite(iv_rmse_sel):
             continue
-        if best is None or iv_rmse_sel < best[1]:
+        score = iv_rmse_sel + FELLER_PENALTY * _feller_violation(params)
+        if use_anchor:
+            score += PARAM_ANCHOR_WEIGHT * _anchor_distance(params, anchor, BATES_PARAM_ORDER, BATES_BOUNDS)
+        if score < best_score:
+            best_score = score
             best = (params, iv_rmse_sel, iv_rmse_gate, price_rmse, n_helpers)
 
     if best is None:

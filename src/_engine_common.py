@@ -11,7 +11,7 @@ import numpy as np
 from config import (
     IV_ACC, IV_MAXEVAL, IV_LO, IV_HI,
     SEED_VAR_FALLBACK, SEED_VAR_LO, SEED_VAR_HI,
-    WING_WEIGHT_GAIN, WING_WEIGHT_POWER, WING_WEIGHT_SCALE,
+    WING_WEIGHT_GAIN, WING_WEIGHT_POWER, WING_WEIGHT_SCALE, WING_WEIGHT_FLOOR,
 )
 
 
@@ -30,6 +30,40 @@ def _on_boundary(params, low, high):
     return False
 
 
+def _feller_violation(params):
+    """Feller shortfall max(0, eta^2 - 2*kappa*theta) from a model.params() vector.
+
+    Zero when the Feller condition 2*kappa*theta >= eta^2 holds, otherwise the size of the violation.
+    Works for both engines: a HestonModel.params() vector is [theta, kappa, eta, rho, v0] and a
+    BatesModel.params() vector is [theta, kappa, eta, rho, v0, nu, delta, lambda]; the first three
+    entries are theta, kappa, eta in both, and jumps do not enter Feller. Used by the restart-selection
+    soft penalty (config.FELLER_PENALTY) to bias the chosen restart toward Feller-compliant fits.
+    """
+    theta, kappa, eta = float(params[0]), float(params[1]), float(params[2])
+    return max(0.0, eta ** 2 - 2.0 * kappa * theta)
+
+
+def _anchor_distance(params, anchor, names, bounds):
+    """Span-normalised squared distance of a model.params() vector from a prior-day `anchor` dict.
+
+    `params` is the fitted vector, `names` its matching parameter names (PARAM_ORDER for Heston,
+    BATES_PARAM_ORDER for Bates), `bounds` the box dict. Only names present (and non-None) in `anchor`
+    contribute, so a caller can anchor a subset (e.g. the five Heston params, leaving the noisy jump
+    triple free). Each term is ((param - prior) / bound_span) ** 2, so every parameter contributes on a
+    comparable 0..1 scale. Zero when the fit equals the prior. Used by the cross-day regularisation
+    (config.PARAM_ANCHOR_WEIGHT) to bias restart selection toward the previous day's parameters.
+    """
+    d = 0.0
+    for p, name in zip(params, names):
+        a = anchor.get(name)
+        if a is None:
+            continue
+        lo, hi = bounds[name]
+        span = (hi - lo) or 1.0
+        d += ((float(p) - float(a)) / span) ** 2
+    return d
+
+
 def _seed_var(vol_matrix):
     """The surface's variance level: clip(median(vol)^2, [SEED_VAR_LO, SEED_VAR_HI]).
 
@@ -42,10 +76,14 @@ def _seed_var(vol_matrix):
 
 
 def _wing_weight(k, s):
-    """LM weight for a cell at strike k against reference spot s: 1 at ATM, rising into the wings by
-    |log(k/s)|. GAIN=0 => 1.0 everywhere (uniform). QuantLib normalises these, so only ratios matter."""
+    """LM weight for a cell at strike k against reference spot s: 1 at ATM, shifted into the wings by
+    |log(k/s)|. GAIN=0 => 1.0 everywhere (uniform). GAIN>0 up-weights the wings; GAIN<0 down-weights
+    them, clamped to WING_WEIGHT_FLOOR so the weight stays positive (QuantLib needs positive weights).
+    GAIN=0 makes the clamp inert, so the default path is identical. QuantLib normalises these, so only
+    ratios matter."""
     x = abs(np.log(float(k) / float(s)))
-    return 1.0 + WING_WEIGHT_GAIN * (x / WING_WEIGHT_SCALE) ** WING_WEIGHT_POWER
+    w = 1.0 + WING_WEIGHT_GAIN * (x / WING_WEIGHT_SCALE) ** WING_WEIGHT_POWER
+    return max(w, WING_WEIGHT_FLOOR)
 
 
 def _iv_rmse(helpers, mkt_vols, weights=None):

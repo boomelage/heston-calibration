@@ -184,22 +184,25 @@ FELLER_PENALTY = 0.0
 
 # ---- Engine: cross-day parameter anchor / regularization (PLAN.md Phase 3 Lever 5) ----
 # Day-to-day parameter instability (e.g. the 2019 kappa walk toward its floor) is damped by softly
-# anchoring each day's fit to a PRIOR day's parameters. This is a TWO-PASS workflow, not a live
-# neighbour dependency, so it stays parallelism-safe: Pass 1 is a normal run; Pass 2 reads the Pass-1
-# calibrations.csv (via the calibrator's --PRIOR_FROM <path>) and, for each day, anchors to its
-# previous accepted day(s) in that file. The anchor enters the engine two ways, BOTH gated on
-# PARAM_ANCHOR_WEIGHT > 0 and on an anchor actually being supplied:
+# anchoring each day's fit to its RECENT accepted parameters. The orchestrator reads them IN-FLIGHT:
+# each day anchors to the median of its last PARAM_ANCHOR_LOOKBACK accepted days, drawn from the live
+# accepted pool (the rows on disk at run start, resumed, plus every day the run has accepted so far).
+# Anchoring on the true latest predecessors makes day D depend on D-1, an inherently sequential chain,
+# so when PARAM_ANCHOR_WEIGHT > 0 the calibrator runs STRICTLY SEQUENTIALLY in date order (--MAX_JOBS is
+# ignored; perfect anchor freshness at the cost of parallelism). The anchor enters the engine two ways,
+# BOTH gated on PARAM_ANCHOR_WEIGHT > 0 and on an anchor actually being available:
 #   (1) a warm-start restart seeded at the prior params (so the prior basin is explored), and
 #   (2) a Tikhonov term added to the restart-selection score:
 #         score += PARAM_ANCHOR_WEIGHT * sum_p ((param_p - prior_p) / bound_span_p) ** 2
 #       (span-normalised so every parameter contributes comparably). It does NOT touch the LM
 #       objective, the acceptance gate, or the reported iv_rmse. With PARAM_ANCHOR_WEIGHT=0 (default)
-#       or no --PRIOR_FROM, the engines add neither the seed nor the term, so the baseline is unchanged.
+#       the engine adds neither the seed nor the term and the calibrator keeps the fast PARALLEL path,
+#       so the baseline is unchanged. Raise the weight to opt into (sequential) anchoring.
 # PARAM_ANCHOR_LOOKBACK = 1 anchors to the single previous accepted day; N > 1 anchors to the median of
 # the last N accepted days (a smoother, more robust prior). The selection IV-RMSE is ~0.005, so a unit
 # anchor deviation of a full bound-span is huge: start PARAM_ANCHOR_WEIGHT small (~0.001-0.01) and grade
 # day-to-day stability with src/results/calibration_diagnostics.py before trusting it.
-PARAM_ANCHOR_WEIGHT = 0.0
+PARAM_ANCHOR_WEIGHT = 0.005
 PARAM_ANCHOR_LOOKBACK = 5
 
 # ---- Engine: optimizer (Levenberg-Marquardt + EndCriteria) ----

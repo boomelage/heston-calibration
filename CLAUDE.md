@@ -86,7 +86,12 @@ by default; `--LIMIT N` restricts to the `N` most recent trading days, `--MAX_JO
 worker count (default `max(1, os.cpu_count() // 4)`, one day per worker), `--MODEL {heston,bates}`
 (default `heston`), `--OBJECTIVE {price,vol}` (default `vol`, `config.DEFAULT_OBJECTIVE`). A full Heston
 `vol` run over the multi-year sample is a few thousand days / a few hours (multi-start LM, ~1,500
-cells/day); a Bates run is ~4.5x slower per day.
+cells/day); a Bates run is ~4.5x slower per day. **The cross-day anchor (Lever E) overrides
+parallelism:** when `config.PARAM_ANCHOR_WEIGHT > 0` the driver runs **strictly sequentially** in date
+order and `--MAX_JOBS` is ignored, because each day anchors on its recent accepted predecessors read
+in-flight (an inherently sequential dependency; an anchored run is roughly `MAX_JOBS`× the parallel
+wall-clock). Weight 0 (the default) keeps the fast parallel path. The static two-pass `--PRIOR_FROM`
+flag was removed.
 
 **Data not in version control** (full rationale + fresh-clone bootstrap in README): `data/options/raw/`
 (~80–90 MB/day) and the per-day `results/*/calibrations/*/calibration_tests/` are git-ignored (only
@@ -313,9 +318,11 @@ string→QuantLib-enum map and the `_WIRING` builders stay in `_calibration_engi
 Each restart is ranked by `iv_rmse_sel + FELLER_PENALTY*_feller_violation(params) +
 PARAM_ANCHOR_WEIGHT*_anchor_distance(params, anchor, ...)`; the **gate and reported `iv_rmse` stay the
 unweighted IV-RMSE**. `FELLER_PENALTY` (Lever D) biases toward Feller-compliant fits;
-`PARAM_ANCHOR_WEIGHT`/`PARAM_ANCHOR_LOOKBACK` (Lever E) softly anchor a day to a prior run's params via
-the two-pass `--PRIOR_FROM` workflow; `WING_WEIGHT_GAIN < 0` (Lever G) de-emphasises the wings, clamped
-positive by `WING_WEIGHT_FLOOR`. See `PLAN.md` for the lever rationale and sweep findings.
+`PARAM_ANCHOR_WEIGHT`/`PARAM_ANCHOR_LOOKBACK` (Lever E) softly anchor a day to the median of its last
+`PARAM_ANCHOR_LOOKBACK` accepted days, read **in-flight** from the live accepted pool (seeded from
+`calibrations.csv` on resume); `PARAM_ANCHOR_WEIGHT > 0` forces a **strictly sequential** run (see Driver
+flags). `WING_WEIGHT_GAIN < 0` (Lever G) de-emphasises the wings, clamped positive by
+`WING_WEIGHT_FLOOR`. See `PLAN.md` for the lever rationale and sweep findings.
 
 **Shared engine helpers (`src/_engine_common.py`).** Model-agnostic, QuantLib-free helpers the single
 engine builds on: `_on_boundary(params, low, high)` (takes its `low`/`high` so a caller can gate a

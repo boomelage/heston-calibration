@@ -264,21 +264,23 @@ less wing curvature (a sweep, not a default change — 0.15 already pushes some 
 `WING_WEIGHT_FLOOR`) to **de-emphasise** the wings so near-linear days are not forced to bend. Measure:
 the diagnostic's `d_curv_call` / `call_convex_frac`. Risk: low–medium.
 
-**Lever E — warm-start + cross-day anchor (stabiliser; two-pass). [IMPLEMENTED, default-off.]** Damps
+**Lever E — warm-start + cross-day anchor (stabiliser; in-flight, sequential). [IMPLEMENTED, default-off.]** Damps
 day-to-day instability (the 2019 `kappa` walk). `config.PARAM_ANCHOR_WEIGHT` adds a Tikhonov term
 `Σ_p ((param_p − prior_p)/span_p)²` to the restart score and a warm-start seed at the prior params
-(`_engine_common._anchor_distance`; both engines). The prior is supplied by `--PRIOR_FROM`,
-either as an explicit **two-pass** path (Pass 1 normal; Pass 2 reads that static Pass-1
-`calibrations.csv`) or as a **bare flag** that anchors to the run's OWN `calibrations.csv` when present
-— which composes with resume (already-done days skipped; each new day anchors to the earlier days
-already in the file, so an incremental extension self-anchors). Either way each day is anchored to its
-previous accepted day(s) (`config.PARAM_ANCHOR_LOOKBACK`: 1 = previous day, N = median of last N). The static prior keeps Pass 2
-parallelism-safe (each day's anchor is fixed up front, no live-neighbour dependency). **Validated
-end-to-end** (Heston, `MAX_JOBS 1`, scratch tree via the new `HC_RESULTS_DIR` env override): weight 0
-reproduces the baseline exactly, and on well-identified days a nonzero weight is a near-no-op (it does
-not distort good fits — the desired safety property); its bite is reserved for ill-conditioned days.
-Pairs naturally with Lever A — yesterday's `kappa` is the anchor. Measure: cross-day `kappa` stability.
-Risk: medium (touches both engine signatures + the orchestrator, all behind the default-off flag).
+(`_engine_common._anchor_distance`; both engines). The orchestrator reads the prior IN-FLIGHT: each day
+anchors to the median of its last `PARAM_ANCHOR_LOOKBACK` accepted days (1 = previous day, N = median of
+last N), drawn from the live accepted pool (the rows on disk at run start, resumed, plus every day the
+run has accepted so far). The old static `--PRIOR_FROM` two-pass file workflow is gone; resume seeds the
+pool from `calibrations.csv`, so an incremental extension self-anchors on the days already on disk.
+Because a day anchors on its true latest predecessors, day D depends on D-1 (an inherently sequential
+chain, and a parallel day cannot anchor on a day still being fit), so `PARAM_ANCHOR_WEIGHT > 0` forces a
+**strictly sequential** run in date order (`--MAX_JOBS` ignored). That is the freshness/parallelism
+trade-off: perfect anchor freshness costs the multi-core speedup (an anchored full run is roughly
+`MAX_JOBS`× the wall-clock of the parallel baseline). Weight 0 keeps the fast parallel path and
+reproduces the baseline exactly. On well-identified days a nonzero weight is a near-no-op (it does not
+distort good fits, the desired safety property); its bite is reserved for ill-conditioned days. Pairs
+naturally with Lever A: yesterday's `kappa` is the anchor. Measure: cross-day `kappa` stability.
+Risk: medium (touches the orchestrator's run loop; the engine path stays behind the default-off weight).
 
 **Out of scope (future).** Term-structured `r`,`g` curves — flat-forward makes the eval-date
 immaterial (Phase 2 confirmed); revisit only if real SPX term structures are introduced. A genuinely
@@ -298,7 +300,7 @@ FELLER_PENALTY = 0.0                            # lever D: LANDED (default-off; 
 FELLER_SEED_TEMPLATE = [...]                    # lever D: Feller-compliant warm seeds (only when penalty>0)
 HESTON_INTEGRATION = None ; BATES_INTEGRATION = None   # lever F: LANDED (CF integration accuracy)
 WING_WEIGHT_GAIN = 0.0 ; WING_WEIGHT_FLOOR = 1e-3      # lever G: GAIN<0 now de-emphasises wings (clamped)
-PARAM_ANCHOR_WEIGHT = 0.0 ; PARAM_ANCHOR_LOOKBACK = 1  # lever E: LANDED (cross-day anchor, two-pass)
+PARAM_ANCHOR_WEIGHT = 0.0 ; PARAM_ANCHOR_LOOKBACK = 5  # lever E: LANDED (cross-day anchor, in-flight; weight>0 => sequential run)
 # RESULTS now honours the HC_RESULTS_DIR env override (write an A/B run to a scratch tree).
 
 # calibrate_{heston,bates}.py — selection score (all extra terms vanish at the defaults above)
@@ -307,8 +309,8 @@ score = iv_rmse_sel + FELLER_PENALTY*_feller_violation(p) + PARAM_ANCHOR_WEIGHT*
 # warm-start seed at the prior params appended when PARAM_ANCHOR_WEIGHT>0 and an anchor is supplied (lever E)
 
 # calibrator_prototype.py — anchor plumbing (lever E)
-#   --PRIOR_FROM <path>  (explicit Pass-1 file)  OR  --PRIOR_FROM  (bare flag -> own calibrations.csv if present)
-#     -> _build_anchor(prior, date, lookback) per day -> calibrate_by_day(..., anchor)
+#   PARAM_ANCHOR_WEIGHT > 0 -> strictly sequential run; per day _build_anchor(in-flight accepted pool,
+#   date, lookback) -> calibrate_by_day(..., anchor). The pool is seeded from calibrations.csv on resume.
 # Still OPEN: lever C `fixParameters` (fix kappa), and the hard in-LM Feller penalty (custom ql.CostFunction).
 ```
 

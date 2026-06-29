@@ -56,6 +56,14 @@ cover every attempted day and the pegged-vs-thin split is auditable. Like calibr
 rejections.csv is APPENDED INCREMENTALLY as each day is dropped (readable mid-run in worker-completion
 order) and then REWRITTEN SORTED BY DATE at the end (merged with any resumed rows); an empty set
 removes its file.
+
+CROSS-DAY ANCHOR (Lever 5). When config.PARAM_ANCHOR_WEIGHT > 0 each day's fit is softly regularised
+toward the median of its last PARAM_ANCHOR_LOOKBACK accepted days, read from the IN-FLIGHT accepted pool
+(the accepted rows on disk at run start, plus every day this run has accepted so far). Because a day
+anchors on its true latest predecessors, day D depends on D-1, so the anchored run is processed STRICTLY
+SEQUENTIALLY in date order (--MAX_JOBS is ignored). When the weight is 0 the anchor has no effect and the
+run uses the fast parallel path. Resume seeds the pool from the existing calibrations.csv, so an
+incremental extension self-anchors on the days already on disk.
 """
 import os
 import sys
@@ -91,11 +99,9 @@ from config import (
     DEFAULT_MODEL, DEFAULT_OBJECTIVE, PARAM_ANCHOR_LOOKBACK,
 )
 
-# Parameter columns a prior calibrations.csv can supply as a cross-day anchor (Lever 5). Heston rows
+# Parameter columns the in-flight accepted pool can supply as a cross-day anchor (Lever 5). Heston rows
 # carry the first five; Bates rows add the jump triple. _build_anchor keeps whichever are present.
 _ANCHOR_PARAMS = ("theta", "kappa", "eta", "rho", "v0", "lambda_", "nu", "delta")
-# Sentinel for the bare `--PRIOR_FROM` flag (no path given): anchor to the run's OWN calibrations.csv.
-_PRIOR_SELF = "__SELF__"
 
 # The extra Bates parameter columns and the repriced model-price column name. Heston keeps its 5 params
 # and the `heston` price column; Bates appends (lambda_, nu, delta) and writes a `bates` column priced by
@@ -139,23 +145,26 @@ def _objective_paths(model, objective):
     return calib_paths(model, objective)
 
 
-def _build_anchor(prior_sorted, date_str, lookback):
-    """The cross-day anchor (Lever 5) for `date_str`: prior accepted params from `prior_sorted`, or None.
+def _build_anchor(pool, date_str, lookback):
+    """The cross-day anchor (Lever 5) for `date_str`: the recent accepted params from `pool`, or None.
 
-    `prior_sorted` is a Pass-1 calibrations.csv loaded and sorted ascending by the 'date' string column
-    (date strings compare chronologically). The anchor is drawn from the accepted days STRICTLY BEFORE
-    `date_str`: lookback==1 uses the single most recent prior day; lookback>1 uses the per-parameter
-    MEDIAN of the last `lookback` prior days (a smoother, more robust prior). Returns a {param: value}
-    dict over whichever of _ANCHOR_PARAMS the prior file carries, or None when no prior day exists or no
-    prior is supplied. The static prior (a finished file, not this run's live rows) keeps Pass 2
-    parallelism-safe -- every day's anchor is fixed up front, with no day-to-day dependency.
+    `pool` is the in-flight accepted set -- the rows already on disk at run start (resumed) plus every
+    day THIS run has accepted so far -- as a DataFrame with a string 'date' column and the fitted
+    parameter columns. It is sorted ascending here, so the caller need not pre-sort (date strings compare
+    chronologically). The anchor is drawn from the accepted days STRICTLY BEFORE `date_str`: lookback==1
+    uses the single most recent prior day; lookback>1 uses the per-parameter MEDIAN of the last `lookback`
+    prior days (a smoother, more robust prior). Returns a {param: value} dict over whichever of
+    _ANCHOR_PARAMS the pool carries, or None when no prior accepted day exists. The anchored run is
+    processed STRICTLY SEQUENTIALLY in date order (see main), so every accepted day earlier than
+    `date_str` is already in the pool when this is called -- the anchor sees the true latest predecessors.
     """
-    if prior_sorted is None or prior_sorted.empty:
+    if pool is None or pool.empty:
         return None
-    cols = [c for c in _ANCHOR_PARAMS if c in prior_sorted.columns]
+    cols = [c for c in _ANCHOR_PARAMS if c in pool.columns]
     if not cols:
         return None
-    before = prior_sorted[prior_sorted["date"] < date_str]
+    pool = pool.sort_values("date")
+    before = pool[pool["date"] < date_str]
     if before.empty:
         return None
     window = before.tail(max(1, int(lookback)))
@@ -275,8 +284,9 @@ def calibrate_by_day(filepath, OBJECTIVE, MODEL, stop_event=None, anchor=None):
             n_maturities=n_mats, n_strikes=n_strikes, n_cells=n_cells,
         )
 
-    # ONE calibration for the whole day (hardened engine). `anchor` (Lever 5) is the prior-day params
-    # for cross-day regularisation, or None (default / Pass 1), in which case the engine is unchanged.
+    # ONE calibration for the whole day (hardened engine). `anchor` (Lever 5) is the recent accepted
+    # params for cross-day regularisation (supplied only on the sequential anchored path), or None (the
+    # no-anchor parallel path), in which case the engine is unchanged.
     res = calibrate(MODEL, surf, S_ref, r, g, objective=OBJECTIVE, anchor=anchor)
     print(f"{pd.Timestamp(date).date()}  S_ref={S_ref:.1f}  cells={n_cells}  "
           f"iv_rmse={res['iv_rmse']}  price_rmse={res['rmse']}  accepted={res['accepted']}")
@@ -356,15 +366,9 @@ def main():
     parser.add_argument("--LIMIT", type=int, default=0,
                         help="If >0, calibrate only the LIMIT most recent trading days (by date). 0 = all.")
     parser.add_argument("--MAX_JOBS", type=int, default=max(1, os.cpu_count() // 4),
-                        help="Number of threads to use at one (one day's calibration per thread) (1//4 of available threads by default)")
-    parser.add_argument("--PRIOR_FROM", type=str, nargs="?", const=_PRIOR_SELF, default=None,
-                        help="Anchor each day to a prior calibrations.csv (Lever 5 cross-day "
-                             "regularisation; needs config.PARAM_ANCHOR_WEIGHT > 0). Pass a PATH to an "
-                             "explicit Pass-1 file, or use the BARE FLAG (--PRIOR_FROM with no value) to "
-                             "anchor to this run's OWN calibrations.csv when it is present. The bare flag "
-                             "composes with resume: already-calibrated days are skipped, and each new day "
-                             "anchors to the earlier days already in the file. Read-only and static, so "
-                             "the run stays parallel-safe. Omit for a normal (no-anchor) run.")
+                        help="Number of threads to use at one (one day's calibration per thread) (1//4 of "
+                             "available threads by default). Ignored when the cross-day anchor is active "
+                             "(config.PARAM_ANCHOR_WEIGHT > 0), which forces a strictly sequential run.")
     args = parser.parse_args()
 
     CALIBRATIONS_FILE, REJECTIONS_FILE, TESTS = _objective_paths(args.MODEL, args.OBJECTIVE)
@@ -441,109 +445,137 @@ def main():
         files = files[-args.LIMIT:]
     files = pd.Series(files).reset_index(drop=True)
 
-    # ---- Cross-day anchor source (Lever 5) ----
-    # Resolve where the anchor prior comes from. --PRIOR_FROM <path> uses an explicit Pass-1 file; the
-    # bare flag (_PRIOR_SELF) uses THIS run's own calibrations.csv when present -- which composes with
-    # resume: the already-done days are skipped (filtered out of `files` above) and each NEW day anchors
-    # to the earlier days already in the file. A bare flag with no file yet (fresh run) simply yields no
-    # prior -> no anchor, so the first pass runs normally. We load the chosen file ONCE (sorted ascending
-    # by date) and precompute each day's anchor up front, so the per-task arg is just that day's small
-    # {param: value} dict (cheap to pickle) rather than the whole prior frame. The anchor only bites if
-    # PARAM_ANCHOR_WEIGHT > 0; we warn if a prior is supplied but the weight is 0 (almost always a
-    # forgotten config edit).
-    if args.PRIOR_FROM == _PRIOR_SELF:
-        prior_path = CALIBRATIONS_FILE if CALIBRATIONS_FILE.exists() else None
-        if prior_path is None:
-            print("--PRIOR_FROM flag set but no calibrations.csv present yet; running without an anchor "
-                  "(this is Pass 1 -- re-run with the flag to anchor later days to it).")
-    elif args.PRIOR_FROM:
-        prior_path = Path(args.PRIOR_FROM)
-    else:
-        prior_path = None
+    # ---- Cross-day anchor (Lever 5): in-flight, sequential ----
+    # The anchor is active iff config.PARAM_ANCHOR_WEIGHT > 0. When active, each day is softly
+    # regularised toward the MEDIAN of its last PARAM_ANCHOR_LOOKBACK accepted days, drawn from the
+    # IN-FLIGHT accepted pool (the rows already on disk at run start, resumed, plus every day THIS run
+    # has accepted so far). Anchoring a day on its true latest predecessors makes day D depend on D-1,
+    # which depends on D-2, ... -- an inherently sequential chain, and parallel days cannot anchor on a
+    # day still being computed. So the anchored run is processed STRICTLY SEQUENTIALLY in date order (no
+    # parallelism; --MAX_JOBS is ignored). When the weight is 0 the anchor has no effect, so we keep the
+    # fast parallel path (joblib, unordered) unchanged.
+    anchoring = config.PARAM_ANCHOR_WEIGHT > 0.0
 
-    prior_sorted = None
-    if prior_path is not None:
-        prior_sorted = pd.read_csv(prior_path)
-        prior_sorted["date"] = prior_sorted["date"].astype(str)
-        prior_sorted = prior_sorted.sort_values("date").reset_index(drop=True)
-        if config.PARAM_ANCHOR_WEIGHT <= 0.0:
-            print("WARNING: --PRIOR_FROM supplied but config.PARAM_ANCHOR_WEIGHT == 0, so the anchor "
-                  "has NO effect. Set PARAM_ANCHOR_WEIGHT > 0 to enable cross-day regularisation.")
-        print(f"anchoring to {len(prior_sorted)} prior day(s) from {prior_path} "
-              f"(lookback={PARAM_ANCHOR_LOOKBACK}, weight={config.PARAM_ANCHOR_WEIGHT})")
-    anchors = [_build_anchor(prior_sorted, _file_date(f), PARAM_ANCHOR_LOOKBACK) for f in files]
-
-    # joblib's default loky backend spawns processes; on Windows the children re-import this module,
-    # so the driver MUST live behind `if __name__ == "__main__"` (via main()) -- otherwise each worker
-    # re-runs the Parallel call below and recursively spawns process pools. (Parallel/delayed and
-    # SyncManager are imported at module top; only the Parallel CALL must stay behind the guard.)
     accepted, rejected = [], []
     # Both calibrations.csv and rejections.csv are appended incrementally as days complete, so each is
-    # readable mid-run (in worker-completion order). On a fresh run the first flush for each file
-    # creates it with a header; on a resume the file already exists with old rows + header, so suppress
-    # the header and let new rows append cleanly beneath them (the end-of-run merge rewrites both sorted
-    # by date anyway). A file that did not exist at resume (only accepts, or only rejects, last run)
-    # gets its header from this run's first matching row.
+    # readable mid-run. On a fresh run the first flush for each file creates it with a header; on a resume
+    # the file already exists with old rows + header, so suppress the header and let new rows append
+    # cleanly beneath them (the end-of-run merge rewrites both sorted by date anyway). A file that did not
+    # exist at resume (only accepts, or only rejects, last run) gets its header from this run's first row.
     cal_header_written = CALIBRATIONS_FILE.exists()
     rej_header_written = REJECTIONS_FILE.exists()
 
-    # ---- Two-stage graceful Ctrl-C ----
-    # A run uses up to MAX_JOBS worker processes, each calibrating one day. On a console Ctrl-C the
-    # naive behaviour abandons every IN-FLIGHT day (the workers are killed mid-fit), so days earlier
-    # than the last one written are left half-done and must be recomputed on resume. Instead:
-    #   FIRST Ctrl-C  -> request a graceful stop. We set a SHARED stop flag (a Manager().Event(), visible
-    #                    to the workers) so no not-yet-started day begins, and we DO NOT raise -- the
-    #                    result generator keeps draining, so every in-flight worker runs to completion and
-    #                    its row is written. The workers ignore SIGINT (see calibrate_by_day), so the
-    #                    console Ctrl-C cannot kill an in-flight fit. Remaining days return instantly as
-    #                    no-ops and are left for the next resume.
-    #   SECOND Ctrl-C -> warn and force-abort: restore the default handler and raise, which tears the
-    #                    pool down and abandons whatever is still in flight. Execution falls through to the
-    #                    end-of-run block below, which STILL rewrites the authoritative calibrations.csv /
-    #                    rejections.csv / config_spec.json from the days completed so far (unchanged logic).
-    # The Manager server itself ignores SIGINT (_ignore_sigint initializer) so the shared flag survives.
-    mgr = SyncManager()
-    mgr.start(_ignore_sigint)
-    stop_event = mgr.Event()
+    # ---- Two-stage graceful Ctrl-C (both paths) ----
+    #   FIRST Ctrl-C  -> request a graceful stop: start no new day, but let the in-flight day finish and
+    #                    write its row (the handler returns without raising). Remaining days are left for
+    #                    the next resume.
+    #   SECOND Ctrl-C -> restore the default handler and raise, abandoning whatever is in flight. Either
+    #                    way execution falls through to the end-of-run block, which STILL rewrites the
+    #                    authoritative calibrations.csv / rejections.csv / config_spec.json from the days
+    #                    completed so far.
     interrupts = {"n": 0}
     default_sigint = signal.getsignal(signal.SIGINT)
 
-    def _on_sigint(signum, frame):
-        interrupts["n"] += 1
-        if interrupts["n"] == 1:
-            stop_event.set()
-            print("\nKeyboardInterrupt: graceful stop requested. Starting no new days and waiting for "
-                  "the in-flight worker(s) to finish (their rows WILL be written). "
-                  "Press Ctrl-C again to force-abort.", flush=True)
-        else:
-            signal.signal(signal.SIGINT, default_sigint)
-            print("\nSecond KeyboardInterrupt: force-abort. Abandoning in-flight worker(s); writing the "
-                  "days completed so far...", flush=True)
-            raise KeyboardInterrupt
+    if anchoring:
+        # ---- Sequential anchored path ----
+        # No worker pool: calibrate_by_day runs INLINE in this (main) process, so the main _on_sigint
+        # handler stays active throughout each fit (we pass stop_event=None, which makes calibrate_by_day
+        # skip its worker-only SIG_IGN / early-return block). The first Ctrl-C only sets the counter and
+        # returns, so the in-flight day's fit resumes and completes; the loop then breaks before starting
+        # the next day. The second Ctrl-C raises, abandoning the in-flight day.
+        print(f"cross-day anchor active (weight={config.PARAM_ANCHOR_WEIGHT}, lookback="
+              f"{PARAM_ANCHOR_LOOKBACK}): running SEQUENTIALLY in date order (--MAX_JOBS ignored).")
+        # Seed the in-flight pool with the accepted rows already on disk (resumed), so the first new day
+        # anchors on prior runs. date -> str to match _file_date and the lexicographic 'date < date_str'.
+        pool_rows = []
+        if not existing_accepted.empty:
+            seed = existing_accepted.copy()
+            seed["date"] = seed["date"].astype(str)
+            pool_rows = seed.to_dict("records")
 
-    signal.signal(signal.SIGINT, _on_sigint)
-    try:
-        for r in Parallel(n_jobs=args.MAX_JOBS, return_as="generator_unordered")(
-                delayed(calibrate_by_day)(f, args.OBJECTIVE, args.MODEL, stop_event, a)
-                for f, a in zip(files, anchors)):
-            if r is None:
-                continue
-            if 'reason' in r:
-                rejected.append(r)
-                rej_header_written = _append_row(r, REJECTIONS_FILE, rej_header_written)
+        def _on_sigint(signum, frame):
+            interrupts["n"] += 1
+            if interrupts["n"] == 1:
+                print("\nKeyboardInterrupt: graceful stop requested. Finishing the in-flight day (its row "
+                      "WILL be written) and starting no new days. Press Ctrl-C again to force-abort.",
+                      flush=True)
             else:
-                accepted.append(r)
-                cal_header_written = _append_row(r, CALIBRATIONS_FILE, cal_header_written)
-    except KeyboardInterrupt:
-        # Reached only on the SECOND Ctrl-C (force-abort); the first press never raises.
-        print(f"force-abort after {len(accepted)} accepted / {len(rejected)} rejected day(s); "
-              f"finishing writes...", flush=True)
-    finally:
-        signal.signal(signal.SIGINT, default_sigint)
-        mgr.shutdown()
+                signal.signal(signal.SIGINT, default_sigint)
+                print("\nSecond KeyboardInterrupt: force-abort. Abandoning the in-flight day; writing the "
+                      "days completed so far...", flush=True)
+                raise KeyboardInterrupt
+
+        signal.signal(signal.SIGINT, _on_sigint)
+        try:
+            for f in files:
+                if interrupts["n"] >= 1:
+                    break  # graceful stop: start no new day
+                anchor = _build_anchor(pd.DataFrame(pool_rows), _file_date(f), PARAM_ANCHOR_LOOKBACK)
+                row = calibrate_by_day(f, args.OBJECTIVE, args.MODEL, None, anchor)
+                if row is None:
+                    continue
+                if 'reason' in row:
+                    rejected.append(row)
+                    rej_header_written = _append_row(row, REJECTIONS_FILE, rej_header_written)
+                else:
+                    accepted.append(row)
+                    cal_header_written = _append_row(row, CALIBRATIONS_FILE, cal_header_written)
+                    pool_rows.append({**row, 'date': str(row['date'])})  # visible to the NEXT day
+        except KeyboardInterrupt:
+            print(f"force-abort after {len(accepted)} accepted / {len(rejected)} rejected day(s); "
+                  f"finishing writes...", flush=True)
+        finally:
+            signal.signal(signal.SIGINT, default_sigint)
+    else:
+        # ---- Parallel no-anchor path ----
+        # joblib's default loky backend spawns processes; on Windows the children re-import this module,
+        # so the driver MUST live behind `if __name__ == "__main__"` (via main()) -- otherwise each worker
+        # re-runs the Parallel call below and recursively spawns process pools. A run uses up to MAX_JOBS
+        # worker processes, each calibrating one day. The shared stop flag is a Manager().Event() the
+        # workers poll: on the first Ctrl-C no not-yet-started day begins, but the generator keeps draining
+        # so every in-flight worker runs to completion and writes its row (the workers ignore SIGINT -- see
+        # calibrate_by_day -- so the console Ctrl-C cannot kill an in-flight fit). The Manager server
+        # itself ignores SIGINT (_ignore_sigint initializer) so the shared flag survives.
+        mgr = SyncManager()
+        mgr.start(_ignore_sigint)
+        stop_event = mgr.Event()
+
+        def _on_sigint(signum, frame):
+            interrupts["n"] += 1
+            if interrupts["n"] == 1:
+                stop_event.set()
+                print("\nKeyboardInterrupt: graceful stop requested. Starting no new days and waiting for "
+                      "the in-flight worker(s) to finish (their rows WILL be written). "
+                      "Press Ctrl-C again to force-abort.", flush=True)
+            else:
+                signal.signal(signal.SIGINT, default_sigint)
+                print("\nSecond KeyboardInterrupt: force-abort. Abandoning in-flight worker(s); writing the "
+                      "days completed so far...", flush=True)
+                raise KeyboardInterrupt
+
+        signal.signal(signal.SIGINT, _on_sigint)
+        try:
+            for r in Parallel(n_jobs=args.MAX_JOBS, return_as="generator_unordered")(
+                    delayed(calibrate_by_day)(f, args.OBJECTIVE, args.MODEL, stop_event, None)
+                    for f in files):
+                if r is None:
+                    continue
+                if 'reason' in r:
+                    rejected.append(r)
+                    rej_header_written = _append_row(r, REJECTIONS_FILE, rej_header_written)
+                else:
+                    accepted.append(r)
+                    cal_header_written = _append_row(r, CALIBRATIONS_FILE, cal_header_written)
+        except KeyboardInterrupt:
+            # Reached only on the SECOND Ctrl-C (force-abort); the first press never raises.
+            print(f"force-abort after {len(accepted)} accepted / {len(rejected)} rejected day(s); "
+                  f"finishing writes...", flush=True)
+        finally:
+            signal.signal(signal.SIGINT, default_sigint)
+            mgr.shutdown()
 
     if interrupts["n"] == 1:
-        # Graceful stop ran to a clean drain (no second press): the in-flight days were all collected.
+        # Graceful stop ran to a clean drain (no second press): the in-flight day(s) were all collected.
         print(f"graceful stop complete: {len(accepted)} accepted / {len(rejected)} rejected day(s) this "
               f"run; the remaining days were left for the next resume.", flush=True)
 

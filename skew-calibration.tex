@@ -13,7 +13,10 @@
 \usepgfplotslibrary{groupplots}
 \usetikzlibrary{calc}
 \usepackage{standalone}
-\usepackage{natbib}
+\usepackage[backend=biber]{biblatex}
+\addbibresource{refs-skew-calibration.bib}
+%\renewcommand*{\bibfont}{\scriptsize}
+
 
 \newcommand{\doi}[1]{{\tiny DOI:} \href{https://doi.org/#1}{\texttt{#1}}}
 
@@ -121,7 +124,7 @@
 	\begin{titlepage}
 		\vfill
 		\begin{abstract}
-			\noindent We specify a routine that calibrates the five canonical \citet{heston1993}
+			\noindent We specify a routine that calibrates the five canonical \textcite{heston1993}
 			parameters $\Phi=(\theta,\kappa,\eta,\rho,v_0)$ to a day of CBOE S\&P~500
 			(SPX) intraday option trades. The routine performs \emph{one} calibration per
 			trading day over a pooled, moneyness-normalised implied-volatility surface,
@@ -131,7 +134,7 @@
 			grid-snapped strike $K^\star$, the surface-coverage requirements, the configurable
 			in-engine objective (defaulting to implied-volatility ``IV-space'' residuals), the
 			IV-space restart selection and acceptance gate, and the boundary-pegging rejection rule.
-			The same routine optionally fits the \citet{bates1996} extension, which adds Merton lognormal
+			The same routine optionally fits the \textcite{bates1996} extension, which adds Merton lognormal
 			jumps to the Heston dynamics, selected by a run-time flag and calibrated over the identical
 			surface and gate. We keep Heston as the default throughout and present Bates as the
 			eight-parameter generalisation it specialises from.
@@ -149,7 +152,7 @@
 		\subsection{Basis}
 			Under the risk-neutral measure, with constant risk-free rate $r$ and continuous
 			dividend yield $g$, the log-price $X_t=\ln S_t$ and instantaneous variance $v_t$ of the
-			SPX follow the \citet{heston1993} dynamics
+			SPX follow the \textcite{heston1993} dynamics
 			\begin{align}
 				dX_t &= \left( r - g - \tfrac{1}{2} v_t \right) dt
 					+ \sqrt{v_t}\,\bigl( \rho\, dW_t + \sqrt{1 - \rho^2}\, dB_t \bigr), \label{eq:level} \\
@@ -162,7 +165,7 @@
 			\end{equation}
 			with $\theta>0$ the long-run variance, $\kappa>0$ the mean-reversion speed, $\eta>0$ the
 			volatility of variance (QuantLib's \texttt{sigma}), $\rho\in[-1,1]$ the leverage
-			correlation, and $v_0>0$ the initial variance. The Feller quantity \citep{feller1951}
+			correlation, and $v_0>0$ the initial variance. The Feller quantity \parencite{feller1951}
 			\begin{equation}\label{eq:feller}
 				\mathcal{F}(\Phi) \;=\; 2\kappa\theta - \eta^2
 			\end{equation}
@@ -171,7 +174,7 @@
 			otherwise unreasonable; see \S\ref{sec:gate}).
 			
 		\subsection{Jumps}\label{sec:jumps}
-			The \citet{bates1996} model extends Heston with \citet{merton1976} lognormal jumps in the
+			The \textcite{bates1996} model extends Heston with \textcite{merton1976} lognormal jumps in the
 			log-price. The variance dynamics \eqref{eq:variance} are unchanged. The level equation
 			\eqref{eq:level} gains a compound-Poisson jump term:
 			\begin{equation}\label{eq:bates-level}
@@ -204,7 +207,7 @@
 				F(S,\tau) = S\, e^{(r-g)\tau}, \qquad D(\tau) = e^{-r\tau}.
 			\end{equation}
 			
-			\textbf{Black price} \citep{black1976,blackscholes1973}. With total standard deviation $\Sigma=\sigma\sqrt{\tau}$,
+			\textbf{Black price.} \textcite{black1976,blackscholes1973}, with total standard deviation $\Sigma=\sigma\sqrt{\tau}$,
 			\begin{equation}\label{eq:black}
 				\begin{gathered}
 				C_{\mathrm{B}}(\sigma; S, K, \tau, w) = w\, D(\tau)\Bigl[ F\,\mathcal{N}(w d_+) - K\,\mathcal{N}(w d_-) \Bigr], \\
@@ -243,7 +246,7 @@
 				\end{aligned}
 			\end{equation}
 			where $\mu_1=\tfrac12,\ \mu_2=-\tfrac12,\ b_1=\kappa-\rho\eta,\ b_2=\kappa$. In code this
-			integral is evaluated by the QuantLib \citep{quantlib} \texttt{AnalyticHestonEngine} (which uses a
+			integral is evaluated by the QuantLib \parencite{quantlib} \texttt{AnalyticHestonEngine} (which uses a
 			branch-stable formulation of \eqref{eq:heston-prob}); equations
 			\eqref{eq:heston-price}--\eqref{eq:heston-prob} define the operator it realises.
 			
@@ -462,13 +465,13 @@
 					= \left( \frac{1}{|\mathcal{N}|} \sum_{n\in\mathcal{N}} \varepsilon^{\mathrm{px}}_n(\Psi)^2 \right)^{1/2}.
 				\end{equation}
 				The per-target residual $\varepsilon^{\mathrm{px}}_n$ is the (relative-price) error each
-				QuantLib helper exposes. Levenberg--Marquardt \citep{marquardt1963} is a sum-of-squares
+				QuantLib helper exposes. Levenberg--Marquardt \parencite{marquardt1963} is a sum-of-squares
 				method, so it drives the squared residual norm
 				$\sum_{n}(\varepsilon^{\mathrm{px}}_n)^2 = |\mathcal{N}|\,J_{\mathrm{px}}(\Psi)^2$ to a local
 				minimum (equivalently $J_{\mathrm{px}}$, with which it shares a minimiser).
 				
 		\subsection{Multi-start local optimization}\label{sec:multistart}
-			A single start into a non-convex problem is fragile \citep{mikhailov2003}, so we restart from a small,
+			A single start into a non-convex problem is fragile \parencite{mikhailov2003}, so we restart from a small,
 			data-seeded set. Let the surface variance level be
 			\begin{equation}\label{eq:varproxy}
 				\hat v = \clip\Bigl( \!\! \bigl(\med_{(k,\tau) \in \, \mathcal{N}} \hat\sigma_{k,\tau}\bigr)^2,\ [10^{-3},\ 0.25] \Bigr),
@@ -762,31 +765,29 @@
 %			sample is the question a full Bates run would settle.
 %		
 %			Rough volatility is the natural next paradigm, but a separate one. Empirical realised variance is
-%			well described by a fractional process with Hurst exponent $H\approx 0.1$ \citep{gatheral2018}, far
+%			well described by a fractional process with Hurst exponent $H\approx 0.1$ \parencite{gatheral2018}, far
 %			from the $H=\tfrac12$ that the diffusive Heston and Bates dynamics assume. A rough model fits the
 %			steep short-maturity skew that single-factor Heston cannot reach without driving $\eta$ to its cap,
 %			so it speaks directly to the degeneracy and Feller findings above. It does not, however, fit the
 %			routine of this paper. The dynamics are non-Markovian, so the finite-dimensional box, the seed grid,
 %			and the Feller quantity have no direct analogue. There is no QuantLib engine for it. The fastest
 %			tractable variant, rough Heston, prices through a fractional Riccati equation
-%			\citep{eleuch2019} that is far heavier per evaluation than the closed-form Heston integral, and
-%			rough Bergomi \citep{bayer2016} prices by Monte Carlo. Multi-start calibration over thousands of
+%			\parencite{eleuch2019} that is far heavier per evaluation than the closed-form Heston integral, and
+%			rough Bergomi \parencite{bayer2016} prices by Monte Carlo. Multi-start calibration over thousands of
 %			days is then out of reach without a surrogate pricer. There is also a tension with the present
 %			surface: the rough skew is sharpest at the shortest maturities, exactly the tenors the pre-filter
 %			drops at $\ConstMinMaturitySym=\ConstMinMaturityVal$ days \eqref{eq:prefilter}. A fair test would 
 %			re-admit the short end, build a rough-Heston pricer or a learned surrogate, and run on a pilot window 
 %			rather than the full sample. We leave it to separate work.
 %			
+	\newpage
 	\vfill
-	{\scriptsize
-		\bibliographystyle{plainnat}
-		\bibliography{refs-skew-calibration.bib}
-	}
+	\printbibliography[title={References}]
 	\vfill
-%	\newpage
+	\newpage
 	
 	\appendix
-%	
+	
 %	\section{Example option prices}
 %		\input{results/heston/surfaces/plots/tex/surfaces.tex}
 %		\newpage
@@ -810,8 +811,8 @@
 %	
 %	
 	\section{Algorithm}\label{sec:algorithm}
-		\small
-		\algsetup{linenosize=\tiny}
+%		\small
+		\algsetup{linenosize=\small}
 		Algorithm~\ref{alg:perday} states the per-day routine in the active vector $\Psi$; the driver
 		applies it to every trading day and accumulates accepted rows into a single file
 		(\S\ref{sec:output}). Heston is the default ($\Psi=\Phi$). The Bates fit is the same algorithm with
@@ -819,9 +820,9 @@
 		$\dim\Theta$-dimensional one, while the pegging test \eqref{eq:pegged} still ranges over the
 		$\dim\Phi$ diffusive coordinates only.
 		\begin{algorithm}[H]
-			\captionsetup{font=footnotesize}
+%			\captionsetup{font=footnotesize}
 			\caption{Per-day calibration}\label{alg:perday}
-			\begin{algorithmic}[1] \footnotesize
+			\begin{algorithmic}[1] %\footnotesize
 				\REQUIRE day $d$ of OTM trades; rates $r(d),g(d)$; constants of Table~\ref{tab:const}
 				\STATE $\mathcal{D} \leftarrow \{ i : \sigma_i>0,\ \tau_i\ge\ConstMinMaturitySym\}$ \hfill (pre-filter \eqref{eq:prefilter})
 				\IF{$r(d)$ or $g(d)$ undefined on/before $d$}

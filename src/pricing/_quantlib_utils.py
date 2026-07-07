@@ -7,7 +7,7 @@ instead of a hunt through `vanilla_pricer.py`, `_utils.py`, `calibrate_heston.py
 
 Constructor argument orders pinned here (QuantLib 1.35) -- the single home of these orderings:
   - HestonProcess(ts_r, ts_g, S0, v0, kappa, theta, eta(=sigma), rho)
-  - BatesProcess (ts_r, ts_g, S0, v0, kappa, theta, eta,        rho, lambda, nu, delta)
+  - BatesProcess (ts_r, ts_g, S0, v0, kappa, theta, eta(=sigma), rho, lambda, nu, delta)
 The public helpers take the params in (kappa, theta, rho, eta, v0[, lambda_, nu, delta]) order to
 match the DataFrame column contracts; the constructor order above is applied internally so callers
 never restate it.

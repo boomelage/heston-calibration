@@ -223,8 +223,8 @@ For each raw file it does **one calibration per trading day** over a pooled, mon
    cannot trust (returns `None` params — see Stage 3), printing whether the rejection was a thin surface,
    an IV-RMSE miss, or a **boundary-pegged** param.
 7. **On accept** `calibrate_by_day` *returns* the day's **one row keyed by date** (`S_ref` as
-   `spot_price`, `r`, `g`, the params — five for Heston, plus `lambda_, nu, delta` for Bates via
-   `_EXTRA_PARAMS[MODEL]` — `feller`, `iv_rmse`, `rmse`, coverage counts, intraday spot range,
+   `spot_price`, `r`, `g`, the params in `config.MODELS[MODEL]["params_order"]` — five for Heston,
+   plus `nu, delta, lambda_` for Bates — `feller`, `iv_rmse`, `rmse`, coverage counts, intraday spot range,
    `high_move`) and writes the repriced surface contracts to
    `calibration_tests/cboe_spx_calibration_tests_<date>.csv`. Repricing uses each contract's **original**
    `spot_price`/`strike_price` (Heston params are spot-independent), not `S_ref`/`Kstar`. A rejected or
@@ -248,7 +248,11 @@ positional slice — workers finish out of order, so done days are not a contigu
 existing file suppresses its CSV header on the mid-run flush; a file absent at resume gets its header from
 this run's first matching row. A resume **aborts** (`RuntimeError`) if the live `config.as_dict()` differs
 from the `config_spec.json` snapshot (comparison JSON-normalised both sides; the error names the differing
-keys), or if that snapshot is missing. **To start fresh, delete the
+keys), or if that snapshot is missing. It also aborts on this run's **first header-less append** to a
+resumed file whose **header column order** differs from what this run writes (`_append_row`'s check,
+actual row vs actual on-disk header) — a code-level layout change the config-spec guard cannot see would
+otherwise silently misalign appended values against the header; such a file (e.g. one written before the
+param columns were unified on `params_order`) must be deleted, not resumed. **To start fresh, delete the
 `results/<model>/calibrations/<objective>/` files manually.** The end-of-run writes go through
 `_write_blocking`: a locked target (e.g. open in Excel) raises `PermissionError` and the run prompts with
 `input()` to retry; the mid-run flush is best-effort by contrast (a momentary lock is warned and skipped,
@@ -357,10 +361,12 @@ downstream stage:
 - cleaned OTM snapshot schema (in-memory, from `prepare_surface._prepare_options`): `quote_datetime,
   strike_price, w, trade_size, trade_price, trade_iv, spot_price, days_to_maturity`.
 - `calibrations.csv` (**single file, one row per trading day**, keyed by `date`): `spot_price` (=
-  `S_ref`), `risk_free_rate, dividend_rate, theta, kappa, rho, eta, v0, feller, iv_rmse, rmse, n_helpers,
+  `S_ref`), `risk_free_rate, dividend_rate, theta, kappa, eta, rho, v0, feller, iv_rmse, rmse, n_helpers,
   accepted, n_maturities, n_strikes, contracts_count, total_volume, spot_min, spot_max, spot_range_pct,
-  high_move, calculation_date`. **Bates** appends three columns after `v0`: `lambda_, nu, delta` (via
-  `_EXTRA_PARAMS["bates"]`).
+  high_move, calculation_date`. **Bates** appends three columns after `v0`: `nu, delta, lambda_`. The
+  param columns follow `config.MODELS[model]["params_order"]` (QuantLib `model.params()` order); the
+  committed baseline CSVs still carry the pre-unification order (`theta, kappa, rho, eta, v0` and Bates
+  `lambda_, nu, delta`) and cannot be resumed onto — the header check aborts (delete to regenerate).
 - `rejections.csv` (one row per rejected day, keyed by `date` — the complement of `calibrations.csv`):
   `reason` (`no_trades, no_rate, thin, pegged, iv_miss, no_fit`), `detail` (human string), `iv_rmse` (NaN
   unless calibration ran), `n_maturities, n_strikes, n_cells` (NaN unless a surface was built). `date`

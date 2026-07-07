@@ -39,7 +39,10 @@ days they cover are skipped (matched by DATE -- the completed days are not a con
 prefix because workers finish out of order), and this run's new rows are MERGED with the old rows
 (dedup by date, this run wins) before the date-sorted rewrite, so old rows are never clobbered. A
 resume first aborts if the live config differs from the snapshot in config_spec.json (resuming would
-mix incompatible fits), or if that snapshot is missing. The snapshot is written once at the START of a
+mix incompatible fits), or if that snapshot is missing. It also aborts on the first mid-run append to a
+resumed file whose header does not match this run's column order (_append_row's header check): the
+header-less appends assume the layout is identical, so a file written under an older layout must be
+deleted, not resumed. The snapshot is written once at the START of a
 run (before any incremental output), so it is always present beside a partial calibrations.csv/
 rejections.csv. To start fresh, delete the results/<model>/calibrations/<objective>/ files manually.
 The bulky per-day repricing diagnostics stay one-file-per-day under
@@ -99,17 +102,14 @@ from config import (
     DEFAULT_MODEL, DEFAULT_OBJECTIVE, PARAM_ANCHOR_LOOKBACK,
 )
 
-# Parameter columns the in-flight accepted pool can supply as a cross-day anchor (Lever 5). Heston rows
-# carry the first five; Bates rows add the jump triple. _build_anchor keeps whichever are present.
-_ANCHOR_PARAMS = ("theta", "kappa", "eta", "rho", "v0", "lambda_", "nu", "delta")
-
-# The extra Bates parameter columns and the repriced model-price column name. Heston keeps its 5 params
-# and the `heston` price column; Bates appends (lambda_, nu, delta) and writes a `bates` column priced by
-# the Bates wrapper. The engine itself is model-agnostic: _calibration_engine.calibrate(MODEL, ...)
-# dispatches on the model name via config.MODELS. These two maps stay literal -- they are CSV/pricing
-# presentation contracts (the CSV order is rho-before-eta, matching no single config order).
-_EXTRA_PARAMS = {"heston": [], "bates": ["lambda_", "nu", "delta"]}
-_PRICE_COL = {"heston": "heston", "bates": "bates"}
+# Per-model repricing wrapper for the tests-file model-price column, keyed by the config.MODELS name so
+# the pricing function and the column name (price_col = MODEL at the use site) resolve through the same
+# validated key and cannot pair up wrong; a typo'd key fails loudly with KeyError on that model's first
+# day. The calibrations.csv parameter columns are no separate literal: they follow
+# config.MODELS[MODEL]["params_order"] (the QuantLib model.params() order), and _append_row's header
+# check aborts a resume onto a file written under any other column layout, so a params_order change (or
+# an older-layout tree) cannot silently misalign the header-less incremental appends.
+_PRICE_FN = {"heston": vanp.df_heston_price, "bates": vanp.df_bates_price}
 
 
 def _ignore_sigint():
@@ -145,7 +145,7 @@ def _objective_paths(model, objective):
     return calib_paths(model, objective)
 
 
-def _build_anchor(pool, date_str, lookback):
+def _build_anchor(pool, date_str, lookback, model):
     """The cross-day anchor (Lever 5) for `date_str`: the recent accepted params from `pool`, or None.
 
     `pool` is the in-flight accepted set -- the rows already on disk at run start (resumed) plus every
@@ -153,14 +153,15 @@ def _build_anchor(pool, date_str, lookback):
     parameter columns. It is sorted ascending here, so the caller need not pre-sort (date strings compare
     chronologically). The anchor is drawn from the accepted days STRICTLY BEFORE `date_str`: lookback==1
     uses the single most recent prior day; lookback>1 uses the per-parameter MEDIAN of the last `lookback`
-    prior days (a smoother, more robust prior). Returns a {param: value} dict over whichever of
-    _ANCHOR_PARAMS the pool carries, or None when no prior accepted day exists. The anchored run is
+    prior days (a smoother, more robust prior). Returns a {param: value} dict over whichever of `model`'s
+    fitted params (config.MODELS[model]["params_order"]) the pool carries, or None when no prior accepted
+    day exists. The anchored run is
     processed STRICTLY SEQUENTIALLY in date order (see main), so every accepted day earlier than
     `date_str` is already in the pool when this is called -- the anchor sees the true latest predecessors.
     """
     if pool is None or pool.empty:
         return None
-    cols = [c for c in _ANCHOR_PARAMS if c in pool.columns]
+    cols = [c for c in config.MODELS[model]["params_order"] if c in pool.columns]
     if not cols:
         return None
     pool = pool.sort_values("date")
@@ -184,14 +185,41 @@ def _write_blocking(action, target):
                   f"then press Enter to retry... ")
 
 
+# Targets whose on-disk header this run has verified against its own row layout (or written itself).
+# Appends happen only in the main process, so a module-level memo needs no locking.
+_HEADER_CHECKED = set()
+
+
 def _append_row(row, target, header_written):
     """Best-effort mid-run append of one completed day's row to `target` (calibrations.csv or
     rejections.csv). Mirrors the end-of-run columns, so a header written from the first row stays
-    valid for the rest of the run. A momentary file lock (PermissionError, e.g. open in Excel) is
+    valid for the rest of the run. Appends to a PRE-EXISTING (resumed) file are header-less, so on this
+    run's first append to one the on-disk header is checked against this row's column order and a
+    mismatch ABORTS the run (RuntimeError): the file was written under a different column layout (older
+    code, or a changed config.MODELS params_order -- the config-spec resume guard does NOT cover a
+    code-level layout change), and header-less appends onto it would silently misalign every value
+    against the header. A momentary file lock (PermissionError, e.g. open in Excel) is
     warned and skipped -- the row is still in the in-memory list, so the end-of-run sorted rewrite
     includes it -- rather than stalling the worker loop. Returns the updated header_written flag."""
+    if header_written and target not in _HEADER_CHECKED:
+        expected = list(row)  # dict order == written column order (to_csv puts the 'date' index first)
+        try:
+            with open(target, encoding='utf-8') as fh:
+                found = fh.readline().strip().split(',')
+        except OSError:
+            print(f"WARNING: {target} is unreadable; skipping mid-run flush (row kept, written at end)")
+            return header_written
+        if found != expected:
+            raise RuntimeError(
+                f"{target} has a different column layout than this run writes "
+                f"(found {found}, writing {expected}). It was written by an older layout (e.g. before "
+                f"the parameter columns were unified on config.MODELS params_order); header-less "
+                f"appends would misalign rows against its header. Delete the files in "
+                f"{Path(target).parent} to start fresh.")
+        _HEADER_CHECKED.add(target)
     try:
         pd.DataFrame([row]).set_index('date').to_csv(target, mode='a', header=not header_written)
+        _HEADER_CHECKED.add(target)
         return True
     except PermissionError:
         print(f"WARNING: {target} is locked; skipping mid-run flush (row kept, written at end)")
@@ -307,8 +335,9 @@ def calibrate_by_day(filepath, OBJECTIVE, MODEL, stop_event=None, anchor=None):
                          n_maturities=n_mats, n_strikes=n_strikes, n_cells=n_cells)
 
     # ---- one calibration row, keyed by date ----
-    # Heston's 5 params, plus the Bates jump triple when MODEL=='bates' (appended via _EXTRA_PARAMS).
-    params = ['theta', 'kappa', 'rho', 'eta', 'v0'] + _EXTRA_PARAMS[MODEL]
+    # The model's fitted params in config.MODELS params_order (QuantLib model.params() order) -- also
+    # the calibrations.csv column order; _append_row's header check holds resumed files to it.
+    params = list(config.MODELS[MODEL]["params_order"])
     row = {
         'date': pd.Timestamp(date).date(),
         'spot_price': round(S_ref, 4),
@@ -343,10 +372,12 @@ def calibrate_by_day(filepath, OBJECTIVE, MODEL, stop_event=None, anchor=None):
         repriced['black_scholes'] = vanp.df_numpy_black_scholes(repriced)
     except Exception:
         repriced['black_scholes'] = np.nan
-    # Model price column: `heston` (df_heston_price) or `bates` (df_bates_price, which reads the
-    # lambda_/nu/delta columns copied in above). The tests file mirrors the calibrated surface either way.
-    price_col = _PRICE_COL[MODEL]
-    price_fn = vanp.df_bates_price if MODEL == 'bates' else vanp.df_heston_price
+    # Model price column, named after the model itself, priced by the matching wrapper from _PRICE_FN
+    # (df_bates_price reads the lambda_/nu/delta columns copied in above): name and function resolve
+    # through the same validated key, so they cannot pair up wrong. The tests file mirrors the
+    # calibrated surface either way.
+    price_col = MODEL
+    price_fn = _PRICE_FN[MODEL]
     try:
         repriced[price_col] = price_fn(repriced)
     except Exception:
@@ -510,7 +541,8 @@ def main():
             for f in files:
                 if interrupts["n"] >= 1:
                     break  # graceful stop: start no new day
-                anchor = _build_anchor(pd.DataFrame(pool_rows), _file_date(f), PARAM_ANCHOR_LOOKBACK)
+                anchor = _build_anchor(pd.DataFrame(pool_rows), _file_date(f), PARAM_ANCHOR_LOOKBACK,
+                                       args.MODEL)
                 row = calibrate_by_day(f, args.OBJECTIVE, args.MODEL, None, anchor)
                 if row is None:
                     continue

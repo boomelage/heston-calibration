@@ -234,18 +234,53 @@ guess. This breaks the `kappa ↔ rho` trade-off so `rho` stops pegging. Risk: m
 estimator's character, so document that `kappa` is now (partly) imposed, not free. Measure: `rho`
 leaves the floor; cross-day `kappa` stabilises.
 
-**Lever D — soft Feller penalty (+ revisit the `eta` cap).** Add `λ·max(0, eta² − 2·kappa·theta)` to
-the restart-ranking objective so the optimizer prefers Feller-satisfying corners; this fixes the
-accepted day's `feller = −1.41` and keeps `eta` from running toward 2.0. Implement as a post-hoc
-penalty in the multi-start selection (cheap) or a custom `ql.CostFunction` (cleaner). Do **not**
-hard-reject Feller — short-tenor Heston violates it routinely and it is not always a bad fit. Risk:
-medium. Measure: Feller-violation and `eta > 1.5` counts fall.
+**Lever D — soft Feller penalty (+ revisit the `eta` cap). [IMPLEMENTED, default-off; TESTED WEAK.]**
+`config.FELLER_PENALTY` adds `λ·max(0, eta² − 2·kappa·theta)` to the restart-ranking score
+(`_engine_common._feller_violation`, used by both engines; `config.FELLER_SEED_TEMPLATE` adds
+Feller-compliant warm seeds when the penalty is on). It does **not** touch the LM objective, the gate,
+or the reported `iv_rmse`. **Empirical finding (calm 2012 day, both engines):** the default restarts
+all converge to the same Feller-violating basin, so the penalty has nothing to choose; forcing
+compliance with the compliant seeds + a strong penalty selects a fit whose `iv_rmse` blows through the
+0.02 gate (~0.057) and is rejected, and a lower `eta` cap merely relocates the peg to the new ceiling.
+On SPX the short-dated data genuinely wants `eta ≈ 1` and a violated Feller. So the selection-level
+penalty is a mild tie-breaker, not a fix; the safer oscillation lever is the new **integration-accuracy
+lever** (below). A hard in-LM penalty (custom `ql.CostFunction`) remains the heavier follow-up if
+needed. Measure with the new diagnostic (`osc_frac`, `feller_neg`). Risk: medium.
 
-**Lever E — warm-start + stronger search (stabiliser; last).** Seed each day's Levenberg–Marquardt
-from the previous day's accepted params (`kappa`/`rho`/`eta` are persistent across a week) and/or run a
-short global pre-search (`ql.DifferentialEvolution`) before LM. Pairs naturally with lever C —
-yesterday's `kappa` is the anchor. Keep the argmin-IV-RMSE selection. Risk: low–medium. Measure:
-less run-to-run / corner variability.
+**Lever F — characteristic-function integration accuracy (oscillation, numerical). [IMPLEMENTED,
+default-off.]** `config.HESTON_INTEGRATION` / `config.BATES_INTEGRATION` (None = QuantLib default
+Gauss-Laguerre order 144; an int sets the order, capped at 192; a `(relTol, maxEval)` pair selects the
+adaptive integrator). Applied at the single construction site `pricing/_quantlib_utils`
+(`heston_engine_for`/`bates_engine_for`), so the fit, the `calibration_tests` repricing, and the IV
+inversion all integrate identically. This removes *numerical* wing wiggle (Problem 2); if oscillation
+persists after raising accuracy it is structural (back to the eta/Feller story). Measure: `osc_frac`
+from the diagnostic. Risk: low.
+
+**Lever G — jump-curvature + wing de-emphasis (Problem 1: call wing too convex). [IMPLEMENTED,
+default-off / sweep.]** The diagnostic shows the model call wing is too convex on ~87% of days. Two
+knobs: tighten `config.MODELS["bates"]["bounds"]["delta"]` upper (0.5 → {0.25, 0.15}) so the lognormal jumps manufacture
+less wing curvature (a sweep, not a default change — 0.15 already pushes some Bates days past the gate,
+0.25 looks like the sweet spot); and `WING_WEIGHT_GAIN < 0` (now allowed, clamped to
+`WING_WEIGHT_FLOOR`) to **de-emphasise** the wings so near-linear days are not forced to bend. Measure:
+the diagnostic's `d_curv_call` / `call_convex_frac`. Risk: low–medium.
+
+**Lever E — warm-start + cross-day anchor (stabiliser; in-flight, sequential). [IMPLEMENTED, default-off.]** Damps
+day-to-day instability (the 2019 `kappa` walk). `config.PARAM_ANCHOR_WEIGHT` adds a Tikhonov term
+`Σ_p ((param_p − prior_p)/span_p)²` to the restart score and a warm-start seed at the prior params
+(`_engine_common._anchor_distance`; both engines). The orchestrator reads the prior IN-FLIGHT: each day
+anchors to the median of its last `PARAM_ANCHOR_LOOKBACK` accepted days (1 = previous day, N = median of
+last N), drawn from the live accepted pool (the rows on disk at run start, resumed, plus every day the
+run has accepted so far). The old static `--PRIOR_FROM` two-pass file workflow is gone; resume seeds the
+pool from `calibrations.csv`, so an incremental extension self-anchors on the days already on disk.
+Because a day anchors on its true latest predecessors, day D depends on D-1 (an inherently sequential
+chain, and a parallel day cannot anchor on a day still being fit), so `PARAM_ANCHOR_WEIGHT > 0` forces a
+**strictly sequential** run in date order (`--MAX_JOBS` ignored). That is the freshness/parallelism
+trade-off: perfect anchor freshness costs the multi-core speedup (an anchored full run is roughly
+`MAX_JOBS`× the wall-clock of the parallel baseline). Weight 0 keeps the fast parallel path and
+reproduces the baseline exactly. On well-identified days a nonzero weight is a near-no-op (it does not
+distort good fits, the desired safety property); its bite is reserved for ill-conditioned days. Pairs
+naturally with Lever A: yesterday's `kappa` is the anchor. Measure: cross-day `kappa` stability.
+Risk: medium (touches the orchestrator's run loop; the engine path stays behind the default-off weight).
 
 **Out of scope (future).** Term-structured `r`,`g` curves — flat-forward makes the eval-date
 immaterial (Phase 2 confirmed); revisit only if real SPX term structures are introduced. A genuinely
@@ -260,13 +295,32 @@ MIN_DTM = 14                                   # lever A: LANDED (was 29/7)
 WING_WEIGHT_GAIN = 0.0                          # lever B: LANDED, default-off (tested null)
 OTM_MONEYNESS_FLOOR = 0.6                        # deep-OTM floor: LANDED (recovers acceptance)
 
-# calibrate_heston.py — _calibrate_once / calibrate_heston
-weights = [ _wing_weight(k, s) for ... ]        # lever B: plain python list, NOT ql.Array
-model.calibrate(helpers, lm, end, constraint, weights)                                   # B (vol obj only)
-model.calibrate(helpers, lm, end, constraint, weights, [False, True, False, False, False])  # C: fix kappa (TODO)
-# lever D: rank restarts by iv_rmse + lambda*max(0, eta**2 - 2*kappa*theta)   (TODO)
-# lever E: prepend previous day's accepted (v0,kappa,theta,eta,rho) to _seed_grid; or a DE pre-search  (TODO)
+# config.py — new mitigation knobs (all default to a no-op so the committed baseline reproduces)
+FELLER_PENALTY = 0.0                            # lever D: LANDED (default-off; tested weak)
+FELLER_SEED_TEMPLATE = [...]                    # lever D: Feller-compliant warm seeds (only when penalty>0)
+HESTON_INTEGRATION = None ; BATES_INTEGRATION = None   # lever F: LANDED (CF integration accuracy)
+WING_WEIGHT_GAIN = 0.0 ; WING_WEIGHT_FLOOR = 1e-3      # lever G: GAIN<0 now de-emphasises wings (clamped)
+PARAM_ANCHOR_WEIGHT = 0.0 ; PARAM_ANCHOR_LOOKBACK = 5  # lever E: LANDED (cross-day anchor, in-flight; weight>0 => sequential run)
+# RESULTS now honours the HC_RESULTS_DIR env override (write an A/B run to a scratch tree).
+
+# calibrate_{heston,bates}.py — selection score (all extra terms vanish at the defaults above)
+score = iv_rmse_sel + FELLER_PENALTY*_feller_violation(p) + PARAM_ANCHOR_WEIGHT*_anchor_distance(p, anchor, ...)
+# engine build routed through _qu.{heston,bates}_engine_for(model)  -> applies *_INTEGRATION (lever F)
+# warm-start seed at the prior params appended when PARAM_ANCHOR_WEIGHT>0 and an anchor is supplied (lever E)
+
+# calibrator_prototype.py — anchor plumbing (lever E)
+#   PARAM_ANCHOR_WEIGHT > 0 -> strictly sequential run; per day _build_anchor(in-flight accepted pool,
+#   date, lookback) -> calibrate_by_day(..., anchor). The pool is seeded from calibrations.csv on resume.
+# Still OPEN: lever C `fixParameters` (fix kappa), and the hard in-LM Feller penalty (custom ql.CostFunction).
 ```
+
+**Diagnostic harness (this session).** `src/results/calibration_diagnostics.py` (read-only, model/objective
+from `_results_config`, reuses `wing_residuals.load_residuals`) scores each day on all three problems:
+call-wing curvature mismatch vs market (`d_curv_call`, `call_convex_frac`), wing oscillation
+(`osc_frac`), and kappa-floor proximity / `pegged_rate` by year. It writes `diagnostics.csv` and is the
+grading instrument every lever sweep above is judged on. Baseline numbers on the committed bates/vol
+run: `call_convex_frac` ≈ 0.87, `osc_frac` ≈ 0.36, Feller violated 100%, 2019 `kappa_floor_frac` ≈ 0.89
+with `pegged_rate` ≈ 0.10.
 
 **Verification.**
 
@@ -463,6 +517,16 @@ comparison**, which needs both result sets on disk at once — hence routing is 
   gained `build_bates_engine` + the
   `build_model_engine(row, calc_date, model)` dispatcher; the pricing/inversion helpers were already
   engine-agnostic.
+
+**Later refactor (engine unification, post-PR-#12).** `calibrate_heston.py` and `calibrate_bates.py` were
+merged into a single `src/_calibration_engine.py` (`calibrate(model, vol_matrix, s, r, g)`, dispatched on
+the model name via a cached per-model `ModelSpec` = `config.MODELS[model]` data + a `_WIRING` entry of the
+live QuantLib builders). The per-model parameter data (the old `PARAM_ORDER`/`BOUNDS`/`LOW`/`HIGH` and
+`BATES_PARAM_ORDER`/`BATES_BOUNDS`/`BATES_LOW`/`BATES_HIGH`/`BATES_JUMP_SEED`) moved into one
+`config.MODELS` registry, and `_seed_grid`/`_anchor_seed` moved into `_engine_common.py` (now name→value
+dicts). Behaviour is byte-identical (committed `vol` numbers reproduce to full float precision). The
+references above to the two engine files and the flat config names are historical; see CLAUDE.md for the
+current structure.
 
 **Bates result (committed full runs).** Both `vol` and `price` full multi-year Bates runs are committed
 (`results/bates/calibrations/{vol,price}/`) as part of the prior baseline pending regeneration. Against

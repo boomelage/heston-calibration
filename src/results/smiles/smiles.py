@@ -51,14 +51,16 @@ def _figures_dir(model):
     return RESULTS / model / "smiles" / "figures"
 
 
-def main(dates, model=None, objective=None, save=True, show=False, use_legend=USE_LEGEND):
+def main(dates, model=None, objective=None, save=True, show=False, use_legend=USE_LEGEND,
+         sparse_strikes=True):
     """Render per-day market-vs-model smile figures.
 
     `model`/`objective` default to the `_results_config` switches when None, so a notebook can plot a
     different run without editing `_results_config`. `save=True` writes one EPS per day plus smiles.tex
     under results/<model>/smiles/figures/; `save=False` skips disk. `show=True` leaves the figures open
     (does not close them) so the caller can render them; the rendering itself is the caller's job (see
-    inspect.ipynb). Returns a dict {tag: Figure}.
+    inspect.ipynb). `sparse_strikes=False` plots every calibrated market point per maturity (bypasses the
+    MKTMONSTEP thinning). Returns a dict {tag: Figure}.
     """
     model = model or MODEL
     objective = objective or OBJECTIVE
@@ -81,7 +83,8 @@ def main(dates, model=None, objective=None, save=True, show=False, use_legend=US
         day = _day_from_row(row, model=model)
         days.append(day)
         figs[day['tag']] = _save_day_figure(day, use_legend, model=model, tests_dir=tests_dir,
-                                            figures=FIGURES, save=save, show=show)
+                                            figures=FIGURES, save=save, show=show,
+                                            sparse_strikes=sparse_strikes)
     if save:
         write_smiles_TeX(days, model=model, figures_dir=FIGURES)
     return figs
@@ -96,7 +99,8 @@ def _model_wing_iv(engine, bsm, spot, maturity_date, m_grid, wing):
     return np.array([model_implied_vol(float(k), maturity_date, spot, engine, bsm) for k in strikes])
 
 
-def _save_day_figure(day, use_legend, model=None, tests_dir=None, figures=None, save=True, show=False):
+def _save_day_figure(day, use_legend, model=None, tests_dir=None, figures=None, save=True, show=False,
+                     sparse_strikes=True):
     model = model or MODEL
     model_label = model.capitalize()
     figures = figures or _figures_dir(model)
@@ -168,8 +172,10 @@ def _save_day_figure(day, use_legend, model=None, tests_dir=None, figures=None, 
             if sub.empty:
                 continue
             # Thin to a sparse, ~MKTMONSTEP-spaced moneyness subset per maturity (MKTMONSTEP=None =>
-            # every point) so dense days stay readable.
-            sub = _sparse_strikes(sub, MKTMONSTEP)
+            # every point) so dense days stay readable. `sparse_strikes=False` skips this and plots
+            # every calibrated market point.
+            if sparse_strikes:
+                sub = _sparse_strikes(sub, MKTMONSTEP)
             if sub.empty:
                 continue
             ax.scatter(sub['moneyness'], sub['trade_iv'],

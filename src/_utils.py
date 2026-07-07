@@ -146,6 +146,7 @@ def write_config_spec(model, objective, limit, n_accepted, n_rejected):
     }
     spec.update(config.as_dict())
     path = config.spec_path(model, objective)
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(spec, indent=2))
     return path
 

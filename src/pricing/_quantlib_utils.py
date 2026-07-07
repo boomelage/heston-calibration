@@ -7,7 +7,7 @@ instead of a hunt through `vanilla_pricer.py`, `_utils.py`, `calibrate_heston.py
 
 Constructor argument orders pinned here (QuantLib 1.35) -- the single home of these orderings:
   - HestonProcess(ts_r, ts_g, S0, v0, kappa, theta, eta(=sigma), rho)
-  - BatesProcess (ts_r, ts_g, S0, v0, kappa, theta, eta,        rho, lambda, nu, delta)
+  - BatesProcess (ts_r, ts_g, S0, v0, kappa, theta, eta(=sigma), rho, lambda, nu, delta)
 The public helpers take the params in (kappa, theta, rho, eta, v0[, lambda_, nu, delta]) order to
 match the DataFrame column contracts; the constructor order above is applied internally so callers
 never restate it.
@@ -69,6 +69,35 @@ class _quantlib_utils:
                                float(v0), float(kappa), float(theta), float(eta), float(rho),
                                float(lambda_), float(nu), float(delta))
 
+    # ---- pricing engines from an existing model (the single home of the CF-integration accuracy) ---
+    @staticmethod
+    def _with_integration(ctor, model, spec):
+        """Build `ctor(model[, integration...])` per a config integration spec (see config.*_INTEGRATION).
+
+        spec None -> QuantLib default (Gauss-Laguerre order 144); an int -> that Gauss-Laguerre order;
+        a (relTolerance, maxEvaluations) pair -> the adaptive integrator. bool is rejected so a stray
+        True/False cannot be read as the order 1/0.
+        """
+        if spec is None:
+            return ctor(model)
+        if isinstance(spec, bool):
+            raise ValueError(f"integration spec must be None / int / (relTol, maxEval), got {spec!r}")
+        if isinstance(spec, int):
+            return ctor(model, int(spec))
+        if isinstance(spec, (tuple, list)) and len(spec) == 2:
+            return ctor(model, float(spec[0]), int(spec[1]))
+        raise ValueError(f"integration spec must be None / int / (relTol, maxEval), got {spec!r}")
+
+    def heston_engine_for(self, model):
+        """AnalyticHestonEngine for an existing HestonModel, at config.HESTON_INTEGRATION accuracy."""
+        from config import HESTON_INTEGRATION
+        return self._with_integration(ql.AnalyticHestonEngine, model, HESTON_INTEGRATION)
+
+    def bates_engine_for(self, model):
+        """BatesEngine for an existing BatesModel, at config.BATES_INTEGRATION accuracy."""
+        from config import BATES_INTEGRATION
+        return self._with_integration(ql.BatesEngine, model, BATES_INTEGRATION)
+
     # ---- engines (build term structures + process + engine, return the reusable bundle) ------
     def _heston_engine(self, s, r, g, kappa, theta, rho, eta, v0, calculation_date=None):
         if calculation_date is None:
@@ -77,7 +106,7 @@ class _quantlib_utils:
         s_handle = self._spot_handle(s)
         ts_r, ts_g = self._term_structures(r, g, calculation_date)
         process = self.heston_process(ts_r, ts_g, s_handle, kappa, theta, rho, eta, v0)
-        engine = ql.AnalyticHestonEngine(ql.HestonModel(process))
+        engine = self.heston_engine_for(ql.HestonModel(process))
         return engine, s_handle, ts_r, ts_g, self.day_count
 
     def _mc_heston_engine(self, s, r, g, kappa, theta, rho, eta, v0,
@@ -100,5 +129,5 @@ class _quantlib_utils:
         ts_r, ts_g = self._term_structures(r, g, calculation_date)
         process = self.bates_process(ts_r, ts_g, s_handle,
                                      kappa, theta, rho, eta, v0, lambda_, nu, delta)
-        engine = ql.BatesEngine(ql.BatesModel(process))
+        engine = self.bates_engine_for(ql.BatesModel(process))
         return engine, s_handle, ts_r, ts_g, self.day_count

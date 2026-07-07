@@ -37,8 +37,13 @@ for _p in (str(SRC), str(RESULTS_CODE), str(RESULTS)):
         sys.path.insert(0, _p)
 
 from _utils import implied_vol
-from config import BOUNDS, BATES_BOUNDS, IV_RMSE_ACCEPT, OBJECTIVE_NAMES, MODEL_NAMES, calib_paths
+import config
+from config import IV_RMSE_ACCEPT, OBJECTIVE_NAMES, MODEL_NAMES, calib_paths
 from _results_config import MODEL, OBJECTIVE
+
+# Box bounds by model, from the single source (config.MODELS). _thresholds_for and grade_day read these.
+BOUNDS = config.MODELS["heston"]["bounds"]
+BATES_BOUNDS = config.MODELS["bates"]["bounds"]
 
 if OBJECTIVE not in OBJECTIVE_NAMES:
     raise SystemExit(f"unknown objective {OBJECTIVE!r}; expected one of {OBJECTIVE_NAMES}")
@@ -62,10 +67,10 @@ def _thresholds_for(model):
     "hard" = financially impossible -> reject; "susp" (suspicious) = possible but atypical for SPX at
     these tenors -> flag, don't reject. The hard-reject ranges that must agree with the engine (the
     box bounds and the IV gate) are pulled from config bounds / config.IV_RMSE_ACCEPT so the two
-    cannot drift. The bounds differ by model: Heston uses config.BOUNDS, Bates config.BATES_BOUNDS
-    (the five Heston ranges plus the jump triple), so a bates run is graded against the bounds it was
-    actually fit under. The remaining knobs (peg/susp tolerances, kappa_lo) are validator-only
-    judgement calls and stay local.
+    cannot drift. The bounds differ by model: Heston uses config.MODELS["heston"]["bounds"], Bates
+    config.MODELS["bates"]["bounds"] (the five Heston ranges plus the jump triple), so a bates run is
+    graded against the bounds it was actually fit under. The remaining knobs (peg/susp tolerances,
+    kappa_lo) are validator-only judgement calls and stay local.
     """
     b = BATES_BOUNDS if model == "bates" else BOUNDS
     return dict(

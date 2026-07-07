@@ -320,7 +320,7 @@
 		\begin{equation}\label{eq:highmove}
 			R \;=\; \frac{\max_{i} S_i}{\min_{i} S_i} - 1,
 			\qquad
-			\textsc{high\_move} \;=\; \mathbf{1}\{ R > \ConstMaxMoveSym \}.
+			\textsc{high\_move} \;=\; \mathbf{1}_{\{ R > \ConstMaxMoveSym \}}.
 		\end{equation}
 		A flagged day ($R>\ConstMaxMoveSym$) is still calibrated and written, but the normalisation below
 		is recorded as strained (its $S_{\mathrm{ref}}$ should be treated with suspicion).
@@ -785,9 +785,9 @@
 	\printbibliography[title={References}]
 	\vfill
 	\newpage
-	
+
 	\appendix
-	
+
 %	\section{Example option prices}
 %		\input{results/heston/surfaces/plots/tex/surfaces.tex}
 %		\newpage
@@ -830,7 +830,7 @@
 				\ENDIF
 				\STATE $S_{\mathrm{ref}} \leftarrow (\sum q_i S_i)/(\sum q_i)$; \\
 				$R \leftarrow \max_i S_i / \min_i S_i - 1$; \\
-				$\textsc{high\_move}\leftarrow \mathbf{1}\{R>\ConstMaxMoveSym\}$
+				$\textsc{high\_move}\leftarrow \mathbf{1}_{\{R>\ConstMaxMoveSym\}}$
 				\STATE $K^\star_i \leftarrow \ConstStrikeGridSym\,\round(m_i S_{\mathrm{ref}}/\ConstStrikeGridSym)$ with $m_i=K_i/S_i$ \hfill (re-strike \eqref{eq:kstar})
 				\STATE $\mathcal{T}\leftarrow$ top-$\ConstMaxMaturitiesSym$ admissible maturities by volume ($\ge \ConstMinWingStrikesSym$ strikes per wing); \\
 				build $\mathcal{K}_\tau$ (maximum $\ConstMaxWingStrikesSym$ per wing); \\ 

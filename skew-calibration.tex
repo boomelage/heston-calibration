@@ -748,41 +748,41 @@
 %			that would move it are the identification fixes: anchoring $\kappa$, a soft Feller penalty, and
 %			liquidity weighting.
 %		
-%		\section{Avenues for improvement}\label{sec:improvements} 
-%			Acceptance is near one half of attempted days, and Feller violation is now universal on the accepted 
-%			set. The maturity floor has already been raised to $\ConstMinMaturitySym=\ConstMinMaturityVal$ days and an 
-%			objective wing-weighting has been wired but tested null; neither moved acceptance. The remaining levers attack the 
-%			$(\kappa,\rho,\eta)$ degeneracy at its source. Fixing or anchoring $\kappa$ from a cross-day-robust estimate would break the 
-%			$\kappa\!\leftrightarrow\!\rho$ trade-off so $\rho$ stops pegging. A soft Feller penalty in the restart-selection 
-%			criterion, with a revisit of the $\eta$ cap, would curb the now-universal Feller violation. Warm-starting each day
-%			from the previous day's accepted parameters would stabilise the search. The Levenberg--Marquardt
-%			end criteria have not been tuned and are a further candidate.
-%		
-%			A full-sample Bates calibration is the other open item. The engine, bounds, and routing are in
-%			place (\S\ref{sec:jumps}, Table~\ref{tab:bates-bounds}), and the jumps give the model a direct way
-%			to carry the tail the single-factor vol-of-vol now overfits. Whether that relieves the
-%			$(\kappa,\rho,\eta)$ degeneracy and the $\eta$-driven Feller violation across the full 2012--2024
-%			sample is the question a full Bates run would settle.
-%		
-%			Rough volatility is the natural next paradigm, but a separate one. Empirical realised variance is
-%			well described by a fractional process with Hurst exponent $H\approx 0.1$ \parencite{gatheral2018}, far
-%			from the $H=\tfrac12$ that the diffusive Heston and Bates dynamics assume. A rough model fits the
-%			steep short-maturity skew that single-factor Heston cannot reach without driving $\eta$ to its cap,
-%			so it speaks directly to the degeneracy and Feller findings above. It does not, however, fit the
-%			routine of this paper. The dynamics are non-Markovian, so the finite-dimensional box, the seed grid,
-%			and the Feller quantity have no direct analogue. There is no QuantLib engine for it. The fastest
-%			tractable variant, rough Heston, prices through a fractional Riccati equation
-%			\parencite{eleuch2019} that is far heavier per evaluation than the closed-form Heston integral, and
-%			rough Bergomi \parencite{bayer2016} prices by Monte Carlo. Multi-start calibration over thousands of
-%			days is then out of reach without a surrogate pricer. There is also a tension with the present
-%			surface: the rough skew is sharpest at the shortest maturities, exactly the tenors the pre-filter
-%			drops at $\ConstMinMaturitySym=\ConstMinMaturityVal$ days \eqref{eq:prefilter}. A fair test would 
-%			re-admit the short end, build a rough-Heston pricer or a learned surrogate, and run on a pilot window 
-%			rather than the full sample. We leave it to separate work.
-%			
-	\newpage
+%	\section{Avenues for improvement}\label{sec:improvements} 
+%		Acceptance is near one half of attempted days, and Feller violation is now universal on the accepted 
+%		set. The maturity floor has already been raised to $\ConstMinMaturitySym=\ConstMinMaturityVal$ days and an 
+%		objective wing-weighting has been wired but tested null; neither moved acceptance. The remaining levers attack the 
+%		$(\kappa,\rho,\eta)$ degeneracy at its source. Fixing or anchoring $\kappa$ from a cross-day-robust estimate would break the 
+%		$\kappa\!\leftrightarrow\!\rho$ trade-off so $\rho$ stops pegging. A soft Feller penalty in the restart-selection 
+%		criterion, with a revisit of the $\eta$ cap, would curb the now-universal Feller violation. Warm-starting each day
+%		from the previous day's accepted parameters would stabilise the search. The Levenberg--Marquardt
+%		end criteria have not been tuned and are a further candidate.
+%	
+%		A full-sample Bates calibration is the other open item. The engine, bounds, and routing are in
+%		place (\S\ref{sec:jumps}, Table~\ref{tab:bates-bounds}), and the jumps give the model a direct way
+%		to carry the tail the single-factor vol-of-vol now overfits. Whether that relieves the
+%		$(\kappa,\rho,\eta)$ degeneracy and the $\eta$-driven Feller violation across the full 2012--2024
+%		sample is the question a full Bates run would settle.
+%	
+%		Rough volatility is the natural next paradigm, but a separate one. Empirical realised variance is
+%		well described by a fractional process with Hurst exponent $H\approx 0.1$ \parencite{gatheral2018}, far
+%		from the $H=\tfrac12$ that the diffusive Heston and Bates dynamics assume. A rough model fits the
+%		steep short-maturity skew that single-factor Heston cannot reach without driving $\eta$ to its cap,
+%		so it speaks directly to the degeneracy and Feller findings above. It does not, however, fit the
+%		routine of this paper. The dynamics are non-Markovian, so the finite-dimensional box, the seed grid,
+%		and the Feller quantity have no direct analogue. There is no QuantLib engine for it. The fastest
+%		tractable variant, rough Heston, prices through a fractional Riccati equation
+%		\parencite{eleuch2019} that is far heavier per evaluation than the closed-form Heston integral, and
+%		rough Bergomi \parencite{bayer2016} prices by Monte Carlo. Multi-start calibration over thousands of
+%		days is then out of reach without a surrogate pricer. There is also a tension with the present
+%		surface: the rough skew is sharpest at the shortest maturities, exactly the tenors the pre-filter
+%		drops at $\ConstMinMaturitySym=\ConstMinMaturityVal$ days \eqref{eq:prefilter}. A fair test would 
+%		re-admit the short end, build a rough-Heston pricer or a learned surrogate, and run on a pilot window 
+%		rather than the full sample. We leave it to separate work.
+
 	\vfill
-	\printbibliography[title={References}]
+	\section*{References}
+		\printbibliography[heading=none, title={References}]
 	\vfill
 	\newpage
 
@@ -808,8 +808,9 @@
 %		\setlength{\intextsep}{1pt plus 1pt minus 1pt}
 %		\input{results/bates/smiles/figures/smiles.tex}
 %	\endgroup
-%	
-%	
+
+
+
 	\section{Algorithm}\label{sec:algorithm}
 %		\small
 		\algsetup{linenosize=\small}

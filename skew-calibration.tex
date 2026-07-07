@@ -1,23 +1,14 @@
 \documentclass[a4paper, 11pt, reqno]{amsart}
 \usepackage[margin=1.5in]{geometry}
 \usepackage{hyperref}
-\usepackage{amsmath}
 \usepackage{amssymb}
 \usepackage{booktabs}
 \usepackage{algorithm}
 \usepackage{algorithmic}
 \usepackage{seqsplit}
 \usepackage{graphicx}
-\usepackage{pgfplots}
-\pgfplotsset{compat=1.18}
-\usepgfplotslibrary{groupplots}
-\usetikzlibrary{calc}
-\usepackage{standalone}
 \usepackage[backend=biber]{biblatex}
 \addbibresource{refs-skew-calibration.bib}
-
-%\renewcommand*{\bibfont}{\scriptsize}
-\newcommand{\doi}[1]{{\tiny DOI:} \href{https://doi.org/#1}{\texttt{#1}}}
 
 \usepackage[font=scriptsize]{caption}
 
@@ -39,7 +30,7 @@
 % same horizontal position regardless of how many digits the number has. The
 % per-depth \hspace nests the numbers; \quad is the gap between dot and title.
 \makeatletter
-\renewcommand{\tocsection}[3]{\hspace{0em}\indentlabel{\@ifnotempty{#2}{\@ifempty{#1}{\makebox[1.5em][l]{#2.}\quad}{#1\ #2.\quad}}}#3}
+\renewcommand{\tocsection}[3]{\indentlabel{\@ifnotempty{#2}{\@ifempty{#1}{\makebox[1.5em][l]{#2.}\quad}{#1\ #2.\quad}}}#3}
 \renewcommand{\tocsubsection}[3]{\hspace{1em}\indentlabel{\makebox[2.0em][l]{\@ifnotempty{#1}{#1\ }#2.}\quad}#3}
 \renewcommand{\tocsubsubsection}[3]{\hspace{2em}\indentlabel{\makebox[2.6em][l]{\@ifnotempty{#1}{#1\ }#2.}\quad}#3}
 \makeatother

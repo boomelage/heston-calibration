@@ -15,9 +15,8 @@
 \usepackage{standalone}
 \usepackage[backend=biber]{biblatex}
 \addbibresource{refs-skew-calibration.bib}
+
 %\renewcommand*{\bibfont}{\scriptsize}
-
-
 \newcommand{\doi}[1]{{\tiny DOI:} \href{https://doi.org/#1}{\texttt{#1}}}
 
 \usepackage[font=scriptsize]{caption}
@@ -29,7 +28,11 @@
 	urlcolor=blue,
 }
 
-\setcounter{tocdepth}{3}% to get subsubsections in toc
+\setcounter{tocdepth}{3}
+\makeatletter
+\def\l@paragraph{\@tocline{4}{0pt}{1pc}{7pc}{}}
+\@namedef{r@tocindent4}{0pt}
+\makeatother
 
 % Put each depth's section number AND its trailing dot together in a fixed-width,
 % left-aligned box, so the dot hugs the number while the title still starts at the
@@ -81,6 +84,11 @@
 % (subsection is already bold). Keep amsart's spacing and run-in behaviour.
 \def\subsubsection{\@startsection{subsubsection}{3}%
 	\z@{.5\linespacing\@plus.7\linespacing}{-.5em}%
+	{\normalfont\bfseries}}
+% amsart's paragraph is a plain (\normalfont) run-in heading; make it bold to
+% match. Keep amsart's spacing and run-in behaviour.
+\def\paragraph{\@startsection{paragraph}{4}%
+	\z@\z@{-\fontdimen2\font}%
 	{\normalfont\bfseries}}
 % Section number itself defaults to \mdseries in amsart; make it bold too.
 \def\@secnumfont{\bfseries}
@@ -207,7 +215,7 @@
 				F(S,\tau) = S\, e^{(r-g)\tau}, \qquad D(\tau) = e^{-r\tau}.
 			\end{equation}
 			
-			\textbf{Black price.} \textcite{black1976,blackscholes1973}, with total standard deviation $\Sigma=\sigma\sqrt{\tau}$,
+			\paragraph{Black price.} \textcite{black1976,blackscholes1973}, with total standard deviation $\Sigma=\sigma\sqrt{\tau}$,
 			\begin{equation}\label{eq:black}
 				\begin{gathered}
 				C_{\mathrm{B}}(\sigma; S, K, \tau, w) = w\, D(\tau)\Bigl[ F\,\mathcal{N}(w d_+) - K\,\mathcal{N}(w d_-) \Bigr], \\
@@ -216,7 +224,7 @@
 			\end{equation}
 			where $\mathcal{N}$ is the standard normal CDF and $F=F(S,\tau)$.
 			
-			\textbf{Heston price.} The Heston model price $C_{\mathrm{H}}(\Phi; S,K,\tau,w)$ is
+			\paragraph{Heston price.} The Heston model price $C_{\mathrm{H}}(\Phi; S,K,\tau,w)$ is
 			the semi-analytic value
 			\begin{equation}\label{eq:heston-price}
 			\begin{gathered}
@@ -250,7 +258,7 @@
 			branch-stable formulation of \eqref{eq:heston-prob}); equations
 			\eqref{eq:heston-price}--\eqref{eq:heston-prob} define the operator it realises.
 			
-			\textbf{Bates price.} The Bates price $C_{\mathrm{Bates}}(\Theta; S,K,\tau,w)$ has the same form
+			\paragraph{Bates price.} The Bates price $C_{\mathrm{Bates}}(\Theta; S,K,\tau,w)$ has the same form
 			as the Heston price \eqref{eq:heston-price}--\eqref{eq:heston-prob}, with each characteristic
 			function $f_j$ multiplied by the Merton lognormal jump factor of \S\ref{sec:jumps}:
 			\begin{equation}\label{eq:bates-cf}
@@ -264,7 +272,7 @@
 			reduces to $C_{\mathrm{H}}$. In code the integral is evaluated by the QuantLib \texttt{BatesEngine},
 			the jump-augmented counterpart of the \texttt{AnalyticHestonEngine}.
 			
-			\textbf{Implied volatility.} The Black-implied volatility of a price $C$ is the inverse
+			\paragraph{Implied volatility.} The Black-implied volatility of a price $C$ is the inverse
 			of \eqref{eq:black} in its first argument,
 			\begin{equation}\label{eq:ivinv}
 				\mathcal{I}(C; S,K,\tau,w)
@@ -290,7 +298,7 @@
 		dividend rates on or before $d$ (a flat-forward curve for each; under flat curves the
 		evaluation date is immaterial to $T_i$, so it is set to the QuantLib ``today'').
 		
-		\textbf{Pre-filter.} We keep only economically usable, Heston-appropriate quotes. Write the
+		\paragraph{Pre-filter.} We keep only economically usable, Heston-appropriate quotes. Write the
 		ratio moneyness $\varrho_i = e^{-\lvert \ln(K_i/S_i)\rvert}\in(0,1]$ (it equals $1$ at the money
 		and falls as the strike moves out). The kept set is
 		\begin{equation}\label{eq:prefilter}
@@ -312,7 +320,7 @@
 		$\mathcal{D}$ occur across an intraday range of underlying levels $\{S_i\}$. We reconcile
 		the two with one reference spot and a moneyness re-striking.
 		
-		\textbf{Reference spot.} Define the volume-weighted reference spot
+		\paragraph{Reference spot.} Define the volume-weighted reference spot
 		\begin{equation}\label{eq:sref}
 			S_{\mathrm{ref}} \;=\; \frac{\sum_{i\in\mathcal{D}} q_i\, S_i}{\sum_{i\in\mathcal{D}} q_i}.
 		\end{equation}
@@ -325,7 +333,7 @@
 		A flagged day ($R>\ConstMaxMoveSym$) is still calibrated and written, but the normalisation below
 		is recorded as strained (its $S_{\mathrm{ref}}$ should be treated with suspicion).
 		
-		\textbf{Moneyness normalisation and grid snap.} Each trade retains its moneyness at
+		\paragraph{Moneyness normalisation and grid snap.} Each trade retains its moneyness at
 		trade time and is re-struck to the reference spot, then snapped to the SPX strike grid of
 		width $\ConstStrikeGridSym$:
 		\begin{equation}\label{eq:kstar}
@@ -350,7 +358,7 @@
 		money, and the floor $\ConstOtmFloorSym$ sets the outer edge, where the deep-OTM tail is dropped.
 		``Nearest the money'' below therefore means just inside $\ConstOtmCutoffSym$, not at the money itself.
 		
-		\textbf{Maturity selection.} A maturity enters the surface only if it carries both wings.
+		\paragraph{Maturity selection.} A maturity enters the surface only if it carries both wings.
 		For each distinct maturity $\tau$ present in $\mathcal{D}$, let $n_c(\tau)$ and $n_p(\tau)$ be
 		the number of distinct $K^\star$ on its call and put wings, and let
 		$V(\tau)=\sum_{i\in\mathcal{D}:\,\tau_i=\tau} q_i$ be its traded volume. Call $\tau$
@@ -364,7 +372,7 @@
 		discarded before the cap, rather than consuming one of its $\ConstMaxMaturitiesSym$ slots. The kept set falls
 		below $\ConstMaxMaturitiesSym$ only when fewer than $\ConstMaxMaturitiesSym$ maturities are admissible.
 		
-		\textbf{Strike selection (per maturity, per wing).} Within each kept maturity
+		\paragraph{Strike selection (per maturity, per wing).} Within each kept maturity
 		$\tau\in\mathcal{T}$, separate calls ($w_i=+1$, OTM with $K^\star_i \gtrsim S_{\mathrm{ref}}$)
 		from puts ($w_i=-1$, OTM with $K^\star_i \lesssim S_{\mathrm{ref}}$) and keep the $\ConstMaxWingStrikesSym$
 		nearest-the-money distinct strikes on each wing:
@@ -377,7 +385,7 @@
 		The $\ConstMaxWingStrikesSym$ cap binds only where a wing carries more than $\ConstMaxWingStrikesSym$ distinct strikes inside the band;
 		otherwise the wing's outer edge is set by the floor $\ConstOtmFloorSym$ alone.
 		
-		\textbf{Pivot to a surface.} For each retained cell $(k,\tau)$ with $k\in\mathcal{K}_\tau$,
+		\paragraph{Pivot to a surface.} For each retained cell $(k,\tau)$ with $k\in\mathcal{K}_\tau$,
 		set the surface entry to the implied volatility of the \emph{highest-volume} trade in that
 		cell, the one with the largest traded size,
 		\begin{equation}\label{eq:pivot}
@@ -391,7 +399,7 @@
 		\end{equation}
 		be the set of populated cells; these become the calibration targets (helpers).
 		
-		\textbf{Coverage requirement.} To keep the five-parameter fit identified we require a
+		\paragraph{Coverage requirement.} To keep the five-parameter fit identified we require a
 		genuinely two-dimensional surface:
 		\begin{equation}\label{eq:coverage}
 			\bigl|\{\tau : (\cdot,\tau)\in\mathcal{N}\}\bigr| \ge \ConstMinMatsSym,
@@ -433,7 +441,7 @@
 			always run on the IV-space error $J_{\mathrm{iv}}$, so under the default objective the optimizer
 			minimises the very error that then selects and gates.
 			
-			\textbf{IV-space (default in-engine objective; selection and gate).} Invert each model price back to a Black vol via
+			\paragraph{IV-space (default in-engine objective; selection and gate).} Invert each model price back to a Black vol via
 				\eqref{eq:ivinv} and compare to the market vol:
 				\begin{equation}\label{eq:resid-iv}
 					\begin{gathered}
@@ -452,7 +460,7 @@
 				unlike $J_{\mathrm{px}}$, is not inflated by cheap deep-OTM wings (a unit price error on a
 				near-worthless contract is a large \emph{relative} price error but a small vol error).
 				
-			\textbf{Price-space (alternative in-engine objective).} For each target the market value is the
+			\paragraph{Price-space (alternative in-engine objective).} For each target the market value is the
 				Black price at the quoted vol, $C^{\mathrm{mkt}}_n = C_{\mathrm{B}}(\hat\sigma_n; S_{\mathrm{ref}}, K^\star_n, T_n, w_n)$,
 				and the relative-price residual is
 				\begin{equation}\label{eq:resid-price}
@@ -539,7 +547,7 @@
 		violate it while remaining otherwise sound. A rejected or too-thin day yields no parameter
 		row.
 		
-		\textbf{Why an IV-space gate.} An earlier version gated on $J_{\mathrm{px}}$ directly. On a
+		\paragraph{Why an IV-space gate.} An earlier version gated on $J_{\mathrm{px}}$ directly. On a
 		pooled day rich in deep-OTM wings, $J_{\mathrm{px}}$ is dominated by those cheap contracts and
 		rejects fits that are excellent in vol points. Replacing the gate metric with
 		$J_{\mathrm{iv}}$ aligns the acceptance criterion with the units the surface is quoted in;
@@ -549,7 +557,7 @@
 		
 	\section{Output and diagnostics}\label{sec:output}
 		Every attempted day produces output. Results are routed by model and objective into one directory,
-		$\texttt{results/}\langle\textit{model}\rangle\texttt{/calibrations/}\langle\textit{objective}\rangle\texttt{/}$,
+		$\texttt{results/}\langle\textit{model}\,\rangle\texttt{/calibrations/}\langle\textit{objective}\,\rangle\texttt{/}$,
 		so a Heston run never shares a file with a Bates run, nor an IV-space run with a price-space one.
 		That directory holds three artefacts: a parameter table of accepted days
 		(\texttt{calibrations.csv}), a rejection table of dropped days (\texttt{rejections.csv}), and a
@@ -558,7 +566,7 @@
 		table; a rejected day does the reverse. 
 %		So the accept rate and the rejection breakdown of \S\ref{sec:empirical} read straight off them.
 		
-		\textbf{Accepted days: the parameter table.} An accepted day appends one row, keyed by the date
+		\paragraph{Accepted days: the parameter table.} An accepted day appends one row, keyed by the date
 		$d$, to \texttt{calibrations.csv}. The row carries the rate-stamped inputs, the fitted vector, and
 		fit and coverage diagnostics:
 		\begin{equation}\label{eq:accepted-row}
@@ -583,7 +591,7 @@
 		Because the calibration is once-daily, these rows accumulate into the one file, rewritten in date
 		order at the end of each run.
 		
-		\textbf{Rejected days: the rejection table.} A day dropped at any stage appends one row, also keyed
+		\paragraph{Rejected days: the rejection table.} A day dropped at any stage appends one row, also keyed
 		by $d$, to \texttt{rejections.csv}, recording why:
 		\begin{equation}\label{eq:rejection-row}
 			\bigl(\,d;\ \textsc{reason},\ \textsc{detail};\ J_{\mathrm{iv}};\ |\mathcal{T}|,\ \#\text{strikes},\ |\mathcal{N}|\,\bigr).
@@ -599,7 +607,7 @@
 		together cover every attempted day, so the pegged-versus-thin-versus-miss split is auditable
 		directly.
 		
-		\textbf{Per-day repricing diagnostics.} Each accepted day also writes one file to
+		\paragraph{Per-day repricing diagnostics.} Each accepted day also writes one file to
 		\texttt{calibration\_tests/}, holding the day's repriced surface contracts. One representative trade
 		per populated cell (the highest-volume one, matching the pivot \eqref{eq:pivot}) is valued under
 		$\Psi^\star$. The valuation uses each contract's \emph{original} $(S_i,K_i)$, not
@@ -681,7 +689,7 @@
 %		Pegging (almost always $\kappa\!\to\!20$ or $\rho\!\to\!-0.999$ hitting the box wall)
 %		is therefore the binding constraint on the accept rate, not surface quality.
 %		\\
-%		\textbf{Fit quality.} On the accepted set the surface fit is excellent. The IV-space
+%		\paragraph{Fit quality.} On the accepted set the surface fit is excellent. The IV-space
 %		error \eqref{eq:obj-iv} has a median of $0.80$ vol points (mean $0.84$, $90$th percentile
 %		$1.15$, maximum $1.99$), so $J_{\mathrm{iv}}$ sits inside the $2$-vol-point gate on every
 %		accepted day and the gate never binds in practice. Acceptance is governed by the no-pegging
@@ -693,7 +701,7 @@
 %		(\S\ref{sec:gate}). A separate validator clears $1{,}623$ of $1{,}631$ accepted days
 %		($99.5\%$); the $8$ hard failures are repricing-fit outliers, not parameter pathologies.
 %		\\ 
-%		\textbf{Parameter levels.} The accepted parameters are economically sensible and stable
+%		\paragraph{Parameter levels.} The accepted parameters are economically sensible and stable
 %		across the 2012--2024 sample. The leverage correlation is consistently and strongly
 %		negative, $\med\rho=-0.74$ (10th--90th percentile $[-0.81,-0.61]$), as equity-index
 %		smiles require. Long-run variance $\med\theta=0.067$ ($\approx 25.8\%$ annualised vol) and
@@ -705,7 +713,7 @@
 %		A clean interior set is what survives the gate, not evidence that pegging is solved on the
 %		underlying population.
 %		\\ 
-%		\textbf{Feller condition is the standout caveat.} The gate does not test Feller, and these
+%		\paragraph{Feller condition is the standout caveat.} The gate does not test Feller, and these
 %		fits violate it without exception: $\mathcal{F}(\Phi^\star)=2\kappa\theta-\eta^2<0$ on all
 %		$1{,}631$ accepted days, with median $\mathcal{F}=-1.44$. The driver of the violation is the
 %		large vol-of-vol relative to $\kappa\theta$. $\eta$ exceeds $1.5$ on $596$ days ($36.5\%$) and
@@ -717,7 +725,7 @@
 %		and the Feller violation run higher than under the narrower near-money calibration of earlier
 %		drafts.
 %		\\ 
-%		\textbf{Comparison with the earlier price-space baseline.} An earlier draft reported the
+%		\paragraph{Comparison with the earlier price-space baseline.} An earlier draft reported the
 %		price-space objective on a narrower surface (near-money strikes only, a higher maturity floor)
 %		as the default. That run accepted $1{,}713$ of $3{,}215$ days ($53.3\%$) with a lower vol-of-vol
 %		($\med\eta\approx0.89$, $\eta>1.5$ on $8.5\%$ of days) and Feller violated on $99.3\%$. Two
@@ -730,7 +738,7 @@
 %		and pushes Feller violation to every accepted day. The accept rate is little changed
 %		($50.7\%$ against $53.3\%$), and pegging stays the dominant rejection cause under either setup.
 %		\\
-%		\textbf{Price-space as the alternative objective.} Switching the in-engine objective back to
+%		\paragraph{Price-space as the alternative objective.} Switching the in-engine objective back to
 %		price-space \eqref{eq:obj-price} changes only what each restart minimises, not how a day is
 %		selected or gated (\S\ref{sec:objective}). The IV-space default weights the deep-OTM wings evenly
 %		in vol points, whereas the price objective discounts them by their small prices. One consequence
@@ -782,7 +790,7 @@
 
 	\vfill
 	\section*{References}
-		\printbibliography[heading=none, title={References}]
+		\printbibliography[heading=none]
 	\vfill
 	\newpage
 

@@ -50,7 +50,12 @@ over-reliant on passing intermediate CSVs between stages with hard-coded column 
   vanilla_pricer()`), `_quantlib_config.py` (QuantLib date conventions), and `_quantlib_utils.py` (class
   `_quantlib_utils`, the single home of all QuantLib process/engine/option construction). The upstream
   asian/barrier pricers were dropped. Import as `from pricing.vanilla_pricer import vanilla_pricer`
-  **after** `src` is added to `sys.path`.
+  **after** `src` is added to `sys.path`. **Reuse rule: `pricing/` is a self-contained package destined
+  for other projects and must never import host modules (`config`, `_utils`, ...).** Library defaults
+  live in `_quantlib_config.py` (date conventions, `MC_*`, `HESTON_INTEGRATION`/`BATES_INTEGRATION`);
+  the host injects its own values via ctor args on `_quantlib_utils`/`vanilla_pricer` (`day_count_name`,
+  the MC knobs, `heston_integration`/`bates_integration`), a `None` arg resolving to the library default.
+  `grep -rn "import config" src/pricing/` must stay empty.
 
 ## How to run
 
@@ -77,9 +82,13 @@ by the per-model wiring in `_calibration_engine`);
 `vanilla_pricer` prices through `_qu._{heston,mc_heston,bates}_engine` + `_qu._european_option`. A
 constructor-order change is a one-line edit there. The **pricing engine itself** is built in one place:
 `_qu.heston_engine_for(model)`/`_qu.bates_engine_for(model)` apply the CF-integration accuracy
-(`config.HESTON_INTEGRATION`/`BATES_INTEGRATION`, default = QuantLib order-144 Gauss-Laguerre) and are
-used by **both** the calibration fit and the repricing/IV-inversion path, so fit and diagnostics
-integrate identically.
+(`config.HESTON_INTEGRATION`/`BATES_INTEGRATION`, default `None` = QuantLib order-144 Gauss-Laguerre).
+`pricing/` never imports `config`: the accuracy is **injected** at the three app construction sites —
+`_calibration_engine._qu`, `_utils._qu`, `calibrator_prototype.vanp` — each passing the same
+`config.{HESTON,BATES}_INTEGRATION` into the `_quantlib_utils`/`vanilla_pricer` ctor, so the
+calibration fit and the repricing/IV-inversion path integrate identically. **When adding a new
+`_quantlib_utils`/`vanilla_pricer` construction site in app code, pass these constants**, or that
+site silently falls back to the library default and can drift from the fit.
 
 **Driver flags** (`src/calibrator_prototype.py`): calibrates **every** raw file in `data/options/raw/`
 by default; `--LIMIT N` restricts to the `N` most recent trading days, `--MAX_JOBS N` sets the joblib

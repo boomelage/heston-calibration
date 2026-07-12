@@ -1,9 +1,11 @@
 """Centralized QuantLib construction for the pricing/calibration stack.
 
-Every QuantLib process, engine and option used across the repo is built here, so a change in
-QuantLib's constructor argument order (or the date conventions) is a one-line edit in this module
-instead of a hunt through `vanilla_pricer.py`, `_utils.py`, `calibrate_heston.py` and
-`calibrate_bates.py`. The date conventions themselves live in `_quantlib_config.py`.
+Every QuantLib process, engine and option is built here, so a change in QuantLib's constructor
+argument order (or the date conventions) is a one-line edit in this module instead of a hunt through
+every consumer (`vanilla_pricer.py` and the host project's engine/helper modules). The date
+conventions and the package-level defaults live in `_quantlib_config.py`; host-project settings (the
+CF-integration accuracy) are INJECTED via the constructor -- this package never imports the host's
+config.
 
 Constructor argument orders pinned here (QuantLib 1.35) -- the single home of these orderings:
   - HestonProcess(ts_r, ts_g, S0, v0, kappa, theta, eta(=sigma), rho)
@@ -19,16 +21,23 @@ engine unpack with `engine, *_ = ...`.
 """
 import QuantLib as ql
 
+from pricing import _quantlib_config
 from pricing._quantlib_config import day_count
 
 
 class _quantlib_utils:
-    def __init__(self, day_count_name=None):
+    def __init__(self, day_count_name=None, heston_integration=None, bates_integration=None):
         # Store only the NAME (a string/None), never a live SwigPyObject: a vanilla_pricer holds an
         # instance of this class, and joblib pickles it to its worker processes (df_* pricers). A
         # stored ql.DayCounter is unpicklable ("cannot pickle 'SwigPyObject'"). The day_count property
         # rebuilds a fresh instance on access -- QuantLib value types are cheap and safe to rebuild.
         self.day_count_name = day_count_name
+        # CF-integration accuracy for the analytic Heston/Bates engines: None / int / (relTol, maxEval)
+        # -- plain data, so instances stay picklable. None resolves to the _quantlib_config default at
+        # engine-build time (same injection pattern as day_count_name). A host project passes its own
+        # value here; this package never imports the host's config.
+        self.heston_integration = heston_integration
+        self.bates_integration = bates_integration
 
     @property
     def day_count(self):
@@ -72,7 +81,7 @@ class _quantlib_utils:
     # ---- pricing engines from an existing model (the single home of the CF-integration accuracy) ---
     @staticmethod
     def _with_integration(ctor, model, spec):
-        """Build `ctor(model[, integration...])` per a config integration spec (see config.*_INTEGRATION).
+        """Build `ctor(model[, integration...])` per an integration spec (see _quantlib_config).
 
         spec None -> QuantLib default (Gauss-Laguerre order 144); an int -> that Gauss-Laguerre order;
         a (relTolerance, maxEvaluations) pair -> the adaptive integrator. bool is rejected so a stray
@@ -89,14 +98,20 @@ class _quantlib_utils:
         raise ValueError(f"integration spec must be None / int / (relTol, maxEval), got {spec!r}")
 
     def heston_engine_for(self, model):
-        """AnalyticHestonEngine for an existing HestonModel, at config.HESTON_INTEGRATION accuracy."""
-        from config import HESTON_INTEGRATION
-        return self._with_integration(ql.AnalyticHestonEngine, model, HESTON_INTEGRATION)
+        """AnalyticHestonEngine for an existing HestonModel, at this instance's injected accuracy
+        (ctor arg None falls back to _quantlib_config.HESTON_INTEGRATION)."""
+        spec = self.heston_integration
+        if spec is None:
+            spec = _quantlib_config.HESTON_INTEGRATION
+        return self._with_integration(ql.AnalyticHestonEngine, model, spec)
 
     def bates_engine_for(self, model):
-        """BatesEngine for an existing BatesModel, at config.BATES_INTEGRATION accuracy."""
-        from config import BATES_INTEGRATION
-        return self._with_integration(ql.BatesEngine, model, BATES_INTEGRATION)
+        """BatesEngine for an existing BatesModel, at this instance's injected accuracy
+        (ctor arg None falls back to _quantlib_config.BATES_INTEGRATION)."""
+        spec = self.bates_integration
+        if spec is None:
+            spec = _quantlib_config.BATES_INTEGRATION
+        return self._with_integration(ql.BatesEngine, model, spec)
 
     # ---- engines (build term structures + process + engine, return the reusable bundle) ------
     def _heston_engine(self, s, r, g, kappa, theta, rho, eta, v0, calculation_date=None):

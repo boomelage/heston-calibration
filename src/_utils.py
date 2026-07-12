@@ -13,8 +13,10 @@ from config import OTM_MONEYNESS_CUTOFF, OTM_MONEYNESS_FLOOR
 from pricing._quantlib_utils import _quantlib_utils
 
 # One shared builder: it carries the canonical day count and is the single place QuantLib engines
-# are constructed (see pricing/_quantlib_utils.py).
-_qu = _quantlib_utils()
+# are constructed (see pricing/_quantlib_utils.py). pricing/ never imports config, so the project's
+# CF-integration accuracy is injected; this instance must integrate exactly like the calibration fit.
+_qu = _quantlib_utils(heston_integration=config.HESTON_INTEGRATION,
+                      bates_integration=config.BATES_INTEGRATION)
 
 def df_moneyness(df):
     """Ratio moneyness: spot/strike for calls, strike/spot for puts.

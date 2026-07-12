@@ -153,10 +153,13 @@ IV_ACC, IV_MAXEVAL, IV_LO, IV_HI = 1e-6, 500, 1e-4, 5.0
 # fitted/repriced wing IV can oscillate; a coarser CF integration adds to that wiggle. None keeps the
 # QuantLib default (Gauss-Laguerre order 144). An int sets the Gauss-Laguerre order; a
 # (relTolerance, maxEvaluations) pair selects the adaptive integrator (Andersen-Piterbarg style).
-# Applied at the single construction site in pricing/_quantlib_utils, so EVERY engine build -- the
-# calibration fit, the calibration_tests repricing, and the IV inversion -- uses the same accuracy and
-# stays consistent. None on both is the exact pre-lever behaviour. The Gauss-Laguerre order is capped
-# at 192 by QuantLib, so for more accuracy than that use the adaptive pair, e.g. (1e-8, 10000).
+# These are THIS PROJECT'S values; pricing/ (a reusable package) never imports config, so they are
+# INJECTED via the _quantlib_utils/vanilla_pricer constructors at the three app construction sites
+# (_calibration_engine._qu, _utils._qu, calibrator_prototype.vanp) -- all engine builds (the
+# calibration fit, the calibration_tests repricing, and the IV inversion) therefore integrate alike.
+# None on both is the exact pre-lever behaviour (the library default in pricing/_quantlib_config.py).
+# The Gauss-Laguerre order is capped at 192 by QuantLib; for more accuracy than that use the adaptive
+# pair, e.g. (1e-8, 10000).
 HESTON_INTEGRATION = None
 BATES_INTEGRATION = None
 

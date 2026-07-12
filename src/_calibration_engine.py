@@ -40,6 +40,7 @@ from config import (
     IV_RMSE_ACCEPT, DEFAULT_OBJECTIVE,
     WING_WEIGHT_GAIN, FELLER_PENALTY, PARAM_ANCHOR_WEIGHT,
     LM_ARGS, END_CRITERIA_ARGS,
+    HESTON_INTEGRATION, BATES_INTEGRATION,
     calendar as _calendar,
 )
 # Model-agnostic helpers (pure; no QuantLib). _seed_grid/_anchor_seed return name->value dicts.
@@ -48,8 +49,10 @@ from _engine_common import (
     _seed_grid, _anchor_seed,
 )
 # Single home of the QuantLib process/term-structure construction (constructor arg order, day count).
+# pricing/ never imports config, so the project's CF-integration accuracy is injected here (and at the
+# other two construction sites, _utils._qu and calibrator_prototype.vanp, from the same constants).
 from pricing._quantlib_utils import _quantlib_utils
-_qu = _quantlib_utils()
+_qu = _quantlib_utils(heston_integration=HESTON_INTEGRATION, bates_integration=BATES_INTEGRATION)
 
 # String->QuantLib-enum objective map. Live ql objects (not serialisable), so kept by the engine, not
 # config. Both models use HestonModelHelper (there is no ql.BatesHelper in QuantLib 1.35); only the
@@ -65,7 +68,7 @@ _ERR = {
 # Per-model live-QuantLib wiring. Kept here (not config) because these are live ql objects. Each
 # make_process reads the seed dict BY NAME and passes the params in the pricing-helper arg order
 # (kappa,theta,rho,eta,v0[,lambda_,nu,delta]); make_model/make_engine build the model and its pricing
-# engine (the engine carries config.{HESTON,BATES}_INTEGRATION via _qu.*_engine_for).
+# engine (the engine carries config.{HESTON,BATES}_INTEGRATION, injected into _qu at construction).
 _WIRING = {
     "heston": dict(
         make_process=lambda qu, r_ts, g_ts, S, p: qu.heston_process(
@@ -138,8 +141,9 @@ def _calibrate_once(spec, start, surface, s, r_ts, g_ts, S_handle, constraint, e
     and reporting. With wing weighting off the two are identical."""
     process = spec.make_process(_qu, r_ts, g_ts, S_handle, start)
     model = spec.make_model(process)
-    # CF-integration accuracy is config.{HESTON,BATES}_INTEGRATION, applied in one place
-    # (_quantlib_utils) so the fit, the calibration_tests repricing and the IV inversion integrate alike.
+    # CF-integration accuracy is config.{HESTON,BATES}_INTEGRATION, injected into every app-side
+    # _quantlib_utils/vanilla_pricer from the same constants, so the fit, the calibration_tests
+    # repricing and the IV inversion integrate alike.
     engine = spec.make_engine(_qu, model)
 
     # Wing weights only meaningful in vol space: "price" already up-weights cheap wings via the price

@@ -91,7 +91,6 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from pricing.vanilla_pricer import vanilla_pricer
-vanp = vanilla_pricer()
 from _utils import write_config_spec, _file_date
 from prepare_surface import prepare_surface, select_surface, SkipDay
 from _calibration_engine import calibrate
@@ -101,6 +100,11 @@ from config import (
     IV_RMSE_ACCEPT, OBJECTIVE_NAMES, MODEL_NAMES, calib_paths, spec_path,
     DEFAULT_MODEL, DEFAULT_OBJECTIVE, PARAM_ANCHOR_LOOKBACK,
 )
+
+# Repricing (calibration_tests) must integrate exactly like the fit: inject the same CF-integration
+# accuracy the engine uses. pricing/ never imports config, so the constants are passed in here.
+vanp = vanilla_pricer(heston_integration=config.HESTON_INTEGRATION,
+                      bates_integration=config.BATES_INTEGRATION)
 
 # Per-model repricing wrapper for the tests-file model-price column, keyed by the config.MODELS name so
 # the pricing function and the column name (price_col = MODEL at the use site) resolve through the same

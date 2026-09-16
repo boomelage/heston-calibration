@@ -299,13 +299,14 @@ the flat-forward curves built by `_qu._term_structures` on `config.day_count()` 
    to the helper error type): `"vol"` (`ImpliedVolError`, default) or `"price"` (`RelativePriceError`).
    This changes only what each restart minimises; selection and the gate always use IV-RMSE. `"vol"` is
    more expensive (a Black-vol inversion per residual per LM iteration) and can throw mid-search (caught
-   per-restart). **Wing weighting (Lever B, wired default-off):** `_calibrate_once` can up-weight OTM
-   wing cells by `_wing_weight(k, s) = 1 + WING_WEIGHT_GAIN*(|log(k/S_ref)|/SCALE)**POWER`, applied
-   **only under `"vol"`** (the `"price"` denominator already up-weights cheap wings) and passed to
-   QuantLib as the 5th positional `weights` arg of `model.calibrate(...)` — a **plain python list**, not
-   `ql.Array`. When on, restart ranking uses the wing-weighted IV-RMSE (`iv_rmse_sel`) while the gate and
-   reported `iv_rmse` stay **unweighted** (`iv_rmse_gate`). `WING_WEIGHT_GAIN=0` (default) is an exact
-   no-op vs the pre-lever engine.
+   per-restart). **Wing weighting (Levers B/G, wired default-off):** `_calibrate_once` can re-weight OTM
+   wing cells by `_wing_weight(k, s) = 1 + WING_WEIGHT_GAIN*(|log(k/S_ref)|/SCALE)**POWER`, engaged for
+   **any nonzero `WING_WEIGHT_GAIN`** (positive up-weights the wings, negative down-weights them, clamped
+   by `WING_WEIGHT_FLOOR`) and applied **only under `"vol"`** (the `"price"` denominator already
+   up-weights cheap wings). The weights are passed to QuantLib as the 5th positional `weights` arg of
+   `model.calibrate(...)` — a **plain python list**, not `ql.Array`. When on, restart ranking uses the
+   wing-weighted IV-RMSE (`iv_rmse_sel`) while the gate and reported `iv_rmse` stay **unweighted**
+   (`iv_rmse_gate`). `WING_WEIGHT_GAIN=0` (default) is an exact no-op vs the pre-lever engine.
 2. **IV-space error (the gate metric).** Each helper's fitted price is inverted back to a Black vol via
    `BlackCalibrationHelper.impliedVolatility(modelValue, ...)` and compared to the market vol that built
    it; the RMSE is in **vol points**. This replaced the old relative-price gate that deep-OTM wings

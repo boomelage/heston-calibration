@@ -148,7 +148,10 @@ def _calibrate_once(spec, start, surface, s, r_ts, g_ts, S_handle, constraint, e
 
     # Wing weights only meaningful in vol space: "price" already up-weights cheap wings via the price
     # denominator, so stacking a wing weight there double-counts (see config.py / PLAN Lever B).
-    apply_wing = (objective == "vol") and (WING_WEIGHT_GAIN > 0.0)
+    # Any nonzero GAIN engages the weights: GAIN > 0 up-weights the wings (Lever B), GAIN < 0
+    # down-weights them (Lever G, clamped positive by WING_WEIGHT_FLOOR). GAIN == 0 is the exact
+    # unweighted baseline path.
+    apply_wing = (objective == "vol") and (WING_WEIGHT_GAIN != 0.0)
 
     helpers, mkt_vols, weights = [], [], []
     for t in surface.columns:

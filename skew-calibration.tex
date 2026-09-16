@@ -112,6 +112,14 @@
 \newcommand{\ConstMinCellsSym}{M_{\mathrm{cell}}}        \newcommand{\ConstMinCellsVal}{12}
 \newcommand{\ConstIvGateSym}{\varepsilon_{\mathrm{iv}}}  \newcommand{\ConstIvGateVal}{0.02}
 \newcommand{\ConstBoundTolSym}{b_{\mathrm{tol}}}         \newcommand{\ConstBoundTolVal}{10^{-3}}
+% ---- tab:levers lever constants (Appendix \ref{sec:levers}); same Sym/Val convention ----
+\newcommand{\ConstWingGainSym}{\gamma}                   \newcommand{\ConstWingGainVal}{0.0}
+\newcommand{\ConstWingPowerSym}{\beta}                   \newcommand{\ConstWingPowerVal}{1.0}
+\newcommand{\ConstWingScaleSym}{x_0}                     \newcommand{\ConstWingScaleVal}{0.05}
+\newcommand{\ConstWingFloorSym}{\omega_{\min}}           \newcommand{\ConstWingFloorVal}{10^{-3}}
+\newcommand{\ConstFellerPenaltySym}{\mu_{\mathcal{F}}}   \newcommand{\ConstFellerPenaltyVal}{0.0}
+\newcommand{\ConstAnchorWeightSym}{\mu_{\mathrm{a}}}     \newcommand{\ConstAnchorWeightVal}{0.005}
+\newcommand{\ConstAnchorLookbackSym}{L}                  \newcommand{\ConstAnchorLookbackVal}{5}
 
 
 
@@ -852,4 +860,188 @@
 			\end{algorithmic}
 		\end{algorithm}
 	
+	\section{Levers}\label{sec:levers}
+		The routine of \S\ref{sec:objective}--\S\ref{sec:gate} carries three optional modifications,
+		called levers. Each is a constant in the configuration (Table~\ref{tab:levers}) and each is
+		inert at the value zero, so the routine of the main text is recovered exactly when every lever
+		is off. They act on two places only: the local problem \eqref{eq:localproblem} that each restart
+		solves, and the rule \eqref{eq:select} that picks one restart. None of them touches the
+		acceptance gate \eqref{eq:accept}, and none changes the reported error $J_{\mathrm{iv}}$, so
+		$\ConstIvGateSym$ keeps its meaning under any lever setting. The three levers are a wing
+		weighting of the residuals, a soft Feller penalty on restart selection, and a cross-day
+		parameter anchor. We define them in that order and then state the modified selection rule.
+
+		\paragraph{Wing weighting.} The unweighted local problem treats every surface cell alike, so a
+		body of near-money cells can outvote a sparse wing. The wing weight re-balances the cells by
+		their distance from the money. For target $n$ let
+		\begin{equation}\label{eq:wing-x}
+			x_n = \bigl|\ln\bigl(K^\star_n / S_{\mathrm{ref}}\bigr)\bigr|
+		\end{equation}
+		be its absolute log-moneyness at the reference spot. The weight is
+		\begin{equation}\label{eq:wing-weight}
+			\omega_n = \max\Bigl\{\ 1 + \ConstWingGainSym\,\bigl(x_n / \ConstWingScaleSym\bigr)^{\ConstWingPowerSym},\ \ \ConstWingFloorSym\ \Bigr\},
+		\end{equation}
+		with gain $\ConstWingGainSym$, ramp power $\ConstWingPowerSym$, reference log-moneyness
+		$\ConstWingScaleSym$, and floor $\ConstWingFloorSym$. At the money $\omega_n=1$. A positive gain
+		raises the weight into both wings, reaching $1+\ConstWingGainSym$ at
+		$x_n=\ConstWingScaleSym$. A negative gain lowers it, so that near-linear days are not forced to
+		bend the wings toward a few far cells; the floor keeps every weight strictly positive, which the
+		optimizer requires. At $\ConstWingGainSym=0$ every weight is one and the floor never binds. The
+		weighted local problem replaces \eqref{eq:localproblem} by
+		\begin{equation}\label{eq:localproblem-w}
+			\widehat\Psi_s \;=\; \argmin_{\Psi \in \mathcal{B}}\ \sum_{n\in\mathcal{N}} \omega_n\,\varepsilon^{\mathrm{obj}}_n(\Psi)^2 .
+		\end{equation}
+		The weights are normalised inside the optimizer, so only their ratios matter. The weighting is
+		applied only under the IV-space objective \eqref{eq:resid-iv}. Under the price-space objective
+		\eqref{eq:resid-price} the weights are held at one regardless of $\ConstWingGainSym$: the
+		relative-price denominator already inflates the cheap wing cells, and a second weighting on top
+		of it double-counts and drives $\rho$ and $\eta$ into their bounds. So that a weighted restart is
+		ranked on the objective it minimised, the selection error becomes the weighted root mean square
+		\begin{equation}\label{eq:obj-iv-w}
+			J^{\omega}_{\mathrm{iv}}(\Psi)
+			= \left( \frac{\sum_{n\in\mathcal{N}'} \omega_n\,\varepsilon^{\mathrm{iv}}_n(\Psi)^2}{\sum_{n\in\mathcal{N}'} \omega_n} \right)^{1/2},
+		\end{equation}
+		over the same finitely-inverting set $\mathcal{N}'$ as \eqref{eq:obj-iv}. The gate and the
+		reported error stay the unweighted $J_{\mathrm{iv}}$, and $J^{\omega}_{\mathrm{iv}}=J_{\mathrm{iv}}$
+		when the weights are uniform.
+
+		A sweep of the positive gain over $\ConstWingGainSym\in\{0.5,1,2\}$, at both narrow and wide strike
+		coverage, was null. The lever engages ($\rho$ drifts more negative, from about $-0.57$ to $-0.60$)
+		but the residual by log-moneyness band does not improve at any band, and acceptance falls (from
+		$64$ to $44$ of $100$ days at $\ConstWingGainSym=2$). Once the wings are inside the fitted surface
+		there is no systematic wing bias left to weight away; what remains is the shape Heston can reach,
+		not an objective-weighting problem. The negative-gain mode, intended for the over-convex call wing,
+		has not yet been graded. The gain is therefore held at $\ConstWingGainSym=\ConstWingGainVal$.
+
+		\paragraph{Soft Feller penalty.} The accepted set violates the Feller condition
+		\eqref{eq:feller} on essentially every day. The violation is the driver of the elevated $\eta$,
+		and through it of the non-monotone implied density that makes the fitted wing oscillate. A hard
+		constraint is not an option: the short-tenor SPX surface genuinely asks for $\eta\approx1$ with
+		$\mathcal{F}<0$, and forcing compliance destroys the fit. The lever instead biases the choice
+		among restarts. Define the Feller shortfall
+		\begin{equation}\label{eq:feller-viol}
+			\mathcal{V}(\Psi) = \max\bigl\{0,\ \eta^2 - 2\kappa\theta\bigr\} = \max\bigl\{0,\ -\mathcal{F}(\Psi)\bigr\},
+		\end{equation}
+		which is zero on a compliant fit and grows with the size of the violation. Under Bates it is built
+		from the diffusive coordinates alone, as $\mathcal{F}$ is. A restart is then charged
+		$\ConstFellerPenaltySym\,\mathcal{V}(\widehat\Psi_s)$ on top of its selection error (equation
+		\eqref{eq:score} below), so a compliant restart is preferred only when its extra fit cost is
+		smaller than the penalty it saves. The selection error on an accepted day is about $0.005$ and a
+		typical shortfall is about $0.5$, so a penalty near $0.01$ makes the two terms comparable.
+
+		The penalty can only prefer a compliant restart if some restart converges into a compliant basin,
+		and the six seeds of \eqref{eq:seeds} do not: on calm days all six funnel into the same violating
+		minimum. When $\ConstFellerPenaltySym>0$ the seed set is therefore extended by three Feller-compliant
+		seeds, in the same $(v_0,\kappa,\theta,\eta,\rho)$ form as \eqref{eq:seeds},
+		\begin{equation}\label{eq:feller-seeds}
+			\mathcal{S}_{\mathcal{F}} =
+			\begin{cases}
+				(\hat v,\ 10.0,\ \hat v,\ 0.20,\ -0.70), \\
+				(\hat v,\ \phantom{1}6.0,\ 1.5\hat v,\ 0.15,\ -0.60), \\
+				(0.8\hat v,\ \phantom{1}8.0,\ 1.2\hat v,\ 0.25,\ -0.80),
+			\end{cases}
+		\end{equation}
+		each starting with a large $\kappa$ and a small $\eta$ so that $2\kappa\theta\ge\eta^2$ holds at
+		the start. Under Bates each is extended by the same fixed jump triple as the base seeds. At
+		$\ConstFellerPenaltySym=0$ the seed set is exactly $\mathcal{S}$ and the score is exactly
+		$J_{\mathrm{iv}}$.
+
+		Tested on a calm 2012 day under both models, the lever is weak. With the base seeds alone the
+		penalty has nothing to choose between. With the compliant seeds and a strong penalty it selects a
+		compliant restart whose error is about $0.057$ vol points, far past the gate
+		$\ConstIvGateSym=\ConstIvGateVal$, and the day is rejected. Lowering the $\eta$ cap merely moves
+		the peg to the new ceiling. The penalty is thus a tie-breaker between near-equal restarts, not a
+		cure, and it is held at $\ConstFellerPenaltySym=\ConstFellerPenaltyVal$. The wing oscillation it
+		was meant to address is treated instead through the accuracy of the characteristic-function
+		integration in the pricing engine, which is a numerical setting rather than a change to the
+		estimator.
+
+		\paragraph{Cross-day parameter anchor.} Successive trading days share most of their surface, yet the
+		day-by-day parameters can wander, most visibly the walk of $\kappa$ toward its floor across a calm
+		regime. The anchor damps this by softly regularising each day toward its own recent accepted
+		history. Fix a day $d$ and let $\mathcal{A}_d$ be the accepted days strictly earlier than $d$ in
+		the live accepted pool: the rows already on disk when the run started, plus every day the current
+		run has accepted so far. If $\mathcal{A}_d$ is empty there is no anchor and the day is fitted
+		without it. Otherwise take the last $\ConstAnchorLookbackSym$ days of $\mathcal{A}_d$ and set the
+		anchor $\bar\Psi^{(d)}$ to their coordinate-wise median,
+		\begin{equation}\label{eq:anchor}
+			\bar\Psi^{(d)}_j = \med\bigl\{\ \Psi^{\star(d')}_j : d' \in \text{the last } \ConstAnchorLookbackSym \text{ days of } \mathcal{A}_d\ \bigr\},
+		\end{equation}
+		with $\ConstAnchorLookbackSym=1$ reducing to the single previous accepted day. The median over
+		several days is a smoother prior than the last day alone and is robust to one odd fit. The anchor
+		enters the engine in two places, both active only when $\ConstAnchorWeightSym>0$ and an anchor
+		exists. First, a warm-start seed at $\bar\Psi^{(d)}$ is appended to the seed set, so the basin of
+		the recent history is always among the restarts; under Bates the warm seed is added only when the
+		history carries the jump triple as well. Second, the selection score gains the span-normalised
+		Tikhonov term
+		\begin{equation}\label{eq:anchor-dist}
+			\mathcal{R}_{\mathrm{a}}\bigl(\Psi;\bar\Psi^{(d)}\bigr)
+			= \sum_{j} \left( \frac{\Psi_j - \bar\Psi^{(d)}_j}{h_j - \ell_j} \right)^{2},
+		\end{equation}
+		summed over the coordinates the anchor carries. Dividing by the box span puts every coordinate on
+		a comparable $0$--$1$ scale, so a $\kappa$ move of a few units and a $\rho$ move of a few
+		hundredths are charged alike relative to their admissible ranges. The term vanishes at the anchor
+		and is weighted by $\ConstAnchorWeightSym$ in \eqref{eq:score}. A deviation of one full span costs
+		$\ConstAnchorWeightSym$ against a selection error of about $0.005$, so the weight is started small,
+		in the range $0.001$ to $0.01$. On a well-identified day every restart lands near the anchor and
+		the term is a near no-op, which is the property wanted: the anchor should not distort a good fit,
+		and its bite is reserved for ill-conditioned days where several restarts tie on
+		$J_{\mathrm{iv}}$.
+
+		The anchor changes how the driver schedules days. Because day $d$ anchors on its true latest
+		predecessors, its fit depends on the outcome of day $d-1$, which depends on $d-2$, and so on. The
+		chain is inherently sequential, and a day computed in parallel cannot anchor on a day still being
+		fitted. When $\ConstAnchorWeightSym>0$ the driver therefore processes the days strictly in date
+		order on a single worker, and the parallel job count is ignored; an anchored run costs roughly the
+		worker count times the wall-clock of the parallel run. At $\ConstAnchorWeightSym=0$ no seed and no
+		term are added and the parallel path is kept. On a resumed run the pool is seeded from the rows
+		already on disk, so an incremental extension anchors on the days it continues from.
+
+		\paragraph{The modified selection rule.} Write $\mathcal{S}^{+}$ for the seed set actually run:
+		$\mathcal{S}$, extended by $\mathcal{S}_{\mathcal{F}}$ when $\ConstFellerPenaltySym>0$, and by
+		the warm-start seed when the anchor is active. Each restart $s\in\mathcal{S}^{+}$ solves the
+		weighted local problem \eqref{eq:localproblem-w} and is scored by
+		\begin{equation}\label{eq:score}
+			\mathcal{J}_{\mathrm{sel}}\bigl(\widehat\Psi_s\bigr)
+			= J^{\omega}_{\mathrm{iv}}\bigl(\widehat\Psi_s\bigr)
+			+ \ConstFellerPenaltySym\,\mathcal{V}\bigl(\widehat\Psi_s\bigr)
+			+ \ConstAnchorWeightSym\,\mathcal{R}_{\mathrm{a}}\bigl(\widehat\Psi_s;\bar\Psi^{(d)}\bigr),
+		\end{equation}
+		with the last term present only when an anchor exists. The selection rule \eqref{eq:select}
+		becomes
+		\begin{equation}\label{eq:select-levers}
+			\Psi^\star \;=\; \argmin_{s\in\mathcal{S}^{+}}\ \mathcal{J}_{\mathrm{sel}}\bigl(\widehat\Psi_s\bigr),
+		\end{equation}
+		and a restart whose selection error is not finite is discarded before scoring. The acceptance
+		test \eqref{eq:accept} is then applied to $\Psi^\star$ unchanged, on the unweighted
+		$J_{\mathrm{iv}}(\Psi^\star)$ and the pegging predicate \eqref{eq:pegged}. In
+		Algorithm~\ref{alg:perday} the levers change only the seed-building step, the restart loop, and the
+		selection step: the seed set is $\mathcal{S}^{+}$, each restart minimises the weighted sum
+		\eqref{eq:localproblem-w}, and the selection ranks by $\mathcal{J}_{\mathrm{sel}}$. With every lever at zero, $\mathcal{S}^{+}=\mathcal{S}$,
+		$\omega_n\equiv1$, and $\mathcal{J}_{\mathrm{sel}}=J_{\mathrm{iv}}$, so \eqref{eq:select-levers}
+		is \eqref{eq:select} and the routine reproduces the main text to full floating-point precision.
+		Table~\ref{tab:levers} lists the constants and their configured values; at the values shown the
+		anchor is the only lever switched on.
+
+		\begin{table}[H]
+		\centering
+		\small
+		\begin{tabular}{llcl}
+			\toprule
+			symbol & config name & value & meaning \\
+			\midrule
+			$\ConstWingGainSym$       & \texttt{WING\_WEIGHT\_GAIN}     & $\ConstWingGainVal$       & wing-weight gain; $0$ = uniform weights \\
+			$\ConstWingPowerSym$      & \texttt{WING\_WEIGHT\_POWER}    & $\ConstWingPowerVal$      & wing-weight ramp power \\
+			$\ConstWingScaleSym$      & \texttt{WING\_WEIGHT\_SCALE}    & $\ConstWingScaleVal$      & log-moneyness where $\omega_n=1+\ConstWingGainSym$ \\
+			$\ConstWingFloorSym$      & \texttt{WING\_WEIGHT\_FLOOR}    & $\ConstWingFloorVal$      & floor on every weight \\
+			$\ConstFellerPenaltySym$  & \texttt{FELLER\_PENALTY}        & $\ConstFellerPenaltyVal$  & weight of the Feller shortfall \eqref{eq:feller-viol} \\
+			$\ConstAnchorWeightSym$   & \texttt{PARAM\_ANCHOR\_WEIGHT}  & $\ConstAnchorWeightVal$   & weight of the anchor distance \eqref{eq:anchor-dist} \\
+			$\ConstAnchorLookbackSym$ & \texttt{PARAM\_ANCHOR\_LOOKBACK} & $\ConstAnchorLookbackVal$ & days in the anchor median \eqref{eq:anchor} \\
+			\bottomrule
+		\end{tabular}
+		\vspace*{-0.8em}
+		\caption{Lever constants. Each lever is inert at zero; the wing weighting also requires the
+		IV-space objective.}\label{tab:levers}
+		\end{table}
+
 \end{document}

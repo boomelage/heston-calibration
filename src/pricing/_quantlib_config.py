@@ -27,6 +27,18 @@ MC_RNG = "pseudorandom"         # RNG; alternative: "lowdiscrepancy"
 MC_NUM_PATHS = 100000           # required samples
 MC_SEED = 1312                  # RNG seed
 
+# ---- Characteristic-function integration accuracy: LIBRARY DEFAULTS ----
+# How the Heston/Bates analytic engines integrate the characteristic function. None keeps the
+# QuantLib default (Gauss-Laguerre order 144). An int sets the Gauss-Laguerre order (QuantLib caps it
+# at 192; for more accuracy use the adaptive pair); a (relTolerance, maxEvaluations) pair selects the
+# adaptive integrator (Andersen-Piterbarg style).
+# These are the package defaults only. A host project tunes the accuracy by passing
+# heston_integration/bates_integration to the _quantlib_utils (or vanilla_pricer) constructor -- a
+# ctor arg of None resolves to the values here, the same pattern as day_count_name and the MC_*
+# defaults. This package never imports the host project's config.
+HESTON_INTEGRATION = None
+BATES_INTEGRATION = None
+
 
 def day_count(name=None):
     """Fresh day-count instance for `name` (defaults to DAY_COUNT_NAME)."""

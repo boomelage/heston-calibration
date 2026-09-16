@@ -8,10 +8,12 @@ from pricing._quantlib_utils import _quantlib_utils  # one home for all QuantLib
 from pricing._quantlib_config import MC_STEPS, MC_RNG, MC_NUM_PATHS, MC_SEED  # MC defaults
 
 class vanilla_pricer:
-	def __init__(self,day_count_name=None,steps=None,rng=None,numPaths=None,seed=None):
+	def __init__(self,day_count_name=None,steps=None,rng=None,numPaths=None,seed=None,
+			heston_integration=None,bates_integration=None):
 		# All QuantLib processes/engines/options are built by this helper, so a constructor-order or
-		# convention change happens in pricing/_quantlib_utils.py, not in every method below.
-		self.qu = _quantlib_utils(day_count_name)
+		# convention change happens in pricing/_quantlib_utils.py, not in every method below. The
+		# CF-integration args pass through to it (None resolves to the _quantlib_config default).
+		self.qu = _quantlib_utils(day_count_name, heston_integration, bates_integration)
 
 		# MC engine settings: a None arg resolves to the default in _quantlib_config.
 		self.steps = MC_STEPS if steps is None else steps

@@ -50,7 +50,12 @@ over-reliant on passing intermediate CSVs between stages with hard-coded column 
   vanilla_pricer()`), `_quantlib_config.py` (QuantLib date conventions), and `_quantlib_utils.py` (class
   `_quantlib_utils`, the single home of all QuantLib process/engine/option construction). The upstream
   asian/barrier pricers were dropped. Import as `from pricing.vanilla_pricer import vanilla_pricer`
-  **after** `src` is added to `sys.path`.
+  **after** `src` is added to `sys.path`. **Reuse rule: `pricing/` is a self-contained package destined
+  for other projects and must never import host modules (`config`, `_utils`, ...).** Library defaults
+  live in `_quantlib_config.py` (date conventions, `MC_*`, `HESTON_INTEGRATION`/`BATES_INTEGRATION`);
+  the host injects its own values via ctor args on `_quantlib_utils`/`vanilla_pricer` (`day_count_name`,
+  the MC knobs, `heston_integration`/`bates_integration`), a `None` arg resolving to the library default.
+  `grep -rn "import config" src/pricing/` must stay empty.
 
 ## How to run
 
@@ -77,9 +82,13 @@ by the per-model wiring in `_calibration_engine`);
 `vanilla_pricer` prices through `_qu._{heston,mc_heston,bates}_engine` + `_qu._european_option`. A
 constructor-order change is a one-line edit there. The **pricing engine itself** is built in one place:
 `_qu.heston_engine_for(model)`/`_qu.bates_engine_for(model)` apply the CF-integration accuracy
-(`config.HESTON_INTEGRATION`/`BATES_INTEGRATION`, default = QuantLib order-144 Gauss-Laguerre) and are
-used by **both** the calibration fit and the repricing/IV-inversion path, so fit and diagnostics
-integrate identically.
+(`config.HESTON_INTEGRATION`/`BATES_INTEGRATION`, default `None` = QuantLib order-144 Gauss-Laguerre).
+`pricing/` never imports `config`: the accuracy is **injected** at the three app construction sites —
+`_calibration_engine._qu`, `_utils._qu`, `calibrator_prototype.vanp` — each passing the same
+`config.{HESTON,BATES}_INTEGRATION` into the `_quantlib_utils`/`vanilla_pricer` ctor, so the
+calibration fit and the repricing/IV-inversion path integrate identically. **When adding a new
+`_quantlib_utils`/`vanilla_pricer` construction site in app code, pass these constants**, or that
+site silently falls back to the library default and can drift from the fit.
 
 **Driver flags** (`src/calibrator_prototype.py`): calibrates **every** raw file in `data/options/raw/`
 by default; `--LIMIT N` restricts to the `N` most recent trading days, `--MAX_JOBS N` sets the joblib
@@ -290,13 +299,14 @@ the flat-forward curves built by `_qu._term_structures` on `config.day_count()` 
    to the helper error type): `"vol"` (`ImpliedVolError`, default) or `"price"` (`RelativePriceError`).
    This changes only what each restart minimises; selection and the gate always use IV-RMSE. `"vol"` is
    more expensive (a Black-vol inversion per residual per LM iteration) and can throw mid-search (caught
-   per-restart). **Wing weighting (Lever B, wired default-off):** `_calibrate_once` can up-weight OTM
-   wing cells by `_wing_weight(k, s) = 1 + WING_WEIGHT_GAIN*(|log(k/S_ref)|/SCALE)**POWER`, applied
-   **only under `"vol"`** (the `"price"` denominator already up-weights cheap wings) and passed to
-   QuantLib as the 5th positional `weights` arg of `model.calibrate(...)` — a **plain python list**, not
-   `ql.Array`. When on, restart ranking uses the wing-weighted IV-RMSE (`iv_rmse_sel`) while the gate and
-   reported `iv_rmse` stay **unweighted** (`iv_rmse_gate`). `WING_WEIGHT_GAIN=0` (default) is an exact
-   no-op vs the pre-lever engine.
+   per-restart). **Wing weighting (Levers B/G, wired default-off):** `_calibrate_once` can re-weight OTM
+   wing cells by `_wing_weight(k, s) = 1 + WING_WEIGHT_GAIN*(|log(k/S_ref)|/SCALE)**POWER`, engaged for
+   **any nonzero `WING_WEIGHT_GAIN`** (positive up-weights the wings, negative down-weights them, clamped
+   by `WING_WEIGHT_FLOOR`) and applied **only under `"vol"`** (the `"price"` denominator already
+   up-weights cheap wings). The weights are passed to QuantLib as the 5th positional `weights` arg of
+   `model.calibrate(...)` — a **plain python list**, not `ql.Array`. When on, restart ranking uses the
+   wing-weighted IV-RMSE (`iv_rmse_sel`) while the gate and reported `iv_rmse` stay **unweighted**
+   (`iv_rmse_gate`). `WING_WEIGHT_GAIN=0` (default) is an exact no-op vs the pre-lever engine.
 2. **IV-space error (the gate metric).** Each helper's fitted price is inverted back to a Black vol via
    `BlackCalibrationHelper.impliedVolatility(modelValue, ...)` and compared to the market vol that built
    it; the RMSE is in **vol points**. This replaced the old relative-price gate that deep-OTM wings

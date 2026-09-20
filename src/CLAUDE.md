@@ -182,7 +182,7 @@ orchestrator. **THREE distinct orderings (declared in `config.MODELS["bates"]`, 
 conflate):** (1) `params_order` = `BatesModel.params()` = `[theta, kappa, eta, rho, v0, nu, delta,
 lambda]` — drives `low`/`high` and the unpack; (2) `ctor_order` = `BatesProcess(..., v0, kappa, theta,
 eta, rho, lambda, nu, delta)` — drives the seed/jump expansion; (3) `vanp.bates_price(...)`/`df_bates_price`
-arg order (handled in `src/pricing`). `feller` stays the Heston-diffusion quantity (jumps do not enter
+arg order (handled in the `qlpricing` package). `feller` stays the Heston-diffusion quantity (jumps do not enter
 it; reported, never gates). **Acceptance gate:** IV-RMSE ≤ `IV_RMSE_ACCEPT` and no **Heston** param
 pegged — the gate runs on `spec.gate_names` (the five Heston params) only; the jump triple is **exempt**
 (`lambda≈0` is a legitimate Heston collapse, and `nu`/`delta` are unidentified when `lambda≈0`). The

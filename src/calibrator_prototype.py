@@ -90,7 +90,7 @@ RESULTS = SRC.parent / "results"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from pricing.vanilla_pricer import vanilla_pricer
+from qlpricing.vanilla_pricer import vanilla_pricer
 from _utils import write_config_spec, _file_date
 from prepare_surface import prepare_surface, select_surface, SkipDay
 from _calibration_engine import calibrate

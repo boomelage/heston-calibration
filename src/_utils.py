@@ -10,7 +10,7 @@ import QuantLib as ql
 
 import config
 from config import OTM_MONEYNESS_CUTOFF, OTM_MONEYNESS_FLOOR
-from pricing._quantlib_utils import _quantlib_utils
+from qlpricing._quantlib_utils import _quantlib_utils
 
 # One shared builder: it carries the canonical day count and is the single place QuantLib engines
 # are constructed (see pricing/_quantlib_utils.py). pricing/ never imports config, so the project's

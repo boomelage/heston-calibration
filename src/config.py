@@ -12,7 +12,7 @@ from pathlib import Path
 # builders that consume them) and re-exported here so the rest of the pipeline keeps a single
 # `from config import day_count, calendar` facade. config is the definition site for everything else;
 # for the day count / calendar it is a thin pass-through to the canonical source.
-from pricing._quantlib_config import (  # noqa: F401  (re-exported)
+from qlpricing._quantlib_config import (  # noqa: F401  (re-exported)
     day_count, calendar, DAY_COUNT_NAME, CALENDAR_NAME,
 )
 

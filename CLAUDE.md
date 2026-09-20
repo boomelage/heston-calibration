@@ -43,20 +43,27 @@ over-reliant on passing intermediate CSVs between stages with hard-coded column 
 
 ## Environment & dependencies
 
-- **Python 3.12**, **QuantLib 1.35**. Also: `pandas`, `numpy`, `scipy`, `joblib`. No `requirements.txt`,
-  `setup.py`, lockfile, or test suite.
-- The QuantLib pricing wrapper is **vendored in-repo** at `src/pricing/` (formerly the author's external
-  `quantlib_pricers` package). It is a plain directory with no `__init__.py`, so `pricing` is a namespace
-  package with three modules: `vanilla_pricer.py` (class `vanilla_pricer`, used as `vanp =
-  vanilla_pricer()`), `_quantlib_config.py` (QuantLib date conventions), and `_quantlib_utils.py` (class
-  `_quantlib_utils`, the single home of all QuantLib process/engine/option construction). The upstream
-  asian/barrier pricers were dropped. Import as `from pricing.vanilla_pricer import vanilla_pricer`
-  **after** `src` is added to `sys.path`. **Reuse rule: `pricing/` is a self-contained package destined
-  for other projects and must never import host modules (`config`, `_utils`, ...).** Library defaults
-  live in `_quantlib_config.py` (date conventions, `MC_*`, `HESTON_INTEGRATION`/`BATES_INTEGRATION`);
-  the host injects its own values via ctor args on `_quantlib_utils`/`vanilla_pricer` (`day_count_name`,
-  the MC knobs, `heston_integration`/`bates_integration`), a `None` arg resolving to the library default.
-  `grep -rn "import config" src/pricing/` must stay empty.
+- **Python 3.12**, **QuantLib 1.35**. Also: `pandas`, `numpy`, `matplotlib`, `joblib` (and
+  `ipywidgets`/`ipython` for `inspect.ipynb`). `requirements.txt` pins them to the versions the
+  committed results were produced with, and pins `qlpricing` by commit (see below). No `setup.py`,
+  lockfile, or test suite.
+- The QuantLib pricing wrapper is an **installed external dependency**, the `qlpricing` package
+  (`git+https://github.com/boomelage/qlpricing`). It was vendored in-repo at `src/pricing/` until that copy
+  was removed, and before that it was the author's `quantlib_pricers`. `requirements.txt` pins it by
+  commit, since it is not on PyPI; `pip install -r requirements.txt` therefore brings it in. For work
+  against a local working copy, `pip install -e <path to the qlpricing checkout>` instead. It is named
+  `qlpricing`, not `pricing`, because `pricing` on PyPI is an unrelated third-party project. It provides `vanilla_pricer.py` (class
+  `vanilla_pricer`, used as `vanp = vanilla_pricer()`), `_quantlib_config.py` (QuantLib date conventions),
+  `_quantlib_utils.py` (class `_quantlib_utils`, the single home of all QuantLib process/engine/option
+  construction), and the `asian_pricer`/`barrier_pricer` modules this repository does not use. Import as
+  `from qlpricing.vanilla_pricer import vanilla_pricer`; it no longer needs `src` on `sys.path`.
+  Library defaults live in `_quantlib_config.py` (date conventions, `MC_*`,
+  `HESTON_INTEGRATION`/`BATES_INTEGRATION`); the host injects its own values via ctor args on
+  `_quantlib_utils`/`vanilla_pricer` (`day_count_name`, the MC knobs,
+  `heston_integration`/`bates_integration`), a `None` arg resolving to the library default.
+  **Reuse rule: `qlpricing` is shared with other projects and must never import host modules (`config`,
+  `_utils`, ...).** Edits to it belong in its own repository, not here — an editable install means a
+  change made from this checkout silently alters every other consumer.
 
 ## How to run
 
@@ -71,11 +78,11 @@ name): each entry declares `params_order` (QuantLib `model.params()` order), `ct
 constructor order, for seeds), the box `bounds`, the derived `low`/`high`, the pegging `gate_names`
 subset, and the Bates `jump_seed`. The private `_model` builder derives `low`/`high` so the order is
 declared once; `MODELS` is plain data that `as_dict()` captures for the run snapshot. The QuantLib **date conventions**
-(`Actual365Fixed` day count, `UnitedStates.NYSE` calendar) live in `src/pricing/_quantlib_config.py`
+(`Actual365Fixed` day count, `UnitedStates.NYSE` calendar) live in the `qlpricing` package's `_quantlib_config.py`
 (`day_count(name=None)`/`calendar(name=None)`, named choices `DAY_COUNT_NAME`/`CALENDAR_NAME`) and are
 **re-exported by `config`**, so `config.day_count`/`config.calendar` keep working as the facade.
 
-**QuantLib construction is centralized** in `src/pricing/_quantlib_utils.py` (`_quantlib_utils`): the
+**QuantLib construction is centralized** in the `qlpricing` package's `_quantlib_utils.py` (`_quantlib_utils`): the
 engine builds its `HestonProcess`/`BatesProcess` via `_qu.heston_process`/`_qu.bates_process` (selected
 by the per-model wiring in `_calibration_engine`);
 `_utils.build_heston_engine`/`build_bates_engine` are thin wrappers over
@@ -219,8 +226,8 @@ gotchas:
   lever is the CF-integration accuracy (`HESTON_INTEGRATION`/`BATES_INTEGRATION`). See `PLAN.md` (Levers
   D/F).
 - **Bates runs end-to-end and is committed for all objectives.** `--MODEL bates` runs the full pipeline
-  (the unified engine `src/_calibration_engine.py` with the `bates` wiring, `df_bates_price` in
-  `src/pricing`, routing to `results/bates/...`).
+  (the unified engine `src/_calibration_engine.py` with the `bates` wiring, `df_bates_price` in the
+  `qlpricing` package, routing to `results/bates/...`).
   Against Heston on the same days it accepts more, fits tighter in IV-RMSE, and roughly halves `eta`
   (jumps absorb the tail); Feller stays violated. The weakly-identified `nu`/`delta` park on their bounds
   (gate-exempt); `validate_calibrations.py` surfaces this as suspicious-tier flags under bates. A `nu`/`delta`

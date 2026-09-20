@@ -1,0 +1,26 @@
+# heston-calibration dependencies. Python 3.12.
+#
+# Pinned to the versions this pipeline's committed results were produced with.
+# QuantLib, numpy and pandas drive the numbers, so relax those only deliberately.
+
+QuantLib==1.35
+numpy==1.26.4
+pandas==2.2.3
+joblib==1.4.2
+matplotlib==3.9.2
+
+# inspect.ipynb only
+ipywidgets==8.1.5
+ipython==8.28.0
+
+# ---------------------------------------------------------------------------
+# The `qlpricing` package (vanilla_pricer, _quantlib_utils, _quantlib_config) is
+# a first-party dependency, pinned by commit rather than by version because it is
+# not on PyPI. It is named `qlpricing`, not `pricing`, because `pricing` on PyPI
+# is an unrelated third-party project -- `pip install pricing` fetches that one.
+#
+qlpricing @ git+https://github.com/boomelage/qlpricing@4705d695dff787c88004c8061d591543ccc7cc35
+
+# For local development against a working copy, install it editable instead:
+#
+#     pip install -e <path to the qlpricing checkout>

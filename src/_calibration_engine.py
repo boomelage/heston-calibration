@@ -51,7 +51,7 @@ from _engine_common import (
 # Single home of the QuantLib process/term-structure construction (constructor arg order, day count).
 # pricing/ never imports config, so the project's CF-integration accuracy is injected here (and at the
 # other two construction sites, _utils._qu and calibrator_prototype.vanp, from the same constants).
-from pricing._quantlib_utils import _quantlib_utils
+from qlpricing._quantlib_utils import _quantlib_utils
 _qu = _quantlib_utils(heston_integration=HESTON_INTEGRATION, bates_integration=BATES_INTEGRATION)
 
 # String->QuantLib-enum objective map. Live ql objects (not serialisable), so kept by the engine, not
